@@ -1,0 +1,27 @@
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import Layout from './components/Layout';
+import Dashboard from './pages/Dashboard';
+import Books from './pages/Books';
+import BookForm from './pages/BookForm';
+import BookEdit from './pages/BookEdit';
+import Playlists from './pages/Playlists';
+import PageEditor from './pages/PageEditor';
+
+function App() {
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<Layout />}>
+          <Route index element={<Dashboard />} />
+          <Route path="books" element={<Books />} />
+          <Route path="books/new" element={<BookForm />} />
+          <Route path="books/edit/:bookId" element={<BookEdit />} />
+          <Route path="pages/new/:bookId" element={<PageEditor />} />
+          <Route path="playlists" element={<Playlists />} />
+        </Route>
+      </Routes>
+    </Router>
+  );
+}
+
+export default App;
