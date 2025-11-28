@@ -79,6 +79,13 @@ const BookReader: React.FC = () => {
         setShowScroll(prev => !prev);
     };
 
+    const resolveUrl = (url?: string) => {
+        if (!url) return '';
+        if (url.startsWith('http')) return url;
+        if (url.startsWith('/uploads')) return `http://localhost:5001${url}`;
+        return url;
+    };
+
     if (loading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
@@ -182,7 +189,7 @@ const BookReader: React.FC = () => {
                     <div className="absolute inset-0 flex items-center justify-center">
                         {currentPage.backgroundType === 'video' ? (
                             <video
-                                src={currentPage.backgroundUrl}
+                                src={resolveUrl(currentPage.backgroundUrl)}
                                 className="w-full h-full object-cover"
                                 autoPlay
                                 loop
@@ -191,7 +198,7 @@ const BookReader: React.FC = () => {
                             />
                         ) : (
                             <img
-                                src={currentPage.backgroundUrl}
+                                src={resolveUrl(currentPage.backgroundUrl)}
                                 alt={`Page ${currentPage.pageNumber}`}
                                 className="w-full h-full object-cover"
                             />
@@ -250,7 +257,7 @@ const BookReader: React.FC = () => {
                         >
                             {/* The Scroll Image */}
                             <img
-                                src={currentPage.scrollUrl}
+                                src={resolveUrl(currentPage.scrollUrl)}
                                 alt="Scroll background"
                                 className="w-full h-full object-fill"
                             />

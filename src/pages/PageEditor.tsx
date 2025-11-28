@@ -147,6 +147,14 @@ const PageEditor: React.FC = () => {
         if (selectedBoxId === id) setSelectedBoxId(null);
     };
 
+    // Helper to resolve image URLs
+    const resolveUrl = (url?: string) => {
+        if (!url) return '';
+        if (url.startsWith('http')) return url;
+        if (url.startsWith('/uploads')) return `http://localhost:5001${url}`;
+        return url;
+    };
+
     // Load existing page for editing
     const loadPage = (page: any) => {
         setEditingPageId(page._id);
@@ -155,13 +163,13 @@ const PageEditor: React.FC = () => {
 
         // Set background preview if URL exists
         if (page.backgroundUrl) {
-            setBackgroundPreview(page.backgroundUrl);
+            setBackgroundPreview(resolveUrl(page.backgroundUrl));
             setBackgroundFile(null); // Clear file since we're using existing URL
         }
 
         // Set scroll preview if URL exists
         if (page.scrollUrl) {
-            setScrollPreview(page.scrollUrl);
+            setScrollPreview(resolveUrl(page.scrollUrl));
             setScrollFile(null);
         }
 
@@ -199,7 +207,7 @@ const PageEditor: React.FC = () => {
         // Apply template if it exists
         if (pageTemplate) {
             if (pageTemplate.scrollUrl) {
-                setScrollPreview(pageTemplate.scrollUrl);
+                setScrollPreview(resolveUrl(pageTemplate.scrollUrl));
             }
             if (pageTemplate.textBoxes && pageTemplate.textBoxes.length > 0) {
                 const boxesWithIds = pageTemplate.textBoxes.map((box: any, idx: number) => ({
@@ -791,13 +799,13 @@ const PageEditor: React.FC = () => {
                                     {page.backgroundUrl ? (
                                         page.backgroundType === 'image' ? (
                                             <img
-                                                src={page.backgroundUrl}
+                                                src={resolveUrl(page.backgroundUrl)}
                                                 alt={`Page ${page.pageNumber}`}
                                                 className="w-full h-full object-cover"
                                             />
                                         ) : (
                                             <video
-                                                src={page.backgroundUrl}
+                                                src={resolveUrl(page.backgroundUrl)}
                                                 className="w-full h-full object-cover"
                                                 muted
                                             />
