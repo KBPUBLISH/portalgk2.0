@@ -384,6 +384,14 @@ const PageEditor: React.FC = () => {
                 // Refresh pages list
                 const res = await axios.get(`http://localhost:5001/api/pages/book/${bookId}`);
                 setExistingPages(res.data);
+
+                // Reload the updated page into the editor to keep state in sync
+                const updatedPage = res.data.find((p: any) => p._id === editingPageId);
+                if (updatedPage) {
+                    loadPage(updatedPage);
+                }
+
+                alert('Page updated successfully!');
             } else {
                 await axios.post('http://localhost:5001/api/pages', payload);
 
