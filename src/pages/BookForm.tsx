@@ -154,10 +154,10 @@ const BookForm: React.FC = () => {
                     <div className="flex items-start gap-4">
                         {(previewUrl || formData.coverImage) ? (
                             <div className="relative">
-                                <img
+                            <img
                                     src={previewUrl || formData.coverImage}
-                                    alt="Cover preview"
-                                    className="w-32 h-48 object-cover rounded-lg border-2 border-gray-200"
+                                alt="Cover preview"
+                                className="w-32 h-48 object-cover rounded-lg border-2 border-gray-200"
                                     onError={(e) => {
                                         console.error('Image failed to load:', previewUrl || formData.coverImage);
                                         e.currentTarget.style.display = 'none';
@@ -289,18 +289,18 @@ const BookForm: React.FC = () => {
                     </div>
                 </div>
 
-                    {/* Status */}
-                    <div className="mb-6">
-                        <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-2">
-                            Status
-                        </label>
-                        <select
-                            id="status"
-                            name="status"
-                            value={formData.status}
-                            onChange={handleInputChange}
+                {/* Status */}
+                <div className="mb-6">
+                    <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-2">
+                        Status
+                    </label>
+                    <select
+                        id="status"
+                        name="status"
+                        value={formData.status}
+                        onChange={handleInputChange}
                             className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white cursor-pointer min-h-[44px]"
-                        >
+                    >
                         <option value="draft">Draft</option>
                         <option value="published">Published</option>
                         <option value="archived">Archived</option>
