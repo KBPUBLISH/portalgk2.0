@@ -176,10 +176,9 @@ const PageEditor: React.FC = () => {
     // Helper to resolve image URLs
     const resolveUrl = (url?: string) => {
         if (!url) return '';
-        // Don't use blob URLs - they're temporary and will fail
+        // Allow blob URLs for preview
         if (url.startsWith('blob:')) {
-            console.warn('Attempted to resolve blob URL, returning empty string:', url);
-            return '';
+            return url;
         }
         // If already absolute URL, return as is
         if (url.startsWith('http://') || url.startsWith('https://')) return url;
