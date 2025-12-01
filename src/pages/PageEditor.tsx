@@ -61,6 +61,7 @@ const PageEditor: React.FC = () => {
         scrollHeight: number;
         textBoxes: Omit<TextBox, 'id'>[];
     } | null>(null);
+    const [showScrollLibrary, setShowScrollLibrary] = useState(false);
     const [showTemplateDialog, setShowTemplateDialog] = useState(false);
 
     // Resizable panels
@@ -724,7 +725,16 @@ const PageEditor: React.FC = () => {
 
                     {/* Scroll Overlay */}
                     <div className="space-y-3">
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Scroll Overlay</label>
+                        <div className="flex justify-between items-center">
+                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Scroll Overlay</label>
+                            <button
+                                onClick={() => setShowScrollLibrary(true)}
+                                className="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"
+                            >
+                                <ImageIcon className="w-3 h-3" />
+                                Select Existing
+                            </button>
+                        </div>
                         <div className="relative group">
                             <input
                                 type="file"
@@ -1251,6 +1261,73 @@ const PageEditor: React.FC = () => {
                                 className="flex-1 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 transition"
                             >
                                 No, Thanks
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Scroll Library Modal */}
+            {showScrollLibrary && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowScrollLibrary(false)}>
+                    <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 shadow-2xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-bold text-gray-800">Select Existing Scroll</h3>
+                            <button onClick={() => setShowScrollLibrary(false)} className="text-gray-500 hover:text-gray-700">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto min-h-[200px]">
+                            {(() => {
+                                const uniqueScrolls = Array.from(new Set(
+                                    existingPages
+                                        .map((p: any) => p.scrollUrl || p.files?.scroll?.url)
+                                        .filter((url: string) => url && !url.startsWith('blob:'))
+                                ));
+
+                                if (uniqueScrolls.length === 0) {
+                                    return (
+                                        <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                                            <ImageIcon className="w-12 h-12 mb-2 opacity-50" />
+                                            <p>No existing scrolls found in this book.</p>
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <div className="grid grid-cols-3 gap-4">
+                                        {uniqueScrolls.map((url, idx) => (
+                                            <div
+                                                key={idx}
+                                                onClick={() => {
+                                                    setScrollPreview(resolveUrl(url as string));
+                                                    setScrollFile(null);
+                                                    setShowScrollLibrary(false);
+                                                }}
+                                                className="border rounded-lg p-2 cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition group relative aspect-video flex items-center justify-center bg-gray-100"
+                                            >
+                                                <img
+                                                    src={resolveUrl(url as string)}
+                                                    className="max-w-full max-h-full object-contain"
+                                                    alt={`Scroll ${idx + 1}`}
+                                                />
+                                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors rounded-lg" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                );
+                            })()}
+                        </div>
+
+                        <div className="mt-4 pt-4 border-t border-gray-100 flex justify-end">
+                            <button
+                                onClick={() => setShowScrollLibrary(false)}
+                                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
+                            >
+                                Cancel
                             </button>
                         </div>
                     </div>
