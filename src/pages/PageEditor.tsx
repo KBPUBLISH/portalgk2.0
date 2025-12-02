@@ -11,7 +11,9 @@ import {
     AlignRight,
     Upload,
     LayoutTemplate,
-    Video
+    Video,
+    Sparkles,
+    Loader2
 } from 'lucide-react';
 import apiClient, { getMediaUrl } from '../services/apiClient';
 
@@ -63,6 +65,7 @@ const PageEditor: React.FC = () => {
     } | null>(null);
     const [showScrollLibrary, setShowScrollLibrary] = useState(false);
     const [showTemplateDialog, setShowTemplateDialog] = useState(false);
+    const [enhancingTextId, setEnhancingTextId] = useState<string | null>(null);
 
     // Resizable panels
     const [leftPanelWidth, setLeftPanelWidth] = useState(320); // 320px = w-80
@@ -172,6 +175,25 @@ const PageEditor: React.FC = () => {
     const deleteTextBox = (id: string) => {
         setTextBoxes(boxes => boxes.filter(box => box.id !== id));
         if (selectedBoxId === id) setSelectedBoxId(null);
+    };
+
+    // Enhance text with ElevenLabs emotion prompts
+    const enhanceText = async (id: string) => {
+        const box = textBoxes.find(b => b.id === id);
+        if (!box || !box.text.trim()) return;
+
+        setEnhancingTextId(id);
+        try {
+            const response = await apiClient.post('/api/tts/enhance', { text: box.text });
+            if (response.data.enhancedText) {
+                updateTextBox(id, { text: response.data.enhancedText });
+            }
+        } catch (error) {
+            console.error('Failed to enhance text:', error);
+            alert('Failed to enhance text. Please try again.');
+        } finally {
+            setEnhancingTextId(null);
+        }
     };
 
     // Helper to resolve image URLs
@@ -888,6 +910,28 @@ const PageEditor: React.FC = () => {
                                 className="w-full text-sm p-2 border rounded focus:ring-2 focus:ring-indigo-300 outline-none"
                                 rows={3}
                             />
+                            {/* Enhance Button */}
+                            <button
+                                onClick={() => enhanceText(selectedBox.id)}
+                                disabled={enhancingTextId === selectedBox.id || !selectedBox.text.trim()}
+                                className="w-full py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-md font-medium text-sm flex items-center justify-center gap-2 hover:from-purple-600 hover:to-pink-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Add emotion prompts for ElevenLabs TTS (e.g., [laughs], [whispers], [excitedly])"
+                            >
+                                {enhancingTextId === selectedBox.id ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Enhancing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Sparkles className="w-4 h-4" />
+                                        Enhance for TTS
+                                    </>
+                                )}
+                            </button>
+                            <p className="text-xs text-gray-500">
+                                Adds emotion tags like [laughs], [whispers], [excitedly] for expressive TTS
+                            </p>
                             <div className="flex gap-1 bg-white p-1 rounded border border-gray-200">
                                 <button
                                     onClick={() => updateTextBox(selectedBox.id, { alignment: 'left' })}
