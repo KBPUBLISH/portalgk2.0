@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Trash2, Edit, Calendar, Video } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
+import apiClient from '../services/apiClient';
 
 interface Lesson {
     _id: string;
@@ -30,9 +30,9 @@ const Lessons: React.FC = () => {
     const fetchLessons = async () => {
         try {
             const url = statusFilter === 'all' 
-                ? 'http://localhost:5001/api/lessons'
-                : `http://localhost:5001/api/lessons?status=${statusFilter}`;
-            const response = await axios.get(url);
+                ? '/api/lessons'
+                : `/api/lessons?status=${statusFilter}`;
+            const response = await apiClient.get(url);
             setLessons(response.data);
         } catch (error) {
             console.error('Error fetching lessons:', error);
@@ -48,7 +48,7 @@ const Lessons: React.FC = () => {
 
         setDeletingLessonId(lessonId);
         try {
-            await axios.delete(`http://localhost:5001/api/lessons/${lessonId}`);
+            await apiClient.delete(`/api/lessons/${lessonId}`);
             setLessons(lessons.filter(lesson => lesson._id !== lessonId));
         } catch (error) {
             console.error('Error deleting lesson:', error);
@@ -218,4 +218,3 @@ const Lessons: React.FC = () => {
 };
 
 export default Lessons;
-

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Gamepad2, Play, Pause, RefreshCw, Edit2, Save, X, Plus, Globe, Upload } from 'lucide-react';
-import axios from 'axios';
+import apiClient from '../services/apiClient';
 
 interface Game {
     _id?: string;
@@ -50,7 +50,7 @@ const Games: React.FC = () => {
 
     const fetchGames = async () => {
         try {
-            const response = await axios.get('http://localhost:5001/api/games');
+            const response = await apiClient.get('/api/games');
             setGames(response.data || []);
         } catch (error: any) {
             console.error('Error fetching games:', error);
@@ -90,7 +90,7 @@ const Games: React.FC = () => {
 
         try {
             for (const game of defaultGames) {
-                await axios.post('http://localhost:5001/api/games', game);
+                await apiClient.post('/api/games', game);
             }
             await fetchGames();
         } catch (error) {
@@ -100,7 +100,7 @@ const Games: React.FC = () => {
 
     const handleToggleEnabled = async (game: Game) => {
         try {
-            await axios.put(`http://localhost:5001/api/games/${game.gameId}/toggle`);
+            await apiClient.put(`/api/games/${game.gameId}/toggle`);
             await fetchGames();
         } catch (error: any) {
             console.error('Error toggling game:', error);
@@ -130,7 +130,7 @@ const Games: React.FC = () => {
         if (!editingGame) return;
 
         try {
-            await axios.put(`http://localhost:5001/api/games/${editingGame.gameId}`, formData);
+            await apiClient.put(`/api/games/${editingGame.gameId}`, formData);
             await fetchGames();
             setEditingGame(null);
             setFormData(null);
@@ -157,7 +157,7 @@ const Games: React.FC = () => {
         }
 
         try {
-            await axios.post('http://localhost:5001/api/games', newGame);
+            await apiClient.post('/api/games', newGame);
             await fetchGames();
             setShowCreateModal(false);
             setNewGame({
@@ -391,8 +391,8 @@ const Games: React.FC = () => {
                                                         const uploadFormData = new FormData();
                                                         uploadFormData.append('file', file);
                                                         try {
-                                                            const response = await axios.post(
-                                                                `http://localhost:5001/api/upload/image?bookId=games&type=game-cover`,
+                                                            const response = await apiClient.post(
+                                                                `/api/upload/image?bookId=games&type=game-cover`,
                                                                 uploadFormData,
                                                                 { headers: { 'Content-Type': 'multipart/form-data' } }
                                                             );
@@ -647,10 +647,8 @@ const Games: React.FC = () => {
                                                         const formData = new FormData();
                                                         formData.append('file', file);
                                                         try {
-                                                            // Use a temporary bookId or create a games folder structure
-                                                            // For now, we'll use a generic "games" folder
-                                                            const response = await axios.post(
-                                                                `http://localhost:5001/api/upload/image?bookId=games&type=game-cover`,
+                                                            const response = await apiClient.post(
+                                                                `/api/upload/image?bookId=games&type=game-cover`,
                                                                 formData,
                                                                 { headers: { 'Content-Type': 'multipart/form-data' } }
                                                             );
@@ -790,4 +788,3 @@ const Games: React.FC = () => {
 };
 
 export default Games;
-

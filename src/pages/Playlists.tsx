@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Edit, Trash2, Music, BookOpen, Eye, EyeOff } from 'lucide-react';
-import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import apiClient from '../services/apiClient';
 
 interface AudioItem {
     _id?: string;
@@ -40,7 +40,7 @@ const Playlists: React.FC = () => {
 
     const fetchPlaylists = async () => {
         try {
-            const response = await axios.get('http://localhost:5001/api/playlists');
+            const response = await apiClient.get('/api/playlists');
             setPlaylists(response.data);
         } catch (error) {
             console.error('Error fetching playlists:', error);
@@ -53,7 +53,7 @@ const Playlists: React.FC = () => {
         if (!confirm('Are you sure you want to delete this playlist?')) return;
 
         try {
-            await axios.delete(`http://localhost:5001/api/playlists/${id}`);
+            await apiClient.delete(`/api/playlists/${id}`);
             setPlaylists(playlists.filter(p => p._id !== id));
         } catch (error) {
             console.error('Error deleting playlist:', error);
@@ -64,7 +64,7 @@ const Playlists: React.FC = () => {
     const handleToggleStatus = async (playlist: Playlist) => {
         const newStatus = playlist.status === 'published' ? 'draft' : 'published';
         try {
-            const response = await axios.put(`http://localhost:5001/api/playlists/${playlist._id}`, {
+            const response = await apiClient.put(`/api/playlists/${playlist._id}`, {
                 ...playlist,
                 status: newStatus,
             });

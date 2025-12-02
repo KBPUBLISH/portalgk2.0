@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import { Plus, Upload, X, Music, Gamepad2, Globe, Trash2, Video } from 'lucide-react';
+import apiClient from '../services/apiClient';
 
 const BookEdit: React.FC = () => {
     const { bookId } = useParams<{ bookId: string }>();
@@ -47,7 +47,7 @@ const BookEdit: React.FC = () => {
         const fetchBook = async () => {
             if (!bookId) return;
             try {
-                const res = await axios.get(`http://localhost:5001/api/books/${bookId}`);
+                const res = await apiClient.get(`/api/books/${bookId}`);
                 const b = res.data;
                 setTitle(b.title || '');
                 setAuthor(b.author || '');
@@ -98,7 +98,7 @@ const BookEdit: React.FC = () => {
         const fetchCategories = async () => {
             try {
                 // Only fetch book categories
-                const response = await axios.get('http://localhost:5001/api/categories?type=book');
+                const response = await apiClient.get('/api/categories?type=book');
                 setCategories(response.data);
             } catch (error) {
                 console.error('Error fetching categories:', error);
@@ -110,7 +110,7 @@ const BookEdit: React.FC = () => {
     useEffect(() => {
         const fetchGames = async () => {
             try {
-                const response = await axios.get('http://localhost:5001/api/games');
+                const response = await apiClient.get('/api/games');
                 setAvailableGames(response.data);
             } catch (error) {
                 console.error('Error fetching games:', error);
@@ -131,8 +131,8 @@ const BookEdit: React.FC = () => {
 
         try {
             // Upload with bookId and type=cover for organized structure
-            const response = await axios.post(
-                `http://localhost:5001/api/upload/image?bookId=${bookId}&type=cover`,
+            const response = await apiClient.post(
+                `/api/upload/image?bookId=${bookId}&type=cover`,
                 formDataUpload,
                 {
                     headers: { 'Content-Type': 'multipart/form-data' },
@@ -202,8 +202,8 @@ const BookEdit: React.FC = () => {
         formDataUpload.append('file', file);
 
         try {
-            const response = await axios.post(
-                `http://localhost:5001/api/upload/audio?bookId=${bookId}`,
+            const response = await apiClient.post(
+                `/api/upload/audio?bookId=${bookId}`,
                 formDataUpload,
                 {
                     headers: { 'Content-Type': 'multipart/form-data' },
@@ -268,8 +268,8 @@ const BookEdit: React.FC = () => {
         formDataUpload.append('file', file);
 
         try {
-            const response = await axios.post(
-                `http://localhost:5001/api/upload/video?bookId=${bookId}&type=video`,
+            const response = await apiClient.post(
+                `/api/upload/video?bookId=${bookId}&type=video`,
                 formDataUpload,
                 {
                     headers: { 'Content-Type': 'multipart/form-data' },
@@ -327,7 +327,7 @@ const BookEdit: React.FC = () => {
                 bookVideos: bookVideos,
             };
             console.log('Updating book with payload:', payload);
-            await axios.put(`http://localhost:5001/api/books/${bookId}`, payload);
+            await apiClient.put(`/api/books/${bookId}`, payload);
             navigate('/books');
         } catch (err) {
             console.error('Error updating book:', err);
@@ -761,8 +761,8 @@ const BookEdit: React.FC = () => {
                                             const formData = new FormData();
                                             formData.append('file', file);
                                             try {
-                                                const response = await axios.post(
-                                                    `http://localhost:5001/api/upload/image?bookId=${bookId}&type=game-cover`,
+                                                const response = await apiClient.post(
+                                                    `/api/upload/image?bookId=${bookId}&type=game-cover`,
                                                     formData,
                                                     { headers: { 'Content-Type': 'multipart/form-data' } }
                                                 );
@@ -993,8 +993,8 @@ const BookEdit: React.FC = () => {
                                             const formData = new FormData();
                                             formData.append('file', file);
                                             try {
-                                                const response = await axios.post(
-                                                    `http://localhost:5001/api/upload/image?bookId=${bookId}&type=cover`,
+                                                const response = await apiClient.post(
+                                                    `/api/upload/image?bookId=${bookId}&type=cover`,
                                                     formData,
                                                     { headers: { 'Content-Type': 'multipart/form-data' } }
                                                 );

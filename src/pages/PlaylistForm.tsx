@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Upload, Plus, Trash2, GripVertical, Music, Save, X } from 'lucide-react';
-import axios from 'axios';
+import apiClient from '../services/apiClient';
 
 interface AudioItem {
     _id?: string;
@@ -64,7 +64,7 @@ const PlaylistForm: React.FC = () => {
     const fetchCategories = async () => {
         try {
             // Only fetch audio categories
-            const response = await axios.get('http://localhost:5001/api/categories?type=audio');
+            const response = await apiClient.get('/api/categories?type=audio');
             setCategories(response.data);
             if (response.data.length > 0 && !formData.category) {
                 setFormData(prev => ({ ...prev, category: response.data[0].name }));
@@ -76,7 +76,7 @@ const PlaylistForm: React.FC = () => {
 
     const fetchPlaylist = async () => {
         try {
-            const response = await axios.get(`http://localhost:5001/api/playlists/${id}`);
+            const response = await apiClient.get(`/api/playlists/${id}`);
             setFormData(response.data);
             // Initialize selectedCategories from the playlist data
             if (response.data.categories && Array.isArray(response.data.categories)) {
@@ -118,9 +118,9 @@ const PlaylistForm: React.FC = () => {
             };
             
             if (id) {
-                await axios.put(`http://localhost:5001/api/playlists/${id}`, payload);
+                await apiClient.put(`/api/playlists/${id}`, payload);
             } else {
-                await axios.post('http://localhost:5001/api/playlists', payload);
+                await apiClient.post('/api/playlists', payload);
             }
             navigate('/playlists');
         } catch (error: any) {
@@ -144,21 +144,21 @@ const PlaylistForm: React.FC = () => {
 
             if (type === 'cover') {
                 // Playlist cover image - always use playlists folder
-                endpoint = 'http://localhost:5001/api/upload/image';
+                endpoint = '/api/upload/image';
                 queryParams = `?bookId=playlists&type=cover`;
             } else if (type === 'itemCover' && itemIndex !== undefined) {
                 // Song/episode cover image - always use playlists folder
-                endpoint = 'http://localhost:5001/api/upload/image';
+                endpoint = '/api/upload/image';
                 queryParams = `?bookId=playlists&type=cover`;
             } else if (type === 'audio' && itemIndex !== undefined) {
                 // Audio file (MP3) - always use playlists folder
-                endpoint = 'http://localhost:5001/api/upload/audio';
+                endpoint = '/api/upload/audio';
                 queryParams = `?bookId=playlists&type=audio`;
             } else {
                 throw new Error('Invalid upload type or missing parameters');
             }
             
-            const response = await axios.post(`${endpoint}${queryParams}`, formDataUpload, {
+            const response = await apiClient.post(`${endpoint}${queryParams}`, formDataUpload, {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
 

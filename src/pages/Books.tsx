@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
+import apiClient from '../services/apiClient';
 
 interface Book {
     _id: string;
@@ -19,7 +19,7 @@ const Books: React.FC = () => {
     useEffect(() => {
         const fetchBooks = async () => {
             try {
-                const response = await axios.get('http://localhost:5001/api/books');
+                const response = await apiClient.get('/api/books');
                 setBooks(response.data);
             } catch (error) {
                 console.error('Error fetching books:', error);
@@ -38,7 +38,7 @@ const Books: React.FC = () => {
 
         setDeletingBookId(bookId);
         try {
-            await axios.delete(`http://localhost:5001/api/books/${bookId}`);
+            await apiClient.delete(`/api/books/${bookId}`);
             // Remove the book from the list
             setBooks(books.filter(book => book._id !== bookId));
         } catch (error) {

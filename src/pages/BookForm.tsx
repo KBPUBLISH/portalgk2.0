@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, ArrowLeft, Save } from 'lucide-react';
-import axios from 'axios';
+import apiClient from '../services/apiClient';
 
 interface BookFormData {
     title: string;
@@ -39,7 +39,7 @@ const BookForm: React.FC = () => {
         const fetchCategories = async () => {
             try {
                 // Only fetch book categories
-                const response = await axios.get('http://localhost:5001/api/categories?type=book');
+                const response = await apiClient.get('/api/categories?type=book');
                 setCategories(response.data);
                 if (response.data.length > 0 && !formData.category) {
                     setFormData(prev => ({ ...prev, category: response.data[0].name }));
@@ -85,7 +85,7 @@ const BookForm: React.FC = () => {
             const bookData = { ...formData, coverImage: '' };
             
             // Create book
-            const response = await axios.post('http://localhost:5001/api/books', bookData);
+            const response = await apiClient.post('/api/books', bookData);
             const newBook = response.data;
             const bookId = newBook._id;
             
@@ -96,8 +96,8 @@ const BookForm: React.FC = () => {
                 formDataUpload.append('file', coverFile);
 
                 try {
-                    const uploadResponse = await axios.post(
-                        `http://localhost:5001/api/upload/image?bookId=${bookId}&type=cover`,
+                    const uploadResponse = await apiClient.post(
+                        `/api/upload/image?bookId=${bookId}&type=cover`,
                         formDataUpload,
                         {
                             headers: { 'Content-Type': 'multipart/form-data' },
@@ -105,7 +105,7 @@ const BookForm: React.FC = () => {
                     );
                     
                     // Update book with the uploaded cover image URL
-                    await axios.put(`http://localhost:5001/api/books/${bookId}`, {
+                    await apiClient.put(`/api/books/${bookId}`, {
                         coverImage: uploadResponse.data.url
                     });
                     

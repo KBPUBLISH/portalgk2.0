@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import axios from 'axios';
 import {
     Save,
     Image as ImageIcon,
@@ -14,6 +13,7 @@ import {
     LayoutTemplate,
     Video
 } from 'lucide-react';
+import apiClient, { getMediaUrl } from '../services/apiClient';
 
 interface TextBox {
     id: string;
@@ -78,7 +78,7 @@ const PageEditor: React.FC = () => {
         const fetchPages = async () => {
             if (!bookId) return;
             try {
-                const res = await axios.get(`http://localhost:5001/api/pages/book/${bookId}`);
+                const res = await apiClient.get(`/api/pages/book/${bookId}`);
                 setExistingPages(res.data);
 
                 // Auto-set page number to next available
@@ -178,20 +178,10 @@ const PageEditor: React.FC = () => {
     const resolveUrl = (url?: string) => {
         if (!url) return '';
         // Allow blob URLs for preview
-        if (url.startsWith('blob:')) {
-            return url;
-        }
-        // If already absolute URL, return as is
-        if (url.startsWith('http://') || url.startsWith('https://')) return url;
-        // If relative URL starting with /uploads, make it absolute
-        if (url.startsWith('/uploads')) return `http://localhost:5001${url}`;
-        // If it's a relative path without leading slash, add it
-        if (url && !url.startsWith('/') && !url.startsWith('http')) {
-            return `http://localhost:5001/${url}`;
-        }
-        return url;
+        if (url.startsWith('blob:')) return url;
+        // Use the centralized getMediaUrl helper
+        return getMediaUrl(url);
     };
-
     // Load existing page for editing
     const loadPage = (page: any) => {
         setEditingPageId(page._id);
@@ -255,7 +245,7 @@ const PageEditor: React.FC = () => {
         }
 
         try {
-            await axios.delete(`http://localhost:5001/api/pages/${pageId}`);
+            await apiClient.delete(`/api/pages/${pageId}`);
 
             // Remove from existing pages list
             setExistingPages(existingPages.filter(p => p._id !== pageId));
@@ -453,8 +443,8 @@ const PageEditor: React.FC = () => {
                 formData.append('file', backgroundFile);
                 const endpoint = backgroundType === 'image' ? '/api/upload/image' : '/api/upload/video';
                 // Upload with bookId and type for organized structure
-                const uploadUrl = `http://localhost:5001${endpoint}?bookId=${bookId}&type=pages&pageNumber=${pageNumber}`;
-                const res = await axios.post(uploadUrl, formData, {
+                const uploadUrl = `${endpoint}?bookId=${bookId}&type=pages&pageNumber=${pageNumber}`;
+                const res = await apiClient.post(uploadUrl, formData, {
                     headers: { 'Content-Type': 'multipart/form-data' },
                 });
                 backgroundUrl = res.data.url;
@@ -488,8 +478,8 @@ const PageEditor: React.FC = () => {
             if (soundEffectFile) {
                 const formData = new FormData();
                 formData.append('file', soundEffectFile);
-                const soundEffectUploadUrl = `http://localhost:5001/api/upload/sound-effect?bookId=${bookId}&pageNumber=${pageNumber}`;
-                const res = await axios.post(soundEffectUploadUrl, formData, {
+                const soundEffectUploadUrl = `/api/upload/sound-effect?bookId=${bookId}&pageNumber=${pageNumber}`;
+                const res = await apiClient.post(soundEffectUploadUrl, formData, {
                     headers: { 'Content-Type': 'multipart/form-data' },
                 });
                 uploadedSoundEffectUrl = res.data.url;
@@ -508,8 +498,8 @@ const PageEditor: React.FC = () => {
                 const formData = new FormData();
                 formData.append('file', scrollFile);
                 // Upload scroll with bookId and type for organized structure
-                const scrollUploadUrl = `http://localhost:5001/api/upload/image?bookId=${bookId}&type=scroll&pageNumber=${pageNumber}`;
-                const res = await axios.post(scrollUploadUrl, formData, {
+                const scrollUploadUrl = `/api/upload/image?bookId=${bookId}&type=scroll&pageNumber=${pageNumber}`;
+                const res = await apiClient.post(scrollUploadUrl, formData, {
                     headers: { 'Content-Type': 'multipart/form-data' },
                 });
                 scrollUrl = res.data.url;
@@ -578,9 +568,9 @@ const PageEditor: React.FC = () => {
 
             // Use PUT to update existing page, POST to create new
             if (editingPageId) {
-                await axios.put(`http://localhost:5001/api/pages/${editingPageId}`, payload);
+                await apiClient.put(`/api/pages/${editingPageId}`, payload);
                 // Refresh pages list
-                const res = await axios.get(`http://localhost:5001/api/pages/book/${bookId}`);
+                const res = await apiClient.get(`/api/pages/book/${bookId}`);
                 setExistingPages(res.data);
 
                 // Reload the updated page into the editor to keep state in sync
@@ -599,10 +589,10 @@ const PageEditor: React.FC = () => {
 
                 alert('Page updated successfully!');
             } else {
-                await axios.post('http://localhost:5001/api/pages', payload);
+                await apiClient.post('/api/pages', payload);
 
                 // Refresh pages list
-                const res = await axios.get(`http://localhost:5001/api/pages/book/${bookId}`);
+                const res = await apiClient.get(`/api/pages/book/${bookId}`);
                 setExistingPages(res.data);
 
                 // If this is page 1 and no template exists, ask if user wants to create one
@@ -1213,7 +1203,7 @@ const PageEditor: React.FC = () => {
 
                                     // Always fetch from the saved page to get the real URL (not blob URL)
                                     try {
-                                        const res = await axios.get(`http://localhost:5001/api/pages/book/${bookId}`);
+                                        const res = await apiClient.get(`/api/pages/book/${bookId}`);
                                         const page1 = res.data.find((p: any) => p.pageNumber === 1);
                                         if (page1 && page1.scrollUrl) {
                                             actualScrollUrl = page1.scrollUrl;

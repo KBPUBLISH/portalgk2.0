@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import { ArrowLeft, Upload, Plus, Trash2, Save, Video, Image as ImageIcon, BookOpen, Activity, Calendar, Sparkles } from 'lucide-react';
+import apiClient from '../services/apiClient';
 
 interface Devotional {
     title?: string;
@@ -88,7 +88,7 @@ const LessonForm: React.FC = () => {
 
     const fetchLesson = async () => {
         try {
-            const response = await axios.get(`http://localhost:5001/api/lessons/${id}`);
+            const response = await apiClient.get(`/api/lessons/${id}`);
             const lesson = response.data;
             setFormData({
                 title: lesson.title || '',
@@ -136,8 +136,8 @@ const LessonForm: React.FC = () => {
 
         try {
             const lessonId = id || 'temp';
-            const response = await axios.post(
-                `http://localhost:5001/api/upload/video?bookId=lessons&type=video&lessonId=${lessonId}`,
+            const response = await apiClient.post(
+                `/api/upload/video?bookId=lessons&type=video&lessonId=${lessonId}`,
                 formDataUpload,
                 {
                     headers: { 'Content-Type': 'multipart/form-data' },
@@ -180,8 +180,8 @@ const LessonForm: React.FC = () => {
 
         try {
             const lessonId = id || 'temp';
-            const response = await axios.post(
-                `http://localhost:5001/api/upload/image?bookId=lessons&type=thumbnail&lessonId=${lessonId}`,
+            const response = await apiClient.post(
+                `/api/upload/image?bookId=lessons&type=thumbnail&lessonId=${lessonId}`,
                 formDataUpload,
                 {
                     headers: { 'Content-Type': 'multipart/form-data' },
@@ -222,7 +222,7 @@ const LessonForm: React.FC = () => {
             
             console.log('Sending request to generate activity:', payload);
             
-            const response = await axios.post('http://localhost:5001/api/lessons/generate-activity', payload);
+            const response = await apiClient.post('/api/lessons/generate-activity', payload);
 
             console.log('Activity generation response:', response.data);
             const generated = response.data;
@@ -317,9 +317,9 @@ const LessonForm: React.FC = () => {
             let lessonId = id;
             
             if (id) {
-                await axios.put(`http://localhost:5001/api/lessons/${id}`, payload);
+                await apiClient.put(`/api/lessons/${id}`, payload);
             } else {
-                const response = await axios.post('http://localhost:5001/api/lessons', payload);
+                const response = await apiClient.post('/api/lessons', payload);
                 lessonId = response.data._id;
                 
                 // Ensure lessonId is defined before using it
@@ -331,12 +331,12 @@ const LessonForm: React.FC = () => {
                 if (videoFile && formData.video.url && !formData.video.url.includes(lessonId)) {
                     const formDataUpload = new FormData();
                     formDataUpload.append('file', videoFile);
-                    const uploadResponse = await axios.post(
-                        `http://localhost:5001/api/upload/video?bookId=lessons&type=video&lessonId=${lessonId}`,
+                    const uploadResponse = await apiClient.post(
+                        `/api/upload/video?bookId=lessons&type=video&lessonId=${lessonId}`,
                         formDataUpload,
                         { headers: { 'Content-Type': 'multipart/form-data' } }
                     );
-                    await axios.put(`http://localhost:5001/api/lessons/${lessonId}`, {
+                    await apiClient.put(`/api/lessons/${lessonId}`, {
                         video: { ...formData.video, url: uploadResponse.data.url },
                     });
                 }
@@ -344,12 +344,12 @@ const LessonForm: React.FC = () => {
                 if (thumbnailFile && formData.video.thumbnail && typeof formData.video.thumbnail === 'string' && !formData.video.thumbnail.includes(lessonId)) {
                     const formDataUpload = new FormData();
                     formDataUpload.append('file', thumbnailFile);
-                    const uploadResponse = await axios.post(
-                        `http://localhost:5001/api/upload/image?bookId=lessons&type=thumbnail&lessonId=${lessonId}`,
+                    const uploadResponse = await apiClient.post(
+                        `/api/upload/image?bookId=lessons&type=thumbnail&lessonId=${lessonId}`,
                         formDataUpload,
                         { headers: { 'Content-Type': 'multipart/form-data' } }
                     );
-                    await axios.put(`http://localhost:5001/api/lessons/${lessonId}`, {
+                    await apiClient.put(`/api/lessons/${lessonId}`, {
                         video: { ...formData.video, thumbnail: uploadResponse.data.url },
                     });
                 }

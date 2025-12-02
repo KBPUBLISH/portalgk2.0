@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Volume2, Play, Pause, RefreshCw, XCircle } from 'lucide-react';
-import axios from 'axios';
+import apiClient from '../services/apiClient';
 
 interface Voice {
     _id?: string;
@@ -40,7 +40,7 @@ const Voices: React.FC = () => {
 
     const fetchVoices = async () => {
         try {
-            const response = await axios.get('http://localhost:5001/api/voices');
+            const response = await apiClient.get('/api/voices');
             setVoices(response.data);
         } catch (error) {
             console.error('Error fetching voices:', error);
@@ -52,7 +52,7 @@ const Voices: React.FC = () => {
     const handleSync = async () => {
         setSyncing(true);
         try {
-            const response = await axios.get('http://localhost:5001/api/voices/sync');
+            const response = await apiClient.get('/api/voices/sync');
             alert(`Synced ${response.data.synced} voices (${response.data.created} new, ${response.data.updated} updated)`);
             await fetchVoices();
         } catch (error: any) {
@@ -66,10 +66,10 @@ const Voices: React.FC = () => {
     const handleToggleEnabled = async (voice: Voice) => {
         try {
             const endpoint = voice.enabled 
-                ? `http://localhost:5001/api/voices/${voice.voiceId}/disable`
-                : `http://localhost:5001/api/voices/${voice.voiceId}/enable`;
+                ? `/api/voices/${voice.voiceId}/disable`
+                : `/api/voices/${voice.voiceId}/enable`;
             
-            await axios.put(endpoint);
+            await apiClient.put(endpoint);
             await fetchVoices();
         } catch (error: any) {
             console.error('Error toggling voice:', error);
@@ -91,7 +91,7 @@ const Voices: React.FC = () => {
 
             // Disable all enabled voices
             const disablePromises = enabledVoices.map(voice =>
-                axios.put(`http://localhost:5001/api/voices/${voice.voiceId}/disable`)
+                apiClient.put(`/api/voices/${voice.voiceId}/disable`)
             );
 
             await Promise.all(disablePromises);
@@ -165,8 +165,8 @@ const Voices: React.FC = () => {
                 formData.append('file', characterImageFile);
                 
                 // Pass bookId and type as query parameters, not form data
-                const uploadResponse = await axios.post(
-                    'http://localhost:5001/api/upload/image?bookId=voices&type=character',
+                const uploadResponse = await apiClient.post(
+                    '/api/upload/image?bookId=voices&type=character',
                     formData,
                     {
                         headers: { 'Content-Type': 'multipart/form-data' }
@@ -177,7 +177,7 @@ const Voices: React.FC = () => {
             }
             
             // Update voice with character image and custom name
-            await axios.put(`http://localhost:5001/api/voices/${editingVoice.voiceId}`, {
+            await apiClient.put(`/api/voices/${editingVoice.voiceId}`, {
                 characterImage: characterImageUrl,
                 customName: customName.trim() || null // Clear if empty
             });
@@ -211,7 +211,7 @@ const Voices: React.FC = () => {
             
             setPlayingPreview(voice.voiceId);
             
-            const response = await axios.post('http://localhost:5001/api/tts/generate', {
+            const response = await apiClient.post('/api/tts/generate', {
                 text: sampleText,
                 voiceId: voice.voiceId
             });
@@ -583,4 +583,3 @@ const Voices: React.FC = () => {
 };
 
 export default Voices;
-

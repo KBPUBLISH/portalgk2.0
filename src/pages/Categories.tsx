@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Edit, Trash2, Tag } from 'lucide-react';
-import axios from 'axios';
+import apiClient from '../services/apiClient';
 
 interface Category {
     _id: string;
@@ -33,11 +33,11 @@ const Categories: React.FC = () => {
         setLoading(true);
         try {
             const url = filterType === 'all' 
-                ? 'http://localhost:5001/api/categories'
+                ? '/api/categories'
                 : filterType === 'explore'
-                    ? 'http://localhost:5001/api/categories?explore=true'
-                    : `http://localhost:5001/api/categories?type=${filterType}`;
-            const response = await axios.get(url);
+                    ? '/api/categories?explore=true'
+                    : `/api/categories?type=${filterType}`;
+            const response = await apiClient.get(url);
             setCategories(response.data);
         } catch (error) {
             console.error('Error fetching categories:', error);
@@ -100,16 +100,16 @@ const Categories: React.FC = () => {
             console.log('Submitting category form data:', payload);
             console.log('showOnExplore value:', formData.showOnExplore, 'type:', typeof formData.showOnExplore);
             if (editingCategory) {
-                const response = await axios.put(`http://localhost:5001/api/categories/${editingCategory._id}`, payload);
+                const response = await apiClient.put(`/api/categories/${editingCategory._id}`, payload);
                 console.log('Update response full:', JSON.stringify(response.data, null, 2));
                 console.log('showOnExplore in response:', response.data.showOnExplore, 'type:', typeof response.data.showOnExplore);
                 
                 // Verify by fetching the category again
-                const verifyResponse = await axios.get(`http://localhost:5001/api/categories/${editingCategory._id}`);
+                const verifyResponse = await apiClient.get(`/api/categories/${editingCategory._id}`);
                 console.log('Verified category after update:', JSON.stringify(verifyResponse.data, null, 2));
                 console.log('Verified showOnExplore:', verifyResponse.data.showOnExplore);
             } else {
-                const response = await axios.post('http://localhost:5001/api/categories', payload);
+                const response = await apiClient.post('/api/categories', payload);
                 console.log('Create response:', response.data);
                 console.log('showOnExplore in response:', response.data.showOnExplore);
             }
@@ -135,7 +135,7 @@ const Categories: React.FC = () => {
         }
         setDeleting(id);
         try {
-            await axios.delete(`http://localhost:5001/api/categories/${id}`);
+            await apiClient.delete(`/api/categories/${id}`);
             await fetchCategories();
         } catch (error: any) {
             console.error('Error deleting category:', error);
@@ -385,4 +385,3 @@ const Categories: React.FC = () => {
 };
 
 export default Categories;
-
