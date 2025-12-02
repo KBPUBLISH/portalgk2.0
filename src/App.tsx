@@ -16,6 +16,7 @@ import Voices from './pages/Voices';
 import Games from './pages/Games';
 import Lessons from './pages/Lessons';
 import LessonForm from './pages/LessonForm';
+import Notifications from './pages/Notifications';
 
 function App() {
   return (
@@ -46,6 +47,7 @@ function App() {
             <Route path="lessons" element={<Lessons />} />
             <Route path="lessons/new" element={<LessonForm />} />
             <Route path="lessons/edit/:id" element={<LessonForm />} />
+            <Route path="notifications" element={<Notifications />} />
           </Route>
         </Routes>
       </Router>
