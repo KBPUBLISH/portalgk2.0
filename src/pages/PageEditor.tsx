@@ -634,7 +634,36 @@ const PageEditor: React.FC = () => {
             if (err.response) {
                 console.error('Response data:', err.response.data);
                 console.error('Response status:', err.response.status);
-                alert(`Failed to save page: ${err.response.data.message || 'Unknown error'}`);
+                
+                // Handle duplicate page number error - offer to edit existing page
+                if (err.response.data.error === 'DUPLICATE_PAGE_NUMBER' && err.response.data.existingPageId) {
+                    const shouldEdit = window.confirm(
+                        `Page ${pageNumber} already exists. Would you like to edit the existing page instead?`
+                    );
+                    if (shouldEdit) {
+                        // Find and load the existing page
+                        const existingPage = existingPages.find(p => p._id === err.response.data.existingPageId);
+                        if (existingPage) {
+                            loadPage(existingPage);
+                            alert('Loaded existing page. Make your changes and click "Update Page" to save.');
+                        } else {
+                            // Page not in our list, fetch it
+                            try {
+                                const res = await apiClient.get(`/api/pages/book/${bookId}`);
+                                setExistingPages(res.data);
+                                const page = res.data.find((p: any) => p._id === err.response.data.existingPageId);
+                                if (page) {
+                                    loadPage(page);
+                                    alert('Loaded existing page. Make your changes and click "Update Page" to save.');
+                                }
+                            } catch {
+                                alert('Could not load existing page. Please click on the page in the sidebar to edit it.');
+                            }
+                        }
+                    }
+                } else {
+                    alert(`Failed to save page: ${err.response.data.message || 'Unknown error'}`);
+                }
             } else {
                 alert('Failed to save page');
             }
