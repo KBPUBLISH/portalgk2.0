@@ -52,6 +52,7 @@ const LessonForm: React.FC = () => {
     const [videoPreview, setVideoPreview] = useState<string>('');
     const [thumbnailPreview, setThumbnailPreview] = useState<string>('');
     const [generatingActivity, setGeneratingActivity] = useState(false);
+    const [enhancingDevotional, setEnhancingDevotional] = useState(false);
     const videoInputRef = useRef<HTMLInputElement>(null);
     const thumbnailInputRef = useRef<HTMLInputElement>(null);
     
@@ -260,6 +261,33 @@ const LessonForm: React.FC = () => {
         }
     };
 
+    // Enhance devotional content with ElevenLabs emotion prompts
+    const handleEnhanceDevotional = async () => {
+        if (!formData.devotional.content || !formData.devotional.content.trim()) {
+            alert('Please add devotional content first before enhancing.');
+            return;
+        }
+
+        setEnhancingDevotional(true);
+        try {
+            const response = await apiClient.post('/api/tts/enhance', { 
+                text: formData.devotional.content 
+            });
+            
+            if (response.data.enhancedText) {
+                setFormData(prev => ({
+                    ...prev,
+                    devotional: { ...prev.devotional, content: response.data.enhancedText }
+                }));
+                alert('Devotional text enhanced with emotion prompts!');
+            }
+        } catch (error) {
+            console.error('Failed to enhance devotional text:', error);
+            alert('Failed to enhance text. Please try again.');
+        } finally {
+            setEnhancingDevotional(false);
+        }
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -557,6 +585,30 @@ const LessonForm: React.FC = () => {
                             className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                             placeholder="Enter devotional content..."
                         />
+                        <div className="mt-2 flex items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={handleEnhanceDevotional}
+                                disabled={enhancingDevotional || !formData.devotional.content?.trim()}
+                                className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-md font-medium text-sm flex items-center gap-2 hover:from-purple-600 hover:to-pink-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Add emotion prompts for ElevenLabs TTS (e.g., [laughs], [whispers], [excitedly])"
+                            >
+                                {enhancingDevotional ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                        Enhancing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Sparkles className="w-4 h-4" />
+                                        Enhance for TTS
+                                    </>
+                                )}
+                            </button>
+                            <span className="text-xs text-gray-500">
+                                Adds emotion tags like [laughs], [whispers], [excitedly] for expressive TTS
+                            </span>
+                        </div>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-4">
