@@ -18,6 +18,7 @@ import Lessons from './pages/Lessons';
 import LessonForm from './pages/LessonForm';
 import Notifications from './pages/Notifications';
 import MusicManagement from './pages/MusicManagement';
+import FeaturedContent from './pages/FeaturedContent';
 
 function App() {
   return (
@@ -50,6 +51,7 @@ function App() {
             <Route path="lessons/edit/:id" element={<LessonForm />} />
             <Route path="notifications" element={<Notifications />} />
             <Route path="music" element={<MusicManagement />} />
+            <Route path="featured" element={<FeaturedContent />} />
           </Route>
         </Routes>
       </Router>
