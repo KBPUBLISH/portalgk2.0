@@ -88,13 +88,22 @@ const Lessons: React.FC = () => {
         <div>
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold text-gray-800">Video Lessons</h1>
-                <Link
-                    to="/lessons/new"
-                    className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition-colors"
-                >
-                    <Plus className="w-5 h-5" />
-                    New Lesson
-                </Link>
+                <div className="flex gap-3">
+                    <Link
+                        to="/lessons/calendar"
+                        className="bg-purple-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-purple-700 transition-colors"
+                    >
+                        <Calendar className="w-5 h-5" />
+                        Calendar View
+                    </Link>
+                    <Link
+                        to="/lessons/new"
+                        className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition-colors"
+                    >
+                        <Plus className="w-5 h-5" />
+                        New Lesson
+                    </Link>
+                </div>
             </div>
 
             {/* Status Filter */}

@@ -16,6 +16,7 @@ import Voices from './pages/Voices';
 import Games from './pages/Games';
 import Lessons from './pages/Lessons';
 import LessonForm from './pages/LessonForm';
+import LessonCalendarPage from './pages/LessonCalendarPage';
 import Notifications from './pages/Notifications';
 import MusicManagement from './pages/MusicManagement';
 import FeaturedContent from './pages/FeaturedContent';
@@ -49,6 +50,7 @@ function App() {
             <Route path="lessons" element={<Lessons />} />
             <Route path="lessons/new" element={<LessonForm />} />
             <Route path="lessons/edit/:id" element={<LessonForm />} />
+            <Route path="lessons/calendar" element={<LessonCalendarPage />} />
             <Route path="notifications" element={<Notifications />} />
             <Route path="music" element={<MusicManagement />} />
             <Route path="featured" element={<FeaturedContent />} />

@@ -13,7 +13,8 @@ import {
     LayoutTemplate,
     Video,
     Sparkles,
-    Loader2
+    Loader2,
+    X
 } from 'lucide-react';
 import apiClient, { getMediaUrl } from '../services/apiClient';
 
@@ -884,6 +885,28 @@ const PageEditor: React.FC = () => {
                                     </div>
                                 )}
                             </label>
+                            {/* Delete Scroll Button */}
+                            {scrollPreview && (
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        if (confirm('Are you sure you want to remove the scroll image from this page?')) {
+                                            // Clean up blob URL if it exists
+                                            if (scrollPreview.startsWith('blob:')) {
+                                                URL.revokeObjectURL(scrollPreview);
+                                            }
+                                            setScrollPreview(null);
+                                            setScrollFile(null);
+                                        }
+                                    }}
+                                    className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1.5 shadow-lg transition-colors z-10"
+                                    title="Remove scroll image"
+                                >
+                                    <X className="w-3 h-3" />
+                                </button>
+                            )}
                         </div>
                     </div>
 
