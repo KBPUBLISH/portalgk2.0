@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Upload, Plus, Trash2, GripVertical, Music, Save, X } from 'lucide-react';
 import apiClient from '../services/apiClient';
+import ContentAnalytics from '../components/ContentAnalytics';
 
 interface AudioItem {
     _id?: string;
@@ -224,6 +225,13 @@ const PlaylistForm: React.FC = () => {
                     {id ? 'Edit Playlist' : 'Create Playlist'}
                 </h1>
             </div>
+
+            {/* Analytics Section - Only show when editing */}
+            {id && (
+                <div className="mb-6">
+                    <ContentAnalytics contentId={id} contentType="playlist" />
+                </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-6">
                 {/* Basic Info Card */}

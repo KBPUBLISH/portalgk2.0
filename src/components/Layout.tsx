@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Book, Music, Layout as LayoutIcon, Home, Tag, Volume2, Gamepad2, Video, LogOut, Bell, Music2, Star, CalendarDays } from 'lucide-react';
+import { Book, Music, Layout as LayoutIcon, Home, Tag, Volume2, Gamepad2, Video, LogOut, Bell, Music2, Star, CalendarDays, BarChart3 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const Layout: React.FC = () => {
@@ -17,6 +17,7 @@ const Layout: React.FC = () => {
 
     const navItems = [
         { path: '/', icon: Home, label: 'Dashboard' },
+        { path: '/analytics', icon: BarChart3, label: 'Analytics' },
         { path: '/featured', icon: Star, label: 'Featured' },
         { path: '/books', icon: Book, label: 'Books' },
         { path: '/playlists', icon: Music, label: 'Playlists' },
