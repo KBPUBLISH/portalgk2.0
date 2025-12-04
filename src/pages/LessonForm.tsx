@@ -24,10 +24,25 @@ interface Activity {
     reflectionPrompt?: string;
 }
 
+type LessonType = 
+    | 'Bible Study' 
+    | 'Science' 
+    | 'Math' 
+    | 'History' 
+    | 'English' 
+    | 'Reading'
+    | 'Arts & Crafts' 
+    | 'Music'
+    | 'Physical Education'
+    | 'Life Skills'
+    | 'Technology'
+    | 'Social Studies'
+    | 'Nature';
+
 interface LessonFormData {
     title: string;
     description: string;
-    type: 'Bible' | 'Science' | 'Math' | 'History' | 'English' | 'Art' | 'Technology';
+    type: LessonType;
     video: {
         url: string;
         thumbnail?: string;
@@ -60,7 +75,7 @@ const LessonForm: React.FC = () => {
     const [formData, setFormData] = useState<LessonFormData>({
         title: '',
         description: '',
-        type: 'Bible',
+        type: 'Bible Study',
         video: {
             url: '',
             thumbnail: '',
@@ -96,7 +111,7 @@ const LessonForm: React.FC = () => {
             setFormData({
                 title: lesson.title || '',
                 description: lesson.description || '',
-                type: lesson.type || 'Bible',
+                type: lesson.type || 'Bible Study',
                 video: lesson.video || { url: '', thumbnail: '', duration: 0 },
                 devotional: lesson.devotional || { title: '', content: '', verse: '', verseText: '' },
                 activity: lesson.activity || { type: 'quiz', questions: [] },
@@ -440,19 +455,25 @@ const LessonForm: React.FC = () => {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Lesson Type</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Subject / Lesson Type</label>
                         <select
                             value={formData.type}
-                            onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value as any }))}
+                            onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value as LessonType }))}
                             className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         >
-                            <option value="Bible">Bible</option>
-                            <option value="Science">Science</option>
-                            <option value="Math">Math</option>
-                            <option value="History">History</option>
-                            <option value="English">English</option>
-                            <option value="Art">Art</option>
-                            <option value="Technology">Technology</option>
+                            <option value="Bible Study">📖 Bible Study</option>
+                            <option value="Science">🔬 Science</option>
+                            <option value="Math">🔢 Math</option>
+                            <option value="History">📜 History</option>
+                            <option value="English">✏️ English</option>
+                            <option value="Reading">📚 Reading</option>
+                            <option value="Arts & Crafts">🎨 Arts & Crafts</option>
+                            <option value="Music">🎵 Music</option>
+                            <option value="Physical Education">🏃 Physical Education</option>
+                            <option value="Life Skills">🌱 Life Skills</option>
+                            <option value="Technology">💻 Technology</option>
+                            <option value="Social Studies">🌍 Social Studies</option>
+                            <option value="Nature">🌿 Nature</option>
                         </select>
                     </div>
                 </div>
