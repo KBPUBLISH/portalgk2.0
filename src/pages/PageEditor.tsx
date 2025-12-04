@@ -14,7 +14,8 @@ import {
     Video,
     Sparkles,
     Loader2,
-    X
+    X,
+    Volume2
 } from 'lucide-react';
 import apiClient, { getMediaUrl } from '../services/apiClient';
 
@@ -69,6 +70,7 @@ const PageEditor: React.FC = () => {
     const [showScrollLibrary, setShowScrollLibrary] = useState(false);
     const [showTemplateDialog, setShowTemplateDialog] = useState(false);
     const [enhancingTextId, setEnhancingTextId] = useState<string | null>(null);
+    const [enhancingSfxId, setEnhancingSfxId] = useState<string | null>(null);
 
     // Resizable panels
     const [leftPanelWidth, setLeftPanelWidth] = useState(320); // 320px = w-80
@@ -196,6 +198,25 @@ const PageEditor: React.FC = () => {
             alert('Failed to enhance text. Please try again.');
         } finally {
             setEnhancingTextId(null);
+        }
+    };
+
+    // Enhance text with sound effect prompts
+    const enhanceWithSoundEffects = async (id: string) => {
+        const box = textBoxes.find(b => b.id === id);
+        if (!box || !box.text.trim()) return;
+
+        setEnhancingSfxId(id);
+        try {
+            const response = await apiClient.post('/api/tts/enhance-sfx', { text: box.text });
+            if (response.data.enhancedText) {
+                updateTextBox(id, { text: response.data.enhancedText });
+            }
+        } catch (error) {
+            console.error('Failed to enhance text with sound effects:', error);
+            alert('Failed to add sound effects. Please try again.');
+        } finally {
+            setEnhancingSfxId(null);
         }
     };
 
@@ -1029,27 +1050,47 @@ const PageEditor: React.FC = () => {
                                 className="w-full text-sm p-2 border rounded focus:ring-2 focus:ring-indigo-300 outline-none"
                                 rows={3}
                             />
-                            {/* Enhance Button */}
-                            <button
-                                onClick={() => enhanceText(selectedBox.id)}
-                                disabled={enhancingTextId === selectedBox.id || !selectedBox.text.trim()}
-                                className="w-full py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-md font-medium text-sm flex items-center justify-center gap-2 hover:from-purple-600 hover:to-pink-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                title="Add emotion prompts for ElevenLabs TTS (e.g., [laughs], [whispers], [excitedly])"
-                            >
-                                {enhancingTextId === selectedBox.id ? (
-                                    <>
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                        Enhancing...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Sparkles className="w-4 h-4" />
-                                        Enhance for TTS
-                                    </>
-                                )}
-                            </button>
+                            {/* Enhance Buttons */}
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => enhanceText(selectedBox.id)}
+                                    disabled={enhancingTextId === selectedBox.id || enhancingSfxId === selectedBox.id || !selectedBox.text.trim()}
+                                    className="flex-1 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-md font-medium text-sm flex items-center justify-center gap-2 hover:from-purple-600 hover:to-pink-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Add emotion prompts for ElevenLabs TTS (e.g., [laughs], [whispers], [excitedly])"
+                                >
+                                    {enhancingTextId === selectedBox.id ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            Enhancing...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Sparkles className="w-4 h-4" />
+                                            TTS Emotions
+                                        </>
+                                    )}
+                                </button>
+                                <button
+                                    onClick={() => enhanceWithSoundEffects(selectedBox.id)}
+                                    disabled={enhancingSfxId === selectedBox.id || enhancingTextId === selectedBox.id || !selectedBox.text.trim()}
+                                    className="flex-1 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-md font-medium text-sm flex items-center justify-center gap-2 hover:from-cyan-600 hover:to-blue-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Add sound effect prompts (e.g., [gentle wind breeze], [door creaking], [birds chirping])"
+                                >
+                                    {enhancingSfxId === selectedBox.id ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            Adding SFX...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Volume2 className="w-4 h-4" />
+                                            Sound Effects
+                                        </>
+                                    )}
+                                </button>
+                            </div>
                             <p className="text-xs text-gray-500">
-                                Adds emotion tags like [laughs], [whispers], [excitedly] for expressive TTS
+                                <strong>TTS Emotions:</strong> [laughs], [whispers], [excitedly] • <strong>Sound Effects:</strong> [gentle wind breeze], [door creaking]
                             </p>
                             <div className="flex gap-1 bg-white p-1 rounded border border-gray-200">
                                 <button
