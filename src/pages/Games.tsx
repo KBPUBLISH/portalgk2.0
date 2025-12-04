@@ -10,6 +10,7 @@ interface Game {
     description?: string;
     url?: string;
     coverImage?: string;
+    showInDailyTasks?: boolean;
     gameType?: 'modal' | 'webview';
     settings?: any;
     rewards?: {
@@ -33,6 +34,7 @@ const Games: React.FC = () => {
         coverImage: '',
         gameType: 'webview' as 'modal' | 'webview',
         enabled: true,
+        showInDailyTasks: true,
         rewards: {
             threeStars: 50,
             twoStars: 25,
@@ -114,6 +116,7 @@ const Games: React.FC = () => {
             name: game.name,
             description: game.description || '',
             enabled: game.enabled,
+            showInDailyTasks: game.showInDailyTasks !== false, // Default to true
             url: game.url || '',
             coverImage: game.coverImage || '',
             gameType: game.gameType || 'modal',
@@ -168,6 +171,7 @@ const Games: React.FC = () => {
                 coverImage: '',
                 gameType: 'webview',
                 enabled: true,
+                showInDailyTasks: true,
                 rewards: {
                     threeStars: 50,
                     twoStars: 25,
@@ -256,6 +260,14 @@ const Games: React.FC = () => {
 
                         {game.description && (
                             <p className="text-gray-600 text-sm mb-2">{game.description}</p>
+                        )}
+
+                        {/* Show Daily Tasks indicator */}
+                        {game.showInDailyTasks !== false && (
+                            <div className="mb-2 inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                                <span>✅</span>
+                                <span>Daily Tasks & IQ Games</span>
+                            </div>
                         )}
                         
                         {game.gameType === 'webview' && game.url && (
@@ -444,6 +456,19 @@ const Games: React.FC = () => {
                                 </label>
                             </div>
 
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    id="showInDailyTasks"
+                                    checked={formData.showInDailyTasks}
+                                    onChange={(e) => setFormData({ ...formData, showInDailyTasks: e.target.checked })}
+                                    className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                                />
+                                <label htmlFor="showInDailyTasks" className="text-sm font-semibold text-gray-700">
+                                    Show in "Daily Tasks & IQ Games" category
+                                </label>
+                            </div>
+
                             <div className="border-t border-gray-200 pt-4">
                                 <h3 className="text-lg font-bold text-gray-800 mb-4">Coin Rewards</h3>
                                 <div className="grid grid-cols-3 gap-4">
@@ -529,6 +554,7 @@ const Games: React.FC = () => {
                                         coverImage: '',
                                         gameType: 'webview',
                                         enabled: true,
+                                        showInDailyTasks: true,
                                         rewards: {
                                             threeStars: 50,
                                             twoStars: 25,
@@ -700,6 +726,19 @@ const Games: React.FC = () => {
                                 </label>
                             </div>
 
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    id="showInDailyTasks-new"
+                                    checked={newGame.showInDailyTasks}
+                                    onChange={(e) => setNewGame({ ...newGame, showInDailyTasks: e.target.checked })}
+                                    className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                                />
+                                <label htmlFor="showInDailyTasks-new" className="text-sm font-semibold text-gray-700">
+                                    Show in "Daily Tasks & IQ Games" category
+                                </label>
+                            </div>
+
                             <div className="border-t border-gray-200 pt-4">
                                 <h3 className="text-lg font-bold text-gray-800 mb-4">Coin Rewards</h3>
                                 <div className="grid grid-cols-3 gap-4">
@@ -761,6 +800,7 @@ const Games: React.FC = () => {
                                         coverImage: '',
                                         gameType: 'webview',
                                         enabled: true,
+                                        showInDailyTasks: true,
                                         rewards: {
                                             threeStars: 50,
                                             twoStars: 25,

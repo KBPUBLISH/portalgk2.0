@@ -21,13 +21,13 @@ interface CalendarDay {
     date: Date;
     isCurrentMonth: boolean;
     isToday: boolean;
-    lesson?: Lesson;
+    lessons: Lesson[]; // Changed to array to support multiple lessons per day
 }
 
 const LessonCalendarPage: React.FC = () => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [calendarDays, setCalendarDays] = useState<CalendarDay[]>([]);
-    const [scheduledLessons, setScheduledLessons] = useState<{ [key: string]: Lesson }>({});
+    const [scheduledLessons, setScheduledLessons] = useState<{ [key: string]: Lesson[] }>({}); // Array of lessons per date
     const [unscheduledLessons, setUnscheduledLessons] = useState<Lesson[]>([]);
     const [selectedDay, setSelectedDay] = useState<CalendarDay | null>(null);
     const [loading, setLoading] = useState(true);
@@ -63,6 +63,7 @@ const LessonCalendarPage: React.FC = () => {
                 date: d,
                 isCurrentMonth: false,
                 isToday: d.getTime() === today.getTime(),
+                lessons: [], // Will be populated after fetch
             });
         }
 
@@ -73,6 +74,7 @@ const LessonCalendarPage: React.FC = () => {
                 date: d,
                 isCurrentMonth: true,
                 isToday: d.getTime() === today.getTime(),
+                lessons: [], // Will be populated after fetch
             });
         }
 
@@ -84,6 +86,7 @@ const LessonCalendarPage: React.FC = () => {
                 date: d,
                 isCurrentMonth: false,
                 isToday: d.getTime() === today.getTime(),
+                lessons: [], // Will be populated after fetch
             });
         }
 
@@ -104,13 +107,16 @@ const LessonCalendarPage: React.FC = () => {
             // Fetch scheduled lessons for calendar
             const calendarResponse = await apiClient.get(`/api/lessons/calendar?startDate=${startDate}&endDate=${endDate}`);
             
-            // Convert to lookup by date
-            const scheduled: { [key: string]: Lesson } = {};
+            // Convert to lookup by date - support multiple lessons per day
+            const scheduled: { [key: string]: Lesson[] } = {};
             if (calendarResponse.data.lessons) {
                 calendarResponse.data.lessons.forEach((lesson: Lesson) => {
                     if (lesson.scheduledDate) {
                         const dateKey = lesson.scheduledDate.split('T')[0];
-                        scheduled[dateKey] = lesson;
+                        if (!scheduled[dateKey]) {
+                            scheduled[dateKey] = [];
+                        }
+                        scheduled[dateKey].push(lesson);
                     }
                 });
             }
@@ -167,7 +173,7 @@ const LessonCalendarPage: React.FC = () => {
         const dateKey = day.date.toISOString().split('T')[0];
         return {
             ...day,
-            lesson: scheduledLessons[dateKey]
+            lessons: scheduledLessons[dateKey] || []
         };
     });
 
@@ -335,34 +341,38 @@ const LessonCalendarPage: React.FC = () => {
                                     {day.date.getDate()}
                                 </div>
 
-                                {day.lesson && (
-                                    <div 
-                                        className="bg-indigo-100 rounded p-1.5 text-xs group relative"
-                                        onClick={(e) => e.stopPropagation()}
-                                    >
-                                        {day.lesson.video?.thumbnail && (
-                                            <img
-                                                src={day.lesson.video.thumbnail}
-                                                alt=""
-                                                className="w-full h-12 object-cover rounded mb-1"
-                                            />
-                                        )}
-                                        <p className="font-medium text-indigo-800 truncate">{day.lesson.title}</p>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                if (confirm(`Unschedule "${day.lesson?.title}" from this day?`)) {
-                                                    unscheduleLesson(day.lesson!._id);
-                                                }
-                                            }}
-                                            className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                                {/* Show all lessons for this day */}
+                                <div className="space-y-1 max-h-[80px] overflow-y-auto">
+                                    {day.lessons.map((lesson) => (
+                                        <div 
+                                            key={lesson._id}
+                                            className="bg-indigo-100 rounded p-1 text-xs group relative"
+                                            onClick={(e) => e.stopPropagation()}
                                         >
-                                            <X className="w-3 h-3" />
-                                        </button>
-                                    </div>
-                                )}
+                                            {lesson.video?.thumbnail && (
+                                                <img
+                                                    src={lesson.video.thumbnail}
+                                                    alt=""
+                                                    className="w-full h-10 object-cover rounded mb-0.5"
+                                                />
+                                            )}
+                                            <p className="font-medium text-indigo-800 truncate text-[10px]">{lesson.title}</p>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (confirm(`Unschedule "${lesson.title}" from this day?`)) {
+                                                        unscheduleLesson(lesson._id);
+                                                    }
+                                                }}
+                                                className="absolute top-0.5 right-0.5 p-0.5 bg-red-500 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                                            >
+                                                <X className="w-2.5 h-2.5" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
 
-                                {!day.lesson && isSelected && (
+                                {day.lessons.length === 0 && isSelected && (
                                     <div className="text-xs text-indigo-600 mt-2">
                                         Click a video from the library
                                     </div>
@@ -373,53 +383,63 @@ const LessonCalendarPage: React.FC = () => {
                 </div>
             </div>
 
-            {/* Selected Day Modal */}
-            {selectedDay && selectedDay.lesson && (
+            {/* Selected Day Modal - shows all lessons for the day */}
+            {selectedDay && selectedDay.lessons.length > 0 && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setSelectedDay(null)}>
-                    <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                    <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 shadow-2xl max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-lg font-semibold text-gray-800">
                                 {selectedDay.date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                                <span className="text-sm font-normal text-gray-500 ml-2">
+                                    ({selectedDay.lessons.length} lesson{selectedDay.lessons.length > 1 ? 's' : ''})
+                                </span>
                             </h3>
                             <button onClick={() => setSelectedDay(null)} className="p-1 hover:bg-gray-100 rounded">
                                 <X className="w-5 h-5 text-gray-500" />
                             </button>
                         </div>
 
-                        <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                            {selectedDay.lesson.video?.thumbnail && (
-                                <img
-                                    src={selectedDay.lesson.video.thumbnail}
-                                    alt={selectedDay.lesson.title}
-                                    className="w-full h-40 object-cover rounded-lg mb-3"
-                                />
-                            )}
-                            <h4 className="font-semibold text-gray-800">{selectedDay.lesson.title}</h4>
-                            {selectedDay.lesson.description && (
-                                <p className="text-sm text-gray-600 mt-1">{selectedDay.lesson.description}</p>
-                            )}
+                        <div className="space-y-4">
+                            {selectedDay.lessons.map((lesson) => (
+                                <div key={lesson._id} className="bg-gray-50 rounded-lg p-4">
+                                    {lesson.video?.thumbnail && (
+                                        <img
+                                            src={lesson.video.thumbnail}
+                                            alt={lesson.title}
+                                            className="w-full h-32 object-cover rounded-lg mb-3"
+                                        />
+                                    )}
+                                    <h4 className="font-semibold text-gray-800">{lesson.title}</h4>
+                                    {lesson.type && (
+                                        <span className="inline-block mt-1 text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded">
+                                            {lesson.type}
+                                        </span>
+                                    )}
+                                    {lesson.description && (
+                                        <p className="text-sm text-gray-600 mt-1">{lesson.description}</p>
+                                    )}
+                                    <button
+                                        onClick={() => {
+                                            if (confirm(`Unschedule "${lesson.title}" from this day?`)) {
+                                                unscheduleLesson(lesson._id);
+                                            }
+                                        }}
+                                        disabled={saving}
+                                        className="mt-3 bg-red-100 text-red-700 px-3 py-1.5 rounded-lg hover:bg-red-200 transition-colors flex items-center gap-2 text-sm"
+                                    >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                        Unschedule
+                                    </button>
+                                </div>
+                            ))}
                         </div>
 
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => {
-                                    if (confirm(`Unschedule "${selectedDay.lesson?.title}" from this day?`)) {
-                                        unscheduleLesson(selectedDay.lesson!._id);
-                                    }
-                                }}
-                                disabled={saving}
-                                className="flex-1 bg-red-100 text-red-700 px-4 py-2 rounded-lg hover:bg-red-200 transition-colors flex items-center justify-center gap-2"
-                            >
-                                <Trash2 className="w-4 h-4" />
-                                Unschedule
-                            </button>
-                            <button
-                                onClick={() => setSelectedDay(null)}
-                                className="flex-1 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
-                            >
-                                Close
-                            </button>
-                        </div>
+                        <button
+                            onClick={() => setSelectedDay(null)}
+                            className="w-full mt-4 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
+                        >
+                            Close
+                        </button>
                     </div>
                 </div>
             )}
