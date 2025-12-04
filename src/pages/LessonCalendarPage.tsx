@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, Calendar, Video, Clock, X, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Video, Clock, X, Trash2, Plus } from 'lucide-react';
 import apiClient from '../services/apiClient';
 
 interface Lesson {
@@ -32,6 +32,7 @@ const LessonCalendarPage: React.FC = () => {
     const [selectedDay, setSelectedDay] = useState<CalendarDay | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [showAddVideoSection, setShowAddVideoSection] = useState(false); // For modal add video
 
     const monthNames = [
         'January', 'February', 'March', 'April', 'May', 'June',
@@ -383,59 +384,150 @@ const LessonCalendarPage: React.FC = () => {
                 </div>
             </div>
 
-            {/* Selected Day Modal - shows all lessons for the day */}
-            {selectedDay && selectedDay.lessons.length > 0 && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setSelectedDay(null)}>
+            {/* Selected Day Modal - shows all lessons for the day + add new video */}
+            {selectedDay && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => { setSelectedDay(null); setShowAddVideoSection(false); }}>
                     <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 shadow-2xl max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-lg font-semibold text-gray-800">
                                 {selectedDay.date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-                                <span className="text-sm font-normal text-gray-500 ml-2">
-                                    ({selectedDay.lessons.length} lesson{selectedDay.lessons.length > 1 ? 's' : ''})
-                                </span>
+                                {selectedDay.lessons.length > 0 && (
+                                    <span className="text-sm font-normal text-gray-500 ml-2">
+                                        ({selectedDay.lessons.length} lesson{selectedDay.lessons.length > 1 ? 's' : ''})
+                                    </span>
+                                )}
                             </h3>
-                            <button onClick={() => setSelectedDay(null)} className="p-1 hover:bg-gray-100 rounded">
+                            <button onClick={() => { setSelectedDay(null); setShowAddVideoSection(false); }} className="p-1 hover:bg-gray-100 rounded">
                                 <X className="w-5 h-5 text-gray-500" />
                             </button>
                         </div>
 
-                        <div className="space-y-4">
-                            {selectedDay.lessons.map((lesson) => (
-                                <div key={lesson._id} className="bg-gray-50 rounded-lg p-4">
-                                    {lesson.video?.thumbnail && (
-                                        <img
-                                            src={lesson.video.thumbnail}
-                                            alt={lesson.title}
-                                            className="w-full h-32 object-cover rounded-lg mb-3"
-                                        />
-                                    )}
-                                    <h4 className="font-semibold text-gray-800">{lesson.title}</h4>
-                                    {lesson.type && (
-                                        <span className="inline-block mt-1 text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded">
-                                            {lesson.type}
-                                        </span>
-                                    )}
-                                    {lesson.description && (
-                                        <p className="text-sm text-gray-600 mt-1">{lesson.description}</p>
-                                    )}
-                                    <button
-                                        onClick={() => {
-                                            if (confirm(`Unschedule "${lesson.title}" from this day?`)) {
-                                                unscheduleLesson(lesson._id);
-                                            }
-                                        }}
-                                        disabled={saving}
-                                        className="mt-3 bg-red-100 text-red-700 px-3 py-1.5 rounded-lg hover:bg-red-200 transition-colors flex items-center gap-2 text-sm"
+                        {/* Existing Lessons */}
+                        {selectedDay.lessons.length > 0 && (
+                            <div className="space-y-4 mb-4">
+                                {selectedDay.lessons.map((lesson) => (
+                                    <div key={lesson._id} className="bg-gray-50 rounded-lg p-4">
+                                        {lesson.video?.thumbnail && (
+                                            <img
+                                                src={lesson.video.thumbnail}
+                                                alt={lesson.title}
+                                                className="w-full h-32 object-cover rounded-lg mb-3"
+                                            />
+                                        )}
+                                        <h4 className="font-semibold text-gray-800">{lesson.title}</h4>
+                                        {lesson.type && (
+                                            <span className="inline-block mt-1 text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded">
+                                                {lesson.type}
+                                            </span>
+                                        )}
+                                        {lesson.description && (
+                                            <p className="text-sm text-gray-600 mt-1">{lesson.description}</p>
+                                        )}
+                                        <button
+                                            onClick={() => {
+                                                if (confirm(`Unschedule "${lesson.title}" from this day?`)) {
+                                                    unscheduleLesson(lesson._id);
+                                                }
+                                            }}
+                                            disabled={saving}
+                                            className="mt-3 bg-red-100 text-red-700 px-3 py-1.5 rounded-lg hover:bg-red-200 transition-colors flex items-center gap-2 text-sm"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                            Unschedule
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* No lessons message */}
+                        {selectedDay.lessons.length === 0 && !showAddVideoSection && (
+                            <div className="text-center py-6 bg-gray-50 rounded-lg mb-4">
+                                <Video className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                                <p className="text-gray-500 text-sm">No videos scheduled for this day</p>
+                            </div>
+                        )}
+
+                        {/* Add Video Section */}
+                        {showAddVideoSection ? (
+                            <div className="border-t border-gray-200 pt-4">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h4 className="font-semibold text-gray-700">Select a video to add:</h4>
+                                    <button 
+                                        onClick={() => setShowAddVideoSection(false)}
+                                        className="text-sm text-gray-500 hover:text-gray-700"
                                     >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                        Unschedule
+                                        Cancel
                                     </button>
                                 </div>
-                            ))}
-                        </div>
+                                {unscheduledLessons.length === 0 ? (
+                                    <div className="text-center py-4 bg-gray-50 rounded-lg">
+                                        <p className="text-gray-500 text-sm mb-2">No unscheduled videos available</p>
+                                        <a 
+                                            href="/lessons/new" 
+                                            className="text-indigo-600 text-sm hover:underline"
+                                        >
+                                            Create a new video lesson →
+                                        </a>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                                        {unscheduledLessons.map((lesson) => (
+                                            <button
+                                                key={lesson._id}
+                                                onClick={() => {
+                                                    scheduleLesson(lesson._id, selectedDay.date);
+                                                    setShowAddVideoSection(false);
+                                                }}
+                                                disabled={saving}
+                                                className="w-full text-left bg-gray-50 hover:bg-indigo-50 hover:border-indigo-300 border border-gray-200 rounded-lg p-3 transition-colors flex gap-3 items-center"
+                                            >
+                                                {lesson.video?.thumbnail ? (
+                                                    <img
+                                                        src={lesson.video.thumbnail}
+                                                        alt={lesson.title}
+                                                        className="w-16 h-12 object-cover rounded"
+                                                    />
+                                                ) : (
+                                                    <div className="w-16 h-12 bg-gray-200 rounded flex items-center justify-center">
+                                                        <Video className="w-5 h-5 text-gray-400" />
+                                                    </div>
+                                                )}
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-medium text-gray-800 text-sm truncate">{lesson.title}</p>
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        {lesson.type && (
+                                                            <span className="text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">
+                                                                {lesson.type}
+                                                            </span>
+                                                        )}
+                                                        {lesson.video?.duration && (
+                                                            <span className="text-xs text-gray-500 flex items-center gap-1">
+                                                                <Clock className="w-3 h-3" />
+                                                                {formatDuration(lesson.video.duration)}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <Plus className="w-5 h-5 text-indigo-600 flex-shrink-0" />
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            /* Add New Video Button */
+                            <button
+                                onClick={() => setShowAddVideoSection(true)}
+                                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-3 rounded-lg transition-colors flex items-center justify-center gap-2 font-medium"
+                            >
+                                <Plus className="w-5 h-5" />
+                                Add New Video
+                            </button>
+                        )}
 
                         <button
-                            onClick={() => setSelectedDay(null)}
+                            onClick={() => { setSelectedDay(null); setShowAddVideoSection(false); }}
                             className="w-full mt-4 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
                         >
                             Close
