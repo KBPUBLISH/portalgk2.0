@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart3, Eye, Heart, BookmarkCheck, Trophy, Palette, Gamepad2, RefreshCw, TrendingUp } from 'lucide-react';
+import { BarChart3, Eye, Heart, BookmarkCheck, Trophy, Palette, Gamepad2, RefreshCw, TrendingUp, BookOpen } from 'lucide-react';
 import apiClient from '../services/apiClient';
 
 interface BookAnalyticsData {
@@ -16,6 +16,8 @@ interface BookAnalyticsData {
         gameOpens: number;
     };
     quizCompletionRate: string | number;
+    averageCompletionRate: number;
+    totalReadSessions: number;
     dailyViews: Array<{ _id: string; count: number }>;
 }
 
@@ -176,7 +178,7 @@ const ContentAnalytics: React.FC<ContentAnalyticsProps> = ({ contentId, contentT
                 </div>
 
                 {/* Main Stats Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
                     <StatCard
                         label="Views"
                         value={bookData.counters.views.toLocaleString()}
@@ -188,6 +190,12 @@ const ContentAnalytics: React.FC<ContentAnalyticsProps> = ({ contentId, contentT
                         value={bookData.counters.reads.toLocaleString()}
                         icon={<BookmarkCheck className="w-4 h-4 text-green-600" />}
                         color="bg-green-100"
+                    />
+                    <StatCard
+                        label="Avg. Completion"
+                        value={`${bookData.averageCompletionRate || 0}%`}
+                        icon={<BookOpen className="w-4 h-4 text-cyan-600" />}
+                        color="bg-cyan-100"
                     />
                     <StatCard
                         label="Likes"
