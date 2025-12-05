@@ -39,10 +39,13 @@ type LessonType =
     | 'Social Studies'
     | 'Nature';
 
+type AgeGroup = '4-6' | '6-8' | '8-10' | '10-12' | 'all';
+
 interface LessonFormData {
     title: string;
     description: string;
     type: LessonType;
+    ageGroup: AgeGroup;
     video: {
         url: string;
         thumbnail?: string;
@@ -76,6 +79,7 @@ const LessonForm: React.FC = () => {
         title: '',
         description: '',
         type: 'Bible Study',
+        ageGroup: 'all',
         video: {
             url: '',
             thumbnail: '',
@@ -112,6 +116,7 @@ const LessonForm: React.FC = () => {
                 title: lesson.title || '',
                 description: lesson.description || '',
                 type: lesson.type || 'Bible Study',
+                ageGroup: lesson.ageGroup || 'all',
                 video: lesson.video || { url: '', thumbnail: '', duration: 0 },
                 devotional: lesson.devotional || { title: '', content: '', verse: '', verseText: '' },
                 activity: lesson.activity || { type: 'quiz', questions: [] },
@@ -455,27 +460,44 @@ const LessonForm: React.FC = () => {
                         />
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Subject / Lesson Type</label>
-                        <select
-                            value={formData.type}
-                            onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value as LessonType }))}
-                            className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        >
-                            <option value="Bible Study">📖 Bible Study</option>
-                            <option value="Science">🔬 Science</option>
-                            <option value="Math">🔢 Math</option>
-                            <option value="History">📜 History</option>
-                            <option value="English">✏️ English</option>
-                            <option value="Reading">📚 Reading</option>
-                            <option value="Arts & Crafts">🎨 Arts & Crafts</option>
-                            <option value="Music">🎵 Music</option>
-                            <option value="Physical Education">🏃 Physical Education</option>
-                            <option value="Life Skills">🌱 Life Skills</option>
-                            <option value="Technology">💻 Technology</option>
-                            <option value="Social Studies">🌍 Social Studies</option>
-                            <option value="Nature">🌿 Nature</option>
-                        </select>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Subject / Lesson Type</label>
+                            <select
+                                value={formData.type}
+                                onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value as LessonType }))}
+                                className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            >
+                                <option value="Bible Study">📖 Bible Study</option>
+                                <option value="Science">🔬 Science</option>
+                                <option value="Math">🔢 Math</option>
+                                <option value="History">📜 History</option>
+                                <option value="English">✏️ English</option>
+                                <option value="Reading">📚 Reading</option>
+                                <option value="Arts & Crafts">🎨 Arts & Crafts</option>
+                                <option value="Music">🎵 Music</option>
+                                <option value="Physical Education">🏃 Physical Education</option>
+                                <option value="Life Skills">🌱 Life Skills</option>
+                                <option value="Technology">💻 Technology</option>
+                                <option value="Social Studies">🌍 Social Studies</option>
+                                <option value="Nature">🌿 Nature</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Target Age Group</label>
+                            <select
+                                value={formData.ageGroup}
+                                onChange={(e) => setFormData(prev => ({ ...prev, ageGroup: e.target.value as AgeGroup }))}
+                                className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            >
+                                <option value="all">👶 All Ages</option>
+                                <option value="4-6">🧒 Ages 4-6 (Pre-K to K)</option>
+                                <option value="6-8">👦 Ages 6-8 (1st-2nd Grade)</option>
+                                <option value="8-10">👧 Ages 8-10 (3rd-4th Grade)</option>
+                                <option value="10-12">🧑 Ages 10-12 (5th-6th Grade)</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
