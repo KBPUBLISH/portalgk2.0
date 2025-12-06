@@ -125,7 +125,11 @@ const LessonCalendarPage: React.FC = () => {
 
             // Fetch all lessons to find unscheduled ones
             const allResponse = await apiClient.get('/api/lessons');
-            const unscheduled = allResponse.data.filter((lesson: Lesson) => 
+            // Handle paginated response or direct array
+            const allLessons = Array.isArray(allResponse.data) 
+                ? allResponse.data 
+                : (allResponse.data.data || allResponse.data.lessons || []);
+            const unscheduled = allLessons.filter((lesson: Lesson) => 
                 !lesson.scheduledDate && lesson.status !== 'archived'
             );
             setUnscheduledLessons(unscheduled);

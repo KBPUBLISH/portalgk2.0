@@ -46,8 +46,16 @@ const FeaturedContent: React.FC = () => {
         apiClient.get('/api/playlists'),
       ]);
 
-      const booksData = booksRes.data.filter((b: Book) => b.status === 'published');
-      const playlistsData = playlistsRes.data.filter((p: Playlist) => p.status === 'published');
+      // Handle paginated response or direct array
+      const booksArray = Array.isArray(booksRes.data) 
+        ? booksRes.data 
+        : (booksRes.data.data || booksRes.data.books || []);
+      const playlistsArray = Array.isArray(playlistsRes.data) 
+        ? playlistsRes.data 
+        : (playlistsRes.data.data || playlistsRes.data.playlists || []);
+
+      const booksData = booksArray.filter((b: Book) => b.status === 'published');
+      const playlistsData = playlistsArray.filter((p: Playlist) => p.status === 'published');
 
       setBooks(booksData);
       setPlaylists(playlistsData);
