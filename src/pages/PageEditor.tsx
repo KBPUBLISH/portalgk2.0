@@ -51,6 +51,11 @@ const PageEditor: React.FC = () => {
     const [backgroundPreview, setBackgroundPreview] = useState<string | null>(null);
     const [scrollPreview, setScrollPreview] = useState<string | null>(null);
     const [soundEffectUrl, setSoundEffectUrl] = useState<string | null>(null);
+    
+    // Scroll Height Settings (percentages)
+    const [scrollMidHeight, setScrollMidHeight] = useState(30); // Mid state height %
+    const [scrollMaxHeight, setScrollMaxHeight] = useState(60); // Max state height %
+    const [scrollPreviewState, setScrollPreviewState] = useState<'hidden' | 'mid' | 'max'>('mid'); // Preview toggle
 
     // UI State
     const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null);
@@ -66,13 +71,21 @@ const PageEditor: React.FC = () => {
     // Template for reusing scroll and text boxes
     const [pageTemplate, setPageTemplate] = useState<{
         scrollUrl: string;
-        scrollHeight: number;
+        scrollMidHeight?: number;
+        scrollMaxHeight?: number;
         textBoxes: Omit<TextBox, 'id'>[];
     } | null>(null);
     const [showScrollLibrary, setShowScrollLibrary] = useState(false);
     const [showTemplateDialog, setShowTemplateDialog] = useState(false);
     const [enhancingTextId, setEnhancingTextId] = useState<string | null>(null);
     const [enhancingSfxId, setEnhancingSfxId] = useState<string | null>(null);
+    
+    // Propagation dialogs for page 1 changes
+    const [showScrollPropagateDialog, setShowScrollPropagateDialog] = useState(false);
+    const [showColorPropagateDialog, setShowColorPropagateDialog] = useState(false);
+    const [pendingScrollUrl, setPendingScrollUrl] = useState<string | null>(null);
+    const [pendingTextColor, setPendingTextColor] = useState<string | null>(null);
+    const [propagatingChanges, setPropagatingChanges] = useState(false);
 
     // Resizable panels
     const [leftPanelWidth, setLeftPanelWidth] = useState(320); // 320px = w-80
@@ -147,6 +160,14 @@ const PageEditor: React.FC = () => {
                                 const resolvedScrollUrl = resolveUrl(template.scrollUrl);
                                 console.log('Loading template scroll:', { original: template.scrollUrl, resolved: resolvedScrollUrl });
                                 setScrollPreview(resolvedScrollUrl);
+                            }
+                            
+                            // Restore scroll height settings from template
+                            if (template.scrollMidHeight) {
+                                setScrollMidHeight(template.scrollMidHeight);
+                            }
+                            if (template.scrollMaxHeight) {
+                                setScrollMaxHeight(template.scrollMaxHeight);
                             }
 
                             if (template.textBoxes && template.textBoxes.length > 0) {
@@ -304,6 +325,14 @@ const PageEditor: React.FC = () => {
             setScrollPreview(null);
             setScrollFile(null);
         }
+        
+        // Load scroll height settings
+        if (page.scrollMidHeight) {
+            setScrollMidHeight(page.scrollMidHeight);
+        }
+        if (page.scrollMaxHeight) {
+            setScrollMaxHeight(page.scrollMaxHeight);
+        }
 
         // Load sound effect if exists
         if (page.files?.soundEffect?.url) {
@@ -413,6 +442,99 @@ const PageEditor: React.FC = () => {
             setTextBoxes([]);
         }
     };
+
+    // Propagate scroll to all pages
+    const handlePropagateScroll = async (scrollUrl: string) => {
+        if (!bookId || existingPages.length <= 1) return;
+        
+        setPropagatingChanges(true);
+        try {
+            // Update all pages except page 1 (which was just saved)
+            const otherPages = existingPages.filter(p => p.pageNumber !== 1);
+            
+            for (const page of otherPages) {
+                await apiClient.put(`/api/pages/${page._id}`, {
+                    scrollUrl: scrollUrl,
+                    scrollMidHeight: scrollMidHeight,
+                    scrollMaxHeight: scrollMaxHeight
+                });
+            }
+            
+            // Update template
+            const template = {
+                scrollUrl: scrollUrl,
+                scrollMidHeight: scrollMidHeight,
+                scrollMaxHeight: scrollMaxHeight,
+                textBoxes: pageTemplate?.textBoxes || textBoxes.map(({ id, ...rest }) => rest)
+            };
+            localStorage.setItem(`pageTemplate_${bookId}`, JSON.stringify(template));
+            setPageTemplate(template);
+            
+            // Refresh pages list
+            const res = await apiClient.get(`/api/pages/book/${bookId}`);
+            setExistingPages(res.data);
+            
+            alert(`✅ Scroll background updated on ${otherPages.length} page(s)!`);
+        } catch (error) {
+            console.error('Error propagating scroll:', error);
+            alert('Failed to update some pages. Please try again.');
+        } finally {
+            setPropagatingChanges(false);
+            setShowScrollPropagateDialog(false);
+            setPendingScrollUrl(null);
+        }
+    };
+
+    // Propagate text color to all pages
+    const handlePropagateTextColor = async (color: string) => {
+        if (!bookId || existingPages.length <= 1) return;
+        
+        setPropagatingChanges(true);
+        try {
+            // Update all pages
+            for (const page of existingPages) {
+                if (page.textBoxes && page.textBoxes.length > 0) {
+                    const updatedTextBoxes = page.textBoxes.map((box: any) => ({
+                        ...box,
+                        color: color
+                    }));
+                    
+                    await apiClient.put(`/api/pages/${page._id}`, {
+                        textBoxes: updatedTextBoxes
+                    });
+                }
+            }
+            
+            // Update template with new color
+            if (pageTemplate) {
+                const updatedTemplate = {
+                    ...pageTemplate,
+                    textBoxes: pageTemplate.textBoxes.map(box => ({
+                        ...box,
+                        color: color
+                    }))
+                };
+                localStorage.setItem(`pageTemplate_${bookId}`, JSON.stringify(updatedTemplate));
+                setPageTemplate(updatedTemplate);
+            }
+            
+            // Refresh pages list
+            const res = await apiClient.get(`/api/pages/book/${bookId}`);
+            setExistingPages(res.data);
+            
+            alert(`✅ Text color updated on all pages!`);
+        } catch (error) {
+            console.error('Error propagating text color:', error);
+            alert('Failed to update some pages. Please try again.');
+        } finally {
+            setPropagatingChanges(false);
+            setShowColorPropagateDialog(false);
+            setPendingTextColor(null);
+        }
+    };
+
+    // Check if we should show propagation dialog (only for page 1 with other pages existing)
+    const shouldShowPropagationOption = pageNumber === 1 && existingPages.length > 1;
 
     // Drag Handlers
     const handleMouseDown = (e: React.MouseEvent, id: string) => {
@@ -638,7 +760,8 @@ const PageEditor: React.FC = () => {
                 backgroundUrl: backgroundUrl || null, // Explicitly set to null if empty
                 backgroundType,
                 scrollUrl: scrollUrl || null,
-                scrollHeight: 200, // Fixed for now, could make dynamic
+                scrollMidHeight: scrollMidHeight, // Dynamic scroll heights
+                scrollMaxHeight: scrollMaxHeight,
                 textBoxes: textBoxes.map(({ id, ...rest }) => rest), // Remove ID before sending
                 isColoringPage,
                 coloringEndModalOnly
@@ -680,11 +803,19 @@ const PageEditor: React.FC = () => {
                         backgroundType: updatedPage.backgroundType
                     });
                     loadPage(updatedPage);
+                    
+                    // If this is page 1 and there are other pages, offer to propagate scroll changes
+                    if (pageNumber === 1 && res.data.length > 1 && scrollUrl && !scrollUrl.startsWith('blob:')) {
+                        setPendingScrollUrl(scrollUrl);
+                        setShowScrollPropagateDialog(true);
+                    }
                 } else {
                     console.error('Updated page not found in response');
                 }
 
-                alert('Page updated successfully!');
+                if (!showScrollPropagateDialog) {
+                    alert('Page updated successfully!');
+                }
             } else {
                 await apiClient.post('/api/pages', payload);
 
@@ -702,6 +833,12 @@ const PageEditor: React.FC = () => {
                 } else {
                     // Reset for new page - template will be auto-applied if it exists
                     createNewPage();
+                }
+                
+                // If page 1 was saved and there are now other pages, offer to propagate scroll
+                if (pageNumber === 1 && res.data.length > 1 && scrollUrl && !scrollUrl.startsWith('blob:')) {
+                    setPendingScrollUrl(scrollUrl);
+                    setShowScrollPropagateDialog(true);
                 }
             }
         } catch (err: any) {
@@ -975,6 +1112,100 @@ const PageEditor: React.FC = () => {
                                 </button>
                             )}
                         </div>
+                        
+                        {/* Scroll Height Controls */}
+                        {scrollPreview && (
+                            <div className="mt-4 space-y-3 p-3 bg-gradient-to-br from-amber-50 to-orange-50 rounded-lg border border-amber-200">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-semibold text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
+                                        📜 Scroll Height Preview
+                                    </label>
+                                </div>
+                                
+                                {/* Preview State Toggle */}
+                                <div className="flex gap-1 bg-amber-100 p-1 rounded-lg">
+                                    <button
+                                        onClick={() => setScrollPreviewState('hidden')}
+                                        className={`flex-1 px-2 py-1.5 text-xs font-medium rounded transition-all ${
+                                            scrollPreviewState === 'hidden' 
+                                                ? 'bg-white text-amber-800 shadow' 
+                                                : 'text-amber-600 hover:bg-white/50'
+                                        }`}
+                                    >
+                                        Hidden
+                                    </button>
+                                    <button
+                                        onClick={() => setScrollPreviewState('mid')}
+                                        className={`flex-1 px-2 py-1.5 text-xs font-medium rounded transition-all ${
+                                            scrollPreviewState === 'mid' 
+                                                ? 'bg-white text-amber-800 shadow' 
+                                                : 'text-amber-600 hover:bg-white/50'
+                                        }`}
+                                    >
+                                        Mid ({scrollMidHeight}%)
+                                    </button>
+                                    <button
+                                        onClick={() => setScrollPreviewState('max')}
+                                        className={`flex-1 px-2 py-1.5 text-xs font-medium rounded transition-all ${
+                                            scrollPreviewState === 'max' 
+                                                ? 'bg-white text-amber-800 shadow' 
+                                                : 'text-amber-600 hover:bg-white/50'
+                                        }`}
+                                    >
+                                        Max ({scrollMaxHeight}%)
+                                    </button>
+                                </div>
+                                
+                                {/* Mid Height Slider */}
+                                <div className="space-y-1">
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-amber-700 font-medium">Mid Height</span>
+                                        <span className="text-amber-600 font-bold">{scrollMidHeight}%</span>
+                                    </div>
+                                    <input
+                                        type="range"
+                                        min="15"
+                                        max="50"
+                                        value={scrollMidHeight}
+                                        onChange={(e) => setScrollMidHeight(parseInt(e.target.value))}
+                                        className="w-full h-2 bg-amber-200 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                                    />
+                                </div>
+                                
+                                {/* Max Height Slider */}
+                                <div className="space-y-1">
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-amber-700 font-medium">Max Height</span>
+                                        <span className="text-amber-600 font-bold">{scrollMaxHeight}%</span>
+                                    </div>
+                                    <input
+                                        type="range"
+                                        min="40"
+                                        max="80"
+                                        value={scrollMaxHeight}
+                                        onChange={(e) => setScrollMaxHeight(parseInt(e.target.value))}
+                                        className="w-full h-2 bg-amber-200 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                                    />
+                                </div>
+                                
+                                <p className="text-[10px] text-amber-600 italic">
+                                    💡 Users swipe up/down on the scroll to switch between Mid and Max heights
+                                </p>
+                                
+                                {/* Apply to All Pages Button */}
+                                {existingPages.length > 1 && scrollPreview && !scrollPreview.startsWith('blob:') && (
+                                    <button
+                                        onClick={() => {
+                                            setPendingScrollUrl(scrollPreview);
+                                            setShowScrollPropagateDialog(true);
+                                        }}
+                                        className="w-full mt-3 py-2 bg-amber-500 text-white rounded-lg text-xs font-semibold hover:bg-amber-600 transition flex items-center justify-center gap-1.5 shadow-sm"
+                                    >
+                                        <span>📜</span> Apply Scroll to All {existingPages.length - 1} Other Page(s)
+                                    </button>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     <hr className="border-gray-100" />
@@ -1197,6 +1428,18 @@ const PageEditor: React.FC = () => {
                                     onChange={e => updateTextBox(selectedBox.id, { color: e.target.value })}
                                     className="w-full h-8 rounded border"
                                 />
+                                {/* Apply to All Pages Button */}
+                                {existingPages.length > 1 && (
+                                    <button
+                                        onClick={() => {
+                                            setPendingTextColor(selectedBox.color);
+                                            setShowColorPropagateDialog(true);
+                                        }}
+                                        className="w-full mt-2 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-xs font-medium hover:bg-indigo-200 transition flex items-center justify-center gap-1.5"
+                                    >
+                                        <span>🎨</span> Apply Color to All Pages
+                                    </button>
+                                )}
                             </div>
                         </div>
                     )}
@@ -1267,8 +1510,13 @@ const PageEditor: React.FC = () => {
                     )}
 
                     {/* Scroll Overlay Layer */}
-                    {scrollPreview && (
-                        <div className="absolute bottom-0 left-0 right-0 h-1/3 pointer-events-none z-10">
+                    {scrollPreview && scrollPreviewState !== 'hidden' && (
+                        <div 
+                            className="absolute bottom-0 left-0 right-0 pointer-events-none z-10 transition-all duration-300 ease-out"
+                            style={{ 
+                                height: scrollPreviewState === 'max' ? `${scrollMaxHeight}%` : `${scrollMidHeight}%` 
+                            }}
+                        >
                             <img
                                 src={resolveUrl(scrollPreview)}
                                 className="w-full h-full object-fill"
@@ -1286,17 +1534,55 @@ const PageEditor: React.FC = () => {
                             />
                         </div>
                     )}
+                    
+                    {/* Scroll State Indicator */}
+                    {scrollPreview && (
+                        <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded-full z-30 flex items-center gap-1">
+                            📜 {scrollPreviewState === 'hidden' ? 'Hidden' : scrollPreviewState === 'mid' ? `Mid ${scrollMidHeight}%` : `Max ${scrollMaxHeight}%`}
+                        </div>
+                    )}
+                    
+                    {/* Scroll Boundary Guide Line */}
+                    {scrollPreview && scrollPreviewState !== 'hidden' && (
+                        <div 
+                            className="absolute left-0 right-0 border-t-2 border-dashed border-amber-400/60 pointer-events-none z-5 transition-all duration-300 ease-out"
+                            style={{ 
+                                bottom: scrollPreviewState === 'max' ? `${scrollMaxHeight}%` : `${scrollMidHeight}%` 
+                            }}
+                        >
+                            <span className="absolute -top-5 left-2 text-[10px] bg-amber-400 text-amber-900 px-1.5 py-0.5 rounded font-medium">
+                                📜 Text area starts here
+                            </span>
+                        </div>
+                    )}
 
                     {/* Text Boxes Layer */}
-                    {textBoxes.map(box => (
+                    {textBoxes.map(box => {
+                        // Calculate scroll-responsive positioning
+                        const hasScroll = !!scrollPreview && scrollPreviewState !== 'hidden';
+                        const currentScrollHeight = scrollPreviewState === 'max' ? scrollMaxHeight : scrollMidHeight;
+                        const scrollTopPercent = 100 - currentScrollHeight; // Where scroll starts from top
+                        
+                        // Text box top: either its own Y position or pushed up by scroll (whichever is lower on screen = higher %)
+                        // We want the text to stay within the scroll area
+                        const effectiveTop = hasScroll 
+                            ? Math.max(box.y, scrollTopPercent + 5) // +5% padding from scroll top
+                            : box.y;
+                        
+                        // Max height: prevent text from going below the canvas
+                        const maxHeightPercent = hasScroll
+                            ? (100 - effectiveTop - 10) // Leave some padding at bottom
+                            : (100 - box.y - 10);
+                        
+                        return (
                         <div
                             key={box.id}
                             onMouseDown={(e) => handleMouseDown(e, box.id)}
-                            className={`absolute cursor-move p-2 z-20 group ${selectedBoxId === box.id ? 'ring-2 ring-indigo-500 bg-white/20 backdrop-blur-sm rounded' : 'hover:ring-1 hover:ring-indigo-300'
+                            className={`absolute cursor-move p-2 z-20 group transition-all duration-300 ease-out ${selectedBoxId === box.id ? 'ring-2 ring-indigo-500 bg-white/20 backdrop-blur-sm rounded' : 'hover:ring-1 hover:ring-indigo-300'
                                 }`}
                             style={{
                                 left: `${box.x}%`,
-                                top: `${box.y}%`,
+                                top: `${effectiveTop}%`,
                                 width: `${box.width || 30}%`,
                                 transform: 'translate(0, 0)', // Remove centering transform to make resizing easier to reason about
                                 textAlign: box.alignment,
@@ -1305,6 +1591,10 @@ const PageEditor: React.FC = () => {
                                 fontSize: `${box.fontSize}px`,
                                 height: 'auto', // Allow height to grow
                                 minHeight: '50px',
+                                maxHeight: `${maxHeightPercent}%`,
+                                overflowY: 'auto',
+                                // Fade out when scroll is hidden
+                                opacity: scrollPreview && scrollPreviewState === 'hidden' ? 0.3 : 1,
                             }}
                         >
                             {/* Drag Handle Icon (visible on hover or select) */}
@@ -1327,7 +1617,8 @@ const PageEditor: React.FC = () => {
 
                             {box.text}
                         </div>
-                    ))}
+                        );
+                    })}
 
                     {/* Empty State Hint */}
                     {!backgroundPreview && (
@@ -1482,11 +1773,12 @@ const PageEditor: React.FC = () => {
                                     // Save template to localStorage with the actual URL
                                     const template = {
                                         scrollUrl: actualScrollUrl,
-                                        scrollHeight: 200,
+                                        scrollMidHeight: scrollMidHeight,
+                                        scrollMaxHeight: scrollMaxHeight,
                                         textBoxes: textBoxes.map(({ id, ...rest }) => rest)
                                     };
                                     localStorage.setItem(`pageTemplate_${bookId}`, JSON.stringify(template));
-                                    setPageTemplate(template);
+                                    setPageTemplate(template as any);
                                     console.log('Template saved:', template);
                                     setShowTemplateDialog(false);
                                     createNewPage();
@@ -1503,6 +1795,100 @@ const PageEditor: React.FC = () => {
                                 className="flex-1 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 transition"
                             >
                                 No, Thanks
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Scroll Propagation Dialog */}
+            {showScrollPropagateDialog && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl p-6 max-w-md mx-4 shadow-2xl border-2 border-amber-200">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
+                                <span className="text-2xl">📜</span>
+                            </div>
+                            <h3 className="text-lg font-bold text-gray-800">Apply Scroll to All Pages?</h3>
+                        </div>
+                        <p className="text-gray-600 mb-6">
+                            You've updated the scroll background on <strong>Page 1</strong>. Would you like to apply this same scroll 
+                            to all <strong>{existingPages.length - 1} other page(s)</strong> in this book?
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => pendingScrollUrl && handlePropagateScroll(pendingScrollUrl)}
+                                disabled={propagatingChanges}
+                                className="flex-1 bg-amber-500 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-amber-600 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {propagatingChanges ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                        Updating...
+                                    </>
+                                ) : (
+                                    <>✓ Yes, Update All Pages</>
+                                )}
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setShowScrollPropagateDialog(false);
+                                    setPendingScrollUrl(null);
+                                }}
+                                disabled={propagatingChanges}
+                                className="flex-1 bg-gray-200 text-gray-700 px-4 py-2.5 rounded-lg font-semibold hover:bg-gray-300 transition disabled:opacity-50"
+                            >
+                                No, Just Page 1
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Text Color Propagation Dialog */}
+            {showColorPropagateDialog && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl p-6 max-w-md mx-4 shadow-2xl border-2 border-indigo-200">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center">
+                                <span className="text-2xl">🎨</span>
+                            </div>
+                            <h3 className="text-lg font-bold text-gray-800">Apply Text Color to All Pages?</h3>
+                        </div>
+                        <p className="text-gray-600 mb-4">
+                            Would you like to apply this text color to all pages in this book?
+                        </p>
+                        <div className="flex items-center gap-3 mb-6 p-3 bg-gray-50 rounded-lg">
+                            <div 
+                                className="w-10 h-10 rounded-lg border-2 border-gray-300 shadow-inner"
+                                style={{ backgroundColor: pendingTextColor || '#4a3b2a' }}
+                            ></div>
+                            <span className="text-gray-700 font-medium">{pendingTextColor}</span>
+                        </div>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => pendingTextColor && handlePropagateTextColor(pendingTextColor)}
+                                disabled={propagatingChanges}
+                                className="flex-1 bg-indigo-600 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-indigo-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {propagatingChanges ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                        Updating...
+                                    </>
+                                ) : (
+                                    <>✓ Yes, Update All Pages</>
+                                )}
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setShowColorPropagateDialog(false);
+                                    setPendingTextColor(null);
+                                }}
+                                disabled={propagatingChanges}
+                                className="flex-1 bg-gray-200 text-gray-700 px-4 py-2.5 rounded-lg font-semibold hover:bg-gray-300 transition disabled:opacity-50"
+                            >
+                                No, Just This Page
                             </button>
                         </div>
                     </div>
