@@ -532,10 +532,6 @@ const PageEditor: React.FC = () => {
             setPendingTextColor(null);
         }
     };
-
-    // Check if we should show propagation dialog (only for page 1 with other pages existing)
-    const shouldShowPropagationOption = pageNumber === 1 && existingPages.length > 1;
-
     // Drag Handlers
     const handleMouseDown = (e: React.MouseEvent, id: string) => {
         e.stopPropagation();
