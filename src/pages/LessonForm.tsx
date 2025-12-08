@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Upload, Plus, Trash2, Save, Video, Image as ImageIcon, BookOpen, Activity, Calendar, Sparkles, GripVertical, ChevronUp, ChevronDown, Film } from 'lucide-react';
+import { ArrowLeft, Upload, Plus, Trash2, Save, Video, Image as ImageIcon, BookOpen, Activity, Calendar, Sparkles, ChevronUp, ChevronDown, Film } from 'lucide-react';
 import apiClient from '../services/apiClient';
 
 interface Episode {
