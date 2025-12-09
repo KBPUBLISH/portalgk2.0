@@ -37,7 +37,7 @@ const BooksAnalytics: React.FC = () => {
     const fetchBooksAnalytics = async () => {
         try {
             // Fetch all books with analytics data
-            const response = await apiClient.get('/api/books?includeAnalytics=true');
+            const response = await apiClient.get('/api/books?status=all&includeAnalytics=true');
             setBooks(response.data);
         } catch (error) {
             console.error('Error fetching books analytics:', error);

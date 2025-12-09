@@ -42,8 +42,8 @@ const FeaturedContent: React.FC = () => {
     setLoading(true);
     try {
       const [booksRes, playlistsRes] = await Promise.all([
-        apiClient.get('/api/books'),
-        apiClient.get('/api/playlists'),
+        apiClient.get('/api/books?status=all'),
+        apiClient.get('/api/playlists?status=all'),
       ]);
 
       // Handle paginated response or direct array

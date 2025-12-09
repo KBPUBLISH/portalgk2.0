@@ -105,8 +105,8 @@ const LessonCalendarPage: React.FC = () => {
             const startDate = new Date(year, month - 1, 1).toISOString();
             const endDate = new Date(year, month + 2, 0).toISOString();
 
-            // Fetch scheduled lessons for calendar
-            const calendarResponse = await apiClient.get(`/api/lessons/calendar?startDate=${startDate}&endDate=${endDate}`);
+            // Fetch scheduled lessons for calendar (status=all to see drafts in portal)
+            const calendarResponse = await apiClient.get(`/api/lessons/calendar?startDate=${startDate}&endDate=${endDate}&status=all`);
             
             // Convert to lookup by date - support multiple lessons per day
             const scheduled: { [key: string]: Lesson[] } = {};
@@ -123,8 +123,8 @@ const LessonCalendarPage: React.FC = () => {
             }
             setScheduledLessons(scheduled);
 
-            // Fetch all lessons to find unscheduled ones
-            const allResponse = await apiClient.get('/api/lessons');
+            // Fetch all lessons to find unscheduled ones (status=all to see drafts in portal)
+            const allResponse = await apiClient.get('/api/lessons?status=all');
             // Handle paginated response or direct array
             const allLessons = Array.isArray(allResponse.data) 
                 ? allResponse.data 

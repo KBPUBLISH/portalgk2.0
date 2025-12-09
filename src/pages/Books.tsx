@@ -23,7 +23,7 @@ const Books: React.FC = () => {
     useEffect(() => {
         const fetchBooks = async () => {
             try {
-                const response = await apiClient.get('/api/books');
+                const response = await apiClient.get('/api/books?status=all');
                 // Handle paginated response { data: [...], pagination: {...} } or direct array
                 const booksData = Array.isArray(response.data) 
                     ? response.data 

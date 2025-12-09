@@ -32,7 +32,7 @@ const Lessons: React.FC = () => {
     const fetchLessons = async () => {
         try {
             const url = statusFilter === 'all'
-                ? '/api/lessons'
+                ? '/api/lessons?status=all'
                 : `/api/lessons?status=${statusFilter}`;
             const response = await apiClient.get(url);
             // Handle paginated response or direct array

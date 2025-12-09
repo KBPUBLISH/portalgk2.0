@@ -44,7 +44,7 @@ const Playlists: React.FC = () => {
 
     const fetchPlaylists = async () => {
         try {
-            const response = await apiClient.get('/api/playlists');
+            const response = await apiClient.get('/api/playlists?status=all');
             // Handle paginated response { data: [...], pagination: {...} } or direct array
             const playlistsData = Array.isArray(response.data) 
                 ? response.data 
