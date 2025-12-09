@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Upload, Plus, Trash2, GripVertical, Music, Save, X } from 'lucide-react';
+import { ArrowLeft, Upload, Plus, Trash2, GripVertical, Music, Save, X, Lock, Unlock } from 'lucide-react';
 import apiClient from '../services/apiClient';
 import ContentAnalytics from '../components/ContentAnalytics';
 
@@ -13,6 +13,7 @@ interface AudioItem {
     audioUrl: string;
     duration?: number;
     order: number;
+    isMembersOnly?: boolean; // Whether this specific song/episode requires membership
 }
 
 interface Category {
@@ -556,6 +557,39 @@ const PlaylistForm: React.FC = () => {
                                                             className="hidden"
                                                         />
                                                     </label>
+                                                </div>
+                                            </div>
+                                            
+                                            {/* Access Control for Individual Item */}
+                                            <div className="md:col-span-2">
+                                                <div 
+                                                    onClick={() => updateItem(index, 'isMembersOnly', !item.isMembersOnly)}
+                                                    className={`w-full rounded-lg border text-sm px-3 py-2 transition cursor-pointer flex items-center justify-between ${
+                                                        item.isMembersOnly 
+                                                            ? 'bg-amber-50 border-amber-300 text-amber-800' 
+                                                            : 'bg-green-50 border-green-300 text-green-800'
+                                                    }`}
+                                                >
+                                                    <span className="font-medium flex items-center gap-2">
+                                                        {item.isMembersOnly ? (
+                                                            <>
+                                                                <Lock className="w-4 h-4" />
+                                                                👑 Premium Only
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Unlock className="w-4 h-4" />
+                                                                🆓 Free for Everyone
+                                                            </>
+                                                        )}
+                                                    </span>
+                                                    <div className={`w-10 h-5 rounded-full relative transition-colors ${
+                                                        item.isMembersOnly ? 'bg-amber-400' : 'bg-green-400'
+                                                    }`}>
+                                                        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                                                            item.isMembersOnly ? 'translate-x-5' : 'translate-x-0.5'
+                                                        }`} />
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
