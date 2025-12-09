@@ -200,6 +200,7 @@ const PlaylistForm: React.FC = () => {
                     author: formData.author,
                     audioUrl: '',
                     order: formData.items.length,
+                    isMembersOnly: false, // Default to free for new items
                 },
             ],
         });
