@@ -28,6 +28,7 @@ const BookEdit: React.FC = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const dropZoneRef = useRef<HTMLDivElement>(null);
     const [audioFiles, setAudioFiles] = useState<Array<{ url: string; filename: string; uploadedAt?: string }>>([]);
+    const [audioUploadVolume, setAudioUploadVolume] = useState<number>(0.2); // 20% default attenuation on upload
     const [uploadingAudio, setUploadingAudio] = useState(false);
     const audioInputRef = useRef<HTMLInputElement>(null);
     const [availableGames, setAvailableGames] = useState<Array<{ gameId: string; name: string; enabled: boolean }>>([]);
@@ -224,7 +225,7 @@ const BookEdit: React.FC = () => {
 
         try {
             const response = await apiClient.post(
-                `/api/upload/audio?bookId=${bookId}`,
+                `/api/upload/audio?bookId=${bookId}&type=audio&volume=${audioUploadVolume}`,
                 formDataUpload,
                 {
                     headers: { 'Content-Type': 'multipart/form-data' },
@@ -606,6 +607,35 @@ const BookEdit: React.FC = () => {
                     <p className="text-xs text-gray-500 mb-3">
                         Upload audio files to play as background music in the book reader. The first file will be used by default.
                     </p>
+
+                    {/* Upload Volume Attenuation */}
+                    <div className="mb-4 bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between gap-4">
+                            <div>
+                                <p className="text-sm font-semibold text-indigo-900">Upload Volume</p>
+                                <p className="text-xs text-indigo-800/80">
+                                    This permanently makes the uploaded file quieter (best for iPhone). Recommended: 20%.
+                                </p>
+                            </div>
+                            <div className="text-indigo-900 font-bold tabular-nums">
+                                {Math.round(audioUploadVolume * 100)}%
+                            </div>
+                        </div>
+                        <input
+                            type="range"
+                            min="0.05"
+                            max="1"
+                            step="0.05"
+                            value={audioUploadVolume}
+                            onChange={(e) => setAudioUploadVolume(parseFloat(e.target.value))}
+                            className="mt-3 w-full h-2 bg-indigo-200 rounded-lg appearance-none cursor-pointer"
+                        />
+                        <div className="mt-2 flex justify-between text-[11px] text-indigo-900/70">
+                            <span>5%</span>
+                            <span>50%</span>
+                            <span>100%</span>
+                        </div>
+                    </div>
                     
                     {/* Existing Audio Files */}
                     {audioFiles.length > 0 && (
