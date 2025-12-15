@@ -60,7 +60,7 @@ const CodeManagement: React.FC = () => {
     // Copy feedback
     const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
-    const appUrl = 'https://godlykids.netlify.app'; // or your actual app URL
+    const appUrl = 'https://app.godlykids.com';
 
     useEffect(() => {
         fetchInfluencers();
