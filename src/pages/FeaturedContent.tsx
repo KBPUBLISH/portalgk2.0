@@ -130,43 +130,55 @@ const FeaturedContent: React.FC = () => {
   };
 
   const saveFeaturedItems = async () => {
+    console.log('🔄 Starting save featured items...');
+    console.log('📋 Featured items to save:', featuredItems);
     setSaving(true);
     try {
       // First, unfeatured all books and playlists
       const unfeaturedBooks = books.filter(b => b.isFeatured);
       const unfeaturedPlaylists = playlists.filter(p => p.isFeatured);
+      console.log('📚 Books to check for unfeaturing:', unfeaturedBooks.length);
+      console.log('🎵 Playlists to check for unfeaturing:', unfeaturedPlaylists.length);
 
       // Unfeatured items that are no longer in the featured list
       for (const book of unfeaturedBooks) {
         const stillFeatured = featuredItems.some(f => f._id === book._id && f.itemType === 'book');
         if (!stillFeatured) {
-          await apiClient.put(`/api/books/${book._id}`, {
+          console.log(`📕 Unfeaturing book: ${book.title}`);
+          const res = await apiClient.put(`/api/books/${book._id}`, {
             isFeatured: false,
             featuredOrder: 0,
           });
+          console.log('📕 Unfeatured book response:', res.data);
         }
       }
 
       for (const playlist of unfeaturedPlaylists) {
         const stillFeatured = featuredItems.some(f => f._id === playlist._id && f.itemType === 'playlist');
         if (!stillFeatured) {
-          await apiClient.put(`/api/playlists/${playlist._id}`, {
+          console.log(`🎵 Unfeaturing playlist: ${playlist.title}`);
+          const res = await apiClient.put(`/api/playlists/${playlist._id}`, {
             isFeatured: false,
             featuredOrder: 0,
           });
+          console.log('🎵 Unfeatured playlist response:', res.data);
         }
       }
 
       // Update featured items with their order
+      console.log(`⭐ Updating ${featuredItems.length} featured items...`);
       for (let i = 0; i < featuredItems.length; i++) {
         const item = featuredItems[i];
         const endpoint = item.itemType === 'book' ? '/api/books' : '/api/playlists';
-        await apiClient.put(`${endpoint}/${item._id}`, {
+        console.log(`⭐ Setting featured #${i + 1}: ${item.title} (${item.itemType})`);
+        const res = await apiClient.put(`${endpoint}/${item._id}`, {
           isFeatured: true,
           featuredOrder: i,
         });
+        console.log(`✅ Updated ${item.title}:`, res.data.isFeatured, res.data.featuredOrder);
       }
 
+      console.log('✅ All featured items saved successfully!');
       alert('Featured content saved successfully!');
       fetchData(); // Refresh data
     } catch (error) {
