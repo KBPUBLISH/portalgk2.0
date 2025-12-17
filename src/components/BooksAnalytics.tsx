@@ -37,8 +37,10 @@ const BooksAnalytics: React.FC = () => {
     const fetchBooksAnalytics = async () => {
         try {
             // Fetch all books with analytics data
-            const response = await apiClient.get('/api/books?status=all&includeAnalytics=true');
-            setBooks(response.data);
+            const response = await apiClient.get('/api/books?status=all');
+            // Handle both old format (array) and new format ({ data: [], pagination: {} })
+            const booksData = Array.isArray(response.data) ? response.data : (response.data?.data || []);
+            setBooks(booksData);
         } catch (error) {
             console.error('Error fetching books analytics:', error);
         } finally {

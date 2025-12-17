@@ -33,8 +33,10 @@ const PlaylistsAnalytics: React.FC = () => {
     const fetchPlaylistsAnalytics = async () => {
         try {
             // Fetch all playlists with analytics data
-            const response = await apiClient.get('/api/playlists?status=all&includeAnalytics=true');
-            const data = response.data.map((p: any) => ({
+            const response = await apiClient.get('/api/playlists?status=all');
+            // Handle both old format (array) and new format ({ data: [], pagination: {} })
+            const playlistsData = Array.isArray(response.data) ? response.data : (response.data?.data || []);
+            const data = playlistsData.map((p: any) => ({
                 ...p,
                 itemCount: p.items?.length || 0,
             }));
