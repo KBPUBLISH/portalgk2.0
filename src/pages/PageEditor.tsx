@@ -14,7 +14,9 @@ import {
     LayoutTemplate,
     Video,
     Sparkles,
-    Loader2
+    Loader2,
+    Music,
+    X
 } from 'lucide-react';
 
 interface TextBox {
@@ -179,6 +181,33 @@ const PageEditor: React.FC = () => {
             alert('Failed to enhance text. Please try again.');
         } finally {
             setEnhancingText(false);
+        }
+    };
+
+    // Enhance text with sound effect prompts
+    const [enhancingSfx, setEnhancingSfx] = useState(false);
+    const handleEnhanceSfx = async (boxId: string) => {
+        const box = textBoxes.find(b => b.id === boxId);
+        if (!box || !box.text.trim()) {
+            alert('Please add text first before enhancing.');
+            return;
+        }
+
+        setEnhancingSfx(true);
+        try {
+            const response = await apiClient.post('/api/tts/enhance-sfx', { 
+                text: box.text 
+            });
+            
+            if (response.data.enhancedText) {
+                updateTextBox(boxId, { text: response.data.enhancedText });
+                alert('Text enhanced with sound effect prompts!');
+            }
+        } catch (error) {
+            console.error('Failed to enhance text with sound effects:', error);
+            alert('Failed to enhance text. Please try again.');
+        } finally {
+            setEnhancingSfx(false);
         }
     };
 
@@ -413,7 +442,7 @@ const PageEditor: React.FC = () => {
                 backgroundUrl = res.data.url;
             }
 
-            // Upload scroll
+            // Upload scroll - include bookId and type=scroll for proper GCS path
             let scrollUrl = '';
             if (scrollPreview && scrollPreview.startsWith('http')) {
                 scrollUrl = scrollPreview;
@@ -422,7 +451,7 @@ const PageEditor: React.FC = () => {
             if (scrollFile) {
                 const formData = new FormData();
                 formData.append('file', scrollFile);
-                const res = await apiClient.post('/api/upload/image', formData, {
+                const res = await apiClient.post(`/api/upload/image?bookId=${bookId}&type=scroll`, formData, {
                     headers: { 'Content-Type': 'multipart/form-data' },
                 });
                 scrollUrl = res.data.url;
@@ -435,6 +464,7 @@ const PageEditor: React.FC = () => {
                 backgroundType,
                 scrollUrl,
                 scrollHeight,
+                scrollMidHeight: scrollHeight, // Store as scrollMidHeight for app compatibility
                 textBoxes: textBoxes.map(({ id, ...rest }) => rest), // Remove ID before sending
             };
 
@@ -480,6 +510,31 @@ const PageEditor: React.FC = () => {
             }
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Delete a page
+    const handleDeletePage = async (pageId: string, pageNum: number) => {
+        if (!confirm(`Are you sure you want to delete page ${pageNum}? This cannot be undone.`)) {
+            return;
+        }
+        
+        try {
+            await apiClient.delete(`/api/pages/${pageId}`);
+            
+            // Refresh pages list
+            const res = await apiClient.get(`/api/pages/book/${bookId}`);
+            setExistingPages(res.data);
+            
+            // If we were editing the deleted page, reset to new page
+            if (editingPageId === pageId) {
+                createNewPage();
+            }
+            
+            alert('Page deleted successfully!');
+        } catch (error) {
+            console.error('Failed to delete page:', error);
+            alert('Failed to delete page. Please try again.');
         }
     };
 
@@ -675,27 +730,44 @@ const PageEditor: React.FC = () => {
                                 rows={3}
                             />
                             
-                            {/* Enhance for TTS Button */}
-                            <button
-                                onClick={() => handleEnhanceText(selectedBox.id)}
-                                disabled={enhancingText}
-                                className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-semibold rounded-lg hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 transition"
-                                title="Add emotion prompts for ElevenLabs TTS (e.g., [laughs], [whispers], [excitedly])"
-                            >
-                                {enhancingText ? (
-                                    <>
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                        Enhancing...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Sparkles className="w-4 h-4" />
-                                        Enhance for TTS
-                                    </>
-                                )}
-                            </button>
+                            {/* Enhance Buttons */}
+                            <div className="flex gap-2">
+                                {/* Emotion Enhance Button */}
+                                <button
+                                    onClick={() => handleEnhanceText(selectedBox.id)}
+                                    disabled={enhancingText || enhancingSfx}
+                                    className="flex-1 flex items-center justify-center gap-1 py-2 px-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-semibold rounded-lg hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 transition"
+                                    title="Add emotion prompts (e.g., [laughs], [whispers])"
+                                >
+                                    {enhancingText ? (
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                    ) : (
+                                        <>
+                                            <Sparkles className="w-3 h-3" />
+                                            Emotion
+                                        </>
+                                    )}
+                                </button>
+                                
+                                {/* Sound Effect Enhance Button */}
+                                <button
+                                    onClick={() => handleEnhanceSfx(selectedBox.id)}
+                                    disabled={enhancingText || enhancingSfx}
+                                    className="flex-1 flex items-center justify-center gap-1 py-2 px-2 bg-gradient-to-r from-green-500 to-teal-500 text-white text-xs font-semibold rounded-lg hover:from-green-600 hover:to-teal-600 disabled:opacity-50 transition"
+                                    title="Add sound effect prompts (e.g., [birds chirping], [thunder])"
+                                >
+                                    {enhancingSfx ? (
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                    ) : (
+                                        <>
+                                            <Music className="w-3 h-3" />
+                                            Sound FX
+                                        </>
+                                    )}
+                                </button>
+                            </div>
                             <p className="text-xs text-gray-500 text-center">
-                                Adds emotion tags like [laughs], [whispers], [excitedly]
+                                Emotion: [laughs], [whispers] • SFX: [birds chirping], [thunder]
                             </p>
                             
                             <div className="flex gap-1 bg-white p-1 rounded border border-gray-200">
@@ -834,8 +906,16 @@ const PageEditor: React.FC = () => {
                         </div>
                     )}
 
-                    {/* Text Boxes Layer */}
-                    {textBoxes.map(box => (
+                    {/* Text Boxes Layer - positioned relative to scroll overlay */}
+                    {textBoxes.map(box => {
+                        // Calculate text position relative to scroll (like the app does)
+                        // When scroll exists, text top should be at least at the top of the scroll
+                        const scrollTopPosition = scrollPreview ? `calc(100% - ${scrollHeight}% + 12px)` : `${box.y}%`;
+                        const textTop = scrollPreview 
+                            ? `max(${box.y}%, ${scrollTopPosition})`
+                            : `${box.y}%`;
+                        
+                        return (
                         <div
                             key={box.id}
                             onMouseDown={(e) => handleMouseDown(e, box.id)}
@@ -843,7 +923,7 @@ const PageEditor: React.FC = () => {
                                 }`}
                             style={{
                                 left: `${box.x}%`,
-                                top: `${box.y}%`,
+                                top: textTop,
                                 width: `${box.width || 30}%`,
                                 transform: 'translate(0, 0)', // Remove centering transform to make resizing easier to reason about
                                 textAlign: box.alignment,
@@ -852,6 +932,8 @@ const PageEditor: React.FC = () => {
                                 fontSize: `${box.fontSize}px`,
                                 height: 'auto', // Allow height to grow
                                 minHeight: '50px',
+                                // Smooth transition when scroll height changes
+                                transition: 'top 0.3s ease-in-out',
                             }}
                         >
                             {/* Drag Handle Icon (visible on hover or select) */}
@@ -874,7 +956,8 @@ const PageEditor: React.FC = () => {
 
                             {box.text}
                         </div>
-                    ))}
+                        );
+                    })}
 
                     {/* Empty State Hint */}
                     {!backgroundPreview && (
@@ -954,6 +1037,18 @@ const PageEditor: React.FC = () => {
                                     <div className="absolute top-2 left-2 bg-indigo-600 text-white text-xs font-bold px-2 py-1 rounded">
                                         #{page.pageNumber}
                                     </div>
+                                    
+                                    {/* Delete button - visible on hover */}
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeletePage(page._id, page.pageNumber);
+                                        }}
+                                        className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-all"
+                                        title="Delete page"
+                                    >
+                                        <X className="w-3 h-3" />
+                                    </button>
                                 </div>
 
                                 <div className="p-2 bg-white group-hover:bg-indigo-50 transition">
