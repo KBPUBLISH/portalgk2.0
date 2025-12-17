@@ -225,22 +225,40 @@ const PageEditor: React.FC = () => {
         console.log('📄 Loading page:', page._id, 'pageNumber:', page.pageNumber);
         console.log('📄 Page data:', JSON.stringify(page, null, 2));
         
+        // Debug: Log all possible background locations
+        console.log('🔍 Background debug:', {
+            'page.backgroundUrl': page.backgroundUrl,
+            'page.backgroundType': page.backgroundType,
+            'page.files': page.files,
+            'page.files?.background': page.files?.background,
+            'page.files?.background?.url': page.files?.background?.url,
+            'page.files?.background?.type': page.files?.background?.type,
+            'page.content?.backgroundUrl': page.content?.backgroundUrl,
+        });
+        
         setEditingPageId(page._id);
         setPageNumber(page.pageNumber);
-        setBackgroundType(page.backgroundType || page.files?.background?.type || 'image');
+        
+        // Determine background type - check all possible locations
+        const bgType = page.backgroundType || page.files?.background?.type || page.content?.backgroundType || 'image';
+        console.log('🎬 Background type determined:', bgType);
+        setBackgroundType(bgType);
 
-        // Set background preview if URL exists (check both legacy and new locations)
-        const bgUrl = page.backgroundUrl || page.files?.background?.url;
-        console.log('🖼️ Background URL:', bgUrl);
+        // Set background preview if URL exists (check ALL possible locations)
+        const bgUrl = page.backgroundUrl || page.files?.background?.url || page.content?.backgroundUrl || page.imageUrl;
+        console.log('🖼️ Background URL determined:', bgUrl);
         if (bgUrl) {
-            setBackgroundPreview(resolveUrl(bgUrl));
+            const resolvedUrl = resolveUrl(bgUrl);
+            console.log('🖼️ Background URL resolved:', resolvedUrl);
+            setBackgroundPreview(resolvedUrl);
             setBackgroundFile(null); // Clear file since we're using existing URL
         } else {
+            console.log('⚠️ No background URL found for this page!');
             setBackgroundPreview(null);
         }
 
         // Set scroll preview if URL exists (check both legacy and new locations)
-        const scrollUrl = page.scrollUrl || page.files?.scroll?.url;
+        const scrollUrl = page.scrollUrl || page.files?.scroll?.url || page.content?.scrollUrl;
         console.log('📜 Scroll URL:', scrollUrl);
         if (scrollUrl) {
             setScrollPreview(resolveUrl(scrollUrl));
@@ -652,7 +670,7 @@ const PageEditor: React.FC = () => {
                                 {backgroundPreview ? (
                                     backgroundType === 'image' ?
                                         <img src={backgroundPreview} className="w-full h-full object-cover rounded-lg opacity-50 group-hover:opacity-40" /> :
-                                        <video src={backgroundPreview} className="w-full h-full object-cover rounded-lg opacity-50 group-hover:opacity-40" />
+                                        <video src={backgroundPreview} className="w-full h-full object-cover rounded-lg opacity-50 group-hover:opacity-40" autoPlay loop muted playsInline />
                                 ) : (
                                     <div className="text-center text-gray-400">
                                         {backgroundType === 'image' ? <ImageIcon className="w-8 h-8 mx-auto mb-1" /> : <Video className="w-8 h-8 mx-auto mb-1" />}
@@ -995,7 +1013,16 @@ const PageEditor: React.FC = () => {
                             {backgroundType === 'image' ? (
                                 <img src={backgroundPreview} className="w-full h-full object-cover" alt="Background" />
                             ) : (
-                                <video src={backgroundPreview} className="w-full h-full object-cover" autoPlay loop muted />
+                                <video 
+                                    src={backgroundPreview} 
+                                    className="w-full h-full object-cover" 
+                                    autoPlay 
+                                    loop 
+                                    muted 
+                                    playsInline
+                                    onError={(e) => console.error('❌ Video failed to load:', backgroundPreview, e)}
+                                    onLoadedData={() => console.log('✅ Video loaded successfully:', backgroundPreview)}
+                                />
                             )}
                         </div>
                     )}
@@ -1137,18 +1164,22 @@ const PageEditor: React.FC = () => {
                                 onClick={() => loadPage(page)}
                             >
                                 <div className="aspect-[4/3] bg-gray-100 relative overflow-hidden">
-                                    {page.backgroundUrl ? (
-                                        page.backgroundType === 'image' ? (
-                                            <img
-                                                src={resolveUrl(page.backgroundUrl)}
-                                                alt={`Page ${page.pageNumber}`}
-                                                className="w-full h-full object-cover"
-                                            />
-                                        ) : (
+                                    {/* Check all possible background URL locations */}
+                                    {(page.backgroundUrl || page.files?.background?.url) ? (
+                                        (page.backgroundType || page.files?.background?.type) === 'video' ? (
                                             <video
-                                                src={resolveUrl(page.backgroundUrl)}
+                                                src={resolveUrl(page.backgroundUrl || page.files?.background?.url)}
                                                 className="w-full h-full object-cover"
                                                 muted
+                                                autoPlay
+                                                loop
+                                                playsInline
+                                            />
+                                        ) : (
+                                            <img
+                                                src={resolveUrl(page.backgroundUrl || page.files?.background?.url)}
+                                                alt={`Page ${page.pageNumber}`}
+                                                className="w-full h-full object-cover"
                                             />
                                         )
                                     ) : (
