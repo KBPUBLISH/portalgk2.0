@@ -38,21 +38,37 @@ const FeaturedContent: React.FC = () => {
     fetchData();
   }, []);
 
+  const fetchAllPages = async <T,>(endpoint: string): Promise<T[]> => {
+    const pageSize = 100; // backend cap is 100
+    let page = 1;
+    let results: T[] = [];
+
+    while (true) {
+      const res = await apiClient.get(`${endpoint}${endpoint.includes('?') ? '&' : '?'}page=${page}&limit=${pageSize}`);
+      const payload = res.data;
+
+      // Support both paginated { data, pagination } and direct arrays
+      const pageItems: T[] = Array.isArray(payload) ? payload : (payload.data || payload.playlists || payload.books || []);
+      results = results.concat(pageItems);
+
+      const hasMore = Array.isArray(payload)
+        ? false
+        : Boolean(payload.pagination?.hasMore);
+
+      if (!hasMore) break;
+      page += 1;
+    }
+
+    return results;
+  };
+
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [booksRes, playlistsRes] = await Promise.all([
-        apiClient.get('/api/books?status=all'),
-        apiClient.get('/api/playlists?status=all'),
+      const [booksArray, playlistsArray] = await Promise.all([
+        fetchAllPages<Book>('/api/books?status=all'),
+        fetchAllPages<Playlist>('/api/playlists?status=all'),
       ]);
-
-      // Handle paginated response or direct array
-      const booksArray = Array.isArray(booksRes.data) 
-        ? booksRes.data 
-        : (booksRes.data.data || booksRes.data.books || []);
-      const playlistsArray = Array.isArray(playlistsRes.data) 
-        ? playlistsRes.data 
-        : (playlistsRes.data.data || playlistsRes.data.playlists || []);
 
       const booksData = booksArray.filter((b: Book) => b.status === 'published');
       const playlistsData = playlistsArray.filter((p: Playlist) => p.status === 'published');
