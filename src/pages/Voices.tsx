@@ -199,7 +199,7 @@ const Voices: React.FC = () => {
         }
     };
 
-    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, voiceId: string) => {
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, _voiceId: string) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
