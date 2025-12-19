@@ -216,8 +216,12 @@ const BookReader: React.FC = () => {
                                 : 'translateY(0)'
                         }}
                     >
-                        {/* Use content.textBoxes first (primary), fall back to root textBoxes (legacy) */}
-                        {(currentPage.content?.textBoxes || currentPage.textBoxes)?.map((box, idx) => {
+                        {/* Use content.textBoxes first (if has items), fall back to root textBoxes (legacy) */}
+                        {(() => {
+                            const contentBoxes = currentPage.content?.textBoxes;
+                            const textBoxes = (contentBoxes && contentBoxes.length > 0) ? contentBoxes : currentPage.textBoxes;
+                            return textBoxes;
+                        })()?.map((box, idx) => {
                             // Calculate scroll top position - use scrollMidHeight if available
                             const scrollHeightVal = currentPage.scrollMidHeight ? `${currentPage.scrollMidHeight}%` : (currentPage.scrollHeight ? `${currentPage.scrollHeight}px` : '30%');
                             const scrollTopVal = `calc(100% - ${scrollHeightVal})`;
@@ -255,7 +259,7 @@ const BookReader: React.FC = () => {
                         <div
                             className={`absolute bottom-0 left-0 right-0 transition-transform duration-500 ease-in-out z-10 ${showScroll ? 'translate-y-0' : 'translate-y-full'
                                 }`}
-                            style={{ height: currentPage.scrollHeight ? `${currentPage.scrollHeight}px` : '30%' }}
+                            style={{ height: currentPage.scrollMidHeight ? `${currentPage.scrollMidHeight}%` : (currentPage.scrollHeight ? `${currentPage.scrollHeight}%` : '30%') }}
                             onClick={(e) => e.stopPropagation()}
                         >
                             {/* The Scroll Image */}
