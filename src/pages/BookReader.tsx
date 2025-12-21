@@ -222,8 +222,8 @@ const BookReader: React.FC = () => {
                             const textBoxes = (contentBoxes && contentBoxes.length > 0) ? contentBoxes : currentPage.textBoxes;
                             return textBoxes;
                         })()?.map((box, idx) => {
-                            // Calculate scroll top position - use scrollMidHeight if available
-                            const scrollHeightVal = currentPage.scrollMidHeight ? `${currentPage.scrollMidHeight}%` : (currentPage.scrollHeight ? `${currentPage.scrollHeight}px` : '30%');
+                            // Calculate scroll top position - use scrollMidHeight if available (all values are percentages)
+                            const scrollHeightVal = currentPage.scrollMidHeight ? `${currentPage.scrollMidHeight}%` : (currentPage.scrollHeight ? `${currentPage.scrollHeight}%` : '30%');
                             const scrollTopVal = `calc(100% - ${scrollHeightVal})`;
 
                             return (
