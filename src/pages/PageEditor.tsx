@@ -44,6 +44,10 @@ const PageEditor: React.FC = () => {
     const [textBoxes, setTextBoxes] = useState<TextBox[]>([]);
     const [loading, setLoading] = useState(false);
     const [enhancingText, setEnhancingText] = useState(false);
+    
+    // Coloring page settings
+    const [isColoringPage, setIsColoringPage] = useState(false);
+    const [coloringEndModalOnly, setColoringEndModalOnly] = useState(true); // Default: coloring pages show in end modal
 
     // Previews
     const [backgroundPreview, setBackgroundPreview] = useState<string | null>(null);
@@ -312,6 +316,10 @@ const PageEditor: React.FC = () => {
             setTextBoxes([]);
         }
 
+        // Load coloring page settings
+        setIsColoringPage(page.isColoringPage || false);
+        setColoringEndModalOnly(page.coloringEndModalOnly !== false); // Default to true if not set
+
         setSelectedBoxId(null);
     };
 
@@ -331,6 +339,10 @@ const PageEditor: React.FC = () => {
         setSoundEffectPreview(null);
         setSoundEffectFilename(null);
         setSelectedBoxId(null);
+        
+        // Reset coloring page settings
+        setIsColoringPage(false);
+        setColoringEndModalOnly(true);
 
         // Apply template if it exists
         if (pageTemplate) {
@@ -522,6 +534,8 @@ const PageEditor: React.FC = () => {
                 scrollMidHeight: scrollHeight, // Store as scrollMidHeight for app compatibility
                 soundEffectUrl, // Sound effect bubble audio
                 textBoxes: textBoxes.map(({ id, ...rest }) => rest), // Remove ID before sending
+                isColoringPage,
+                coloringEndModalOnly: isColoringPage ? coloringEndModalOnly : false, // Only relevant if it's a coloring page
             };
 
             console.log('Sending payload:', JSON.stringify(payload, null, 2));
@@ -823,6 +837,44 @@ const PageEditor: React.FC = () => {
                                 </button>
                             </div>
                         )}
+                    </div>
+
+                    <hr className="border-gray-100" />
+
+                    {/* Coloring Page Settings */}
+                    <div className="space-y-3">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Coloring Page
+                        </label>
+                        <div className="space-y-2">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={isColoringPage}
+                                    onChange={(e) => setIsColoringPage(e.target.checked)}
+                                    className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                                />
+                                <span className="text-sm text-gray-700">This is a coloring page</span>
+                            </label>
+                            
+                            {isColoringPage && (
+                                <div className="ml-6 space-y-2">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={coloringEndModalOnly}
+                                            onChange={(e) => setColoringEndModalOnly(e.target.checked)}
+                                            className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                                        />
+                                        <span className="text-sm text-gray-700">Show only at end of book</span>
+                                    </label>
+                                    <p className="text-xs text-gray-400">
+                                        If checked, this coloring page appears in the "The End" modal. 
+                                        If unchecked, it shows as a regular page in the book.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     <hr className="border-gray-100" />
