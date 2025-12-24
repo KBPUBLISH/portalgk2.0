@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
     Users, UserPlus, Coins, Baby, Calendar, TrendingUp, 
     Activity, Crown, Smartphone, Globe, Monitor, RefreshCw,
-    ChevronDown, ChevronUp, Search, ArrowUpRight, ArrowDownRight
+    ChevronDown, ChevronUp, Search, ArrowUpRight, ArrowDownRight,
+    BookOpen, Clock, Headphones, Music, Gamepad2, FileText
 } from 'lucide-react';
 
 interface UserData {
@@ -13,8 +14,15 @@ interface UserData {
     kidCount: number;
     kids: { name: string; age?: number }[];
     sessions: number;
+    timeSpentMinutes: number;
     booksRead: number;
+    pagesRead: number;
+    playlistsPlayed: number;
+    listeningTimeMinutes: number;
+    lessonsCompleted: number;
     gamesPlayed: number;
+    onboardingStep: number;
+    farthestPage: string;
     subscriptionStatus: string;
     platform: string;
     referralCode?: string;
@@ -29,7 +37,12 @@ interface AnalyticsData {
         totalCoins: number;
         totalKids: number;
         totalSessions: number;
+        totalTimeSpentMinutes: number;
         totalBooksRead: number;
+        totalPagesRead: number;
+        totalPlaylistsPlayed: number;
+        totalListeningTimeMinutes: number;
+        totalLessonsCompleted: number;
         totalGamesPlayed: number;
     };
     newAccounts: {
@@ -219,7 +232,7 @@ const Dashboard: React.FC = () => {
                 </button>
             </div>
 
-            {/* Summary Cards */}
+            {/* Summary Cards - Row 1: Users & Engagement */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                 <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
                     <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
@@ -230,10 +243,18 @@ const Dashboard: React.FC = () => {
                 </div>
                 <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
                     <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
-                        <Coins className="w-4 h-4 text-yellow-500" />
-                        Total Coins
+                        <Activity className="w-4 h-4 text-green-500" />
+                        Total Sessions
                     </div>
-                    <p className="text-2xl font-bold text-yellow-600">{data.summary.totalCoins.toLocaleString()}</p>
+                    <p className="text-2xl font-bold text-green-600">{data.summary.totalSessions.toLocaleString()}</p>
+                </div>
+                <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                    <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
+                        <Clock className="w-4 h-4 text-indigo-500" />
+                        Time in App
+                    </div>
+                    <p className="text-2xl font-bold text-indigo-600">{Math.round((data.summary.totalTimeSpentMinutes || 0) / 60)}h</p>
+                    <p className="text-xs text-gray-400">{data.summary.totalTimeSpentMinutes || 0} min</p>
                 </div>
                 <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
                     <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
@@ -244,24 +265,57 @@ const Dashboard: React.FC = () => {
                 </div>
                 <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
                     <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
-                        <Activity className="w-4 h-4 text-green-500" />
-                        Total Sessions
+                        <Coins className="w-4 h-4 text-yellow-500" />
+                        Total Coins
                     </div>
-                    <p className="text-2xl font-bold text-green-600">{data.summary.totalSessions.toLocaleString()}</p>
+                    <p className="text-2xl font-bold text-yellow-600">{data.summary.totalCoins.toLocaleString()}</p>
                 </div>
                 <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
                     <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
-                        <TrendingUp className="w-4 h-4 text-blue-500" />
+                        <Gamepad2 className="w-4 h-4 text-purple-500" />
+                        Games Played
+                    </div>
+                    <p className="text-2xl font-bold text-purple-600">{data.summary.totalGamesPlayed.toLocaleString()}</p>
+                </div>
+            </div>
+
+            {/* Summary Cards - Row 2: Content Engagement */}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                    <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
+                        <BookOpen className="w-4 h-4 text-blue-500" />
                         Books Read
                     </div>
                     <p className="text-2xl font-bold text-blue-600">{data.summary.totalBooksRead.toLocaleString()}</p>
                 </div>
                 <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
                     <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
-                        <Crown className="w-4 h-4 text-purple-500" />
-                        Games Played
+                        <FileText className="w-4 h-4 text-teal-500" />
+                        Pages Read
                     </div>
-                    <p className="text-2xl font-bold text-purple-600">{data.summary.totalGamesPlayed.toLocaleString()}</p>
+                    <p className="text-2xl font-bold text-teal-600">{(data.summary.totalPagesRead || 0).toLocaleString()}</p>
+                </div>
+                <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                    <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
+                        <Music className="w-4 h-4 text-rose-500" />
+                        Playlists Played
+                    </div>
+                    <p className="text-2xl font-bold text-rose-600">{(data.summary.totalPlaylistsPlayed || 0).toLocaleString()}</p>
+                </div>
+                <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                    <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
+                        <Headphones className="w-4 h-4 text-orange-500" />
+                        Listening Time
+                    </div>
+                    <p className="text-2xl font-bold text-orange-600">{Math.round((data.summary.totalListeningTimeMinutes || 0) / 60)}h</p>
+                    <p className="text-xs text-gray-400">{data.summary.totalListeningTimeMinutes || 0} min</p>
+                </div>
+                <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                    <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
+                        <TrendingUp className="w-4 h-4 text-emerald-500" />
+                        Lessons Done
+                    </div>
+                    <p className="text-2xl font-bold text-emerald-600">{(data.summary.totalLessonsCompleted || 0).toLocaleString()}</p>
                 </div>
             </div>
 
@@ -550,7 +604,7 @@ const Dashboard: React.FC = () => {
                                     {expandedUserId === user.id && (
                                         <tr className="bg-indigo-50">
                                             <td colSpan={8} className="px-6 py-4">
-                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                                                     <div>
                                                         <p className="text-xs text-gray-500 mb-1">Kid Profiles</p>
                                                         {user.kids.length > 0 ? (
@@ -566,17 +620,28 @@ const Dashboard: React.FC = () => {
                                                         )}
                                                     </div>
                                                     <div>
-                                                        <p className="text-xs text-gray-500 mb-1">Activity</p>
+                                                        <p className="text-xs text-gray-500 mb-1">Reading Activity</p>
                                                         <p className="text-sm">📚 {user.booksRead} books read</p>
+                                                        <p className="text-sm">📄 {user.pagesRead} pages read</p>
+                                                        <p className="text-sm">🎯 {user.lessonsCompleted} lessons</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs text-gray-500 mb-1">Audio & Games</p>
+                                                        <p className="text-sm">🎵 {user.playlistsPlayed} playlists</p>
+                                                        <p className="text-sm">🎧 {user.listeningTimeMinutes} min listened</p>
                                                         <p className="text-sm">🎮 {user.gamesPlayed} games played</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs text-gray-500 mb-1">Engagement</p>
+                                                        <p className="text-sm">⏱️ {user.timeSpentMinutes} min total</p>
+                                                        <p className="text-sm">📍 Step {user.onboardingStep} onboarding</p>
+                                                        <p className="text-sm text-xs truncate" title={user.farthestPage}>🚀 {user.farthestPage || '/'}</p>
                                                     </div>
                                                     <div>
                                                         <p className="text-xs text-gray-500 mb-1">Referral</p>
                                                         <p className="text-sm font-mono">{user.referralCode || 'N/A'}</p>
                                                         <p className="text-xs text-gray-400">{user.referralCount} referrals</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs text-gray-500 mb-1">User ID</p>
+                                                        <p className="text-xs text-gray-500 mt-2">User ID</p>
                                                         <p className="text-xs font-mono text-gray-600 break-all">{user.id}</p>
                                                     </div>
                                                 </div>
