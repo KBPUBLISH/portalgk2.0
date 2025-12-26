@@ -14,6 +14,12 @@ interface TextBox {
     color?: string;
 }
 
+interface VideoSequenceItem {
+    url: string;
+    filename?: string;
+    order: number;
+}
+
 interface Page {
     _id: string;
     pageNumber: number;
@@ -22,10 +28,23 @@ interface Page {
     scrollUrl?: string;
     scrollHeight?: number;
     scrollMidHeight?: number;
+    scrollOffsetY?: number;
     textBoxes?: TextBox[]; // Legacy field
     content?: {
         textBoxes?: TextBox[]; // Primary location from DB
     };
+    files?: {
+        background?: {
+            url?: string;
+            type?: 'image' | 'video';
+        };
+        scroll?: {
+            url?: string;
+        };
+    };
+    // Video sequence support
+    useVideoSequence?: boolean;
+    videoSequence?: VideoSequenceItem[];
 }
 
 const BookReader: React.FC = () => {
@@ -189,87 +208,144 @@ const BookReader: React.FC = () => {
 
                     {/* Background Layer */}
                     <div className="absolute inset-0 flex items-center justify-center">
-                        {currentPage.backgroundType === 'video' ? (
-                            <video
-                                src={resolveUrl(currentPage.backgroundUrl)}
-                                className="w-full h-full object-cover"
-                                autoPlay
-                                loop
-                                muted
-                                playsInline
-                            />
-                        ) : (
-                            <img
-                                src={resolveUrl(currentPage.backgroundUrl)}
-                                alt={`Page ${currentPage.pageNumber}`}
-                                className="w-full h-full object-cover"
-                            />
-                        )}
+                        {(() => {
+                            // Check for video sequence first
+                            if (currentPage.useVideoSequence && currentPage.videoSequence && currentPage.videoSequence.length > 0) {
+                                const sortedVideos = [...currentPage.videoSequence].sort((a, b) => a.order - b.order);
+                                const firstVideo = sortedVideos[0];
+                                return (
+                                    <video
+                                        src={resolveUrl(firstVideo.url)}
+                                        className="w-full h-full object-cover"
+                                        autoPlay
+                                        loop
+                                        muted
+                                        playsInline
+                                    />
+                                );
+                            }
+                            
+                            // Get background URL from various possible locations
+                            const bgUrl = currentPage.backgroundUrl || currentPage.files?.background?.url;
+                            const bgType = currentPage.backgroundType || currentPage.files?.background?.type;
+                            
+                            // No background - show placeholder
+                            if (!bgUrl) {
+                                return (
+                                    <div className="w-full h-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">
+                                        <span className="text-gray-500 text-lg">No background set</span>
+                                    </div>
+                                );
+                            }
+                            
+                            // Video background
+                            if (bgType === 'video') {
+                                return (
+                                    <video
+                                        src={resolveUrl(bgUrl)}
+                                        className="w-full h-full object-cover"
+                                        autoPlay
+                                        loop
+                                        muted
+                                        playsInline
+                                    />
+                                );
+                            }
+                            
+                            // Image background (default)
+                            return (
+                                <img
+                                    src={resolveUrl(bgUrl)}
+                                    alt={`Page ${currentPage.pageNumber}`}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                        // Hide broken image and show placeholder
+                                        e.currentTarget.style.display = 'none';
+                                    }}
+                                />
+                            );
+                        })()}
                     </div>
 
                     {/* Text Boxes Layer - positioned relative to full page, moves with scroll */}
-                    <div
-                        className="absolute inset-0 pointer-events-none transition-transform duration-500 ease-in-out z-20"
-                        style={{
-                            transform: currentPage.scrollUrl && !showScroll
-                                ? 'translateY(100%)'
-                                : 'translateY(0)'
-                        }}
-                    >
-                        {/* Use content.textBoxes first (if has items), fall back to root textBoxes (legacy) */}
-                        {(() => {
-                            const contentBoxes = currentPage.content?.textBoxes;
-                            const textBoxes = (contentBoxes && contentBoxes.length > 0) ? contentBoxes : currentPage.textBoxes;
-                            return textBoxes;
-                        })()?.map((box, idx) => {
-                            // Calculate scroll top position - use scrollMidHeight if available (all values are percentages)
-                            const scrollHeightVal = currentPage.scrollMidHeight ? `${currentPage.scrollMidHeight}%` : (currentPage.scrollHeight ? `${currentPage.scrollHeight}%` : '30%');
-                            const scrollTopVal = `calc(100% - ${scrollHeightVal})`;
+                    {(() => {
+                        const scrollUrl = currentPage.scrollUrl || currentPage.files?.scroll?.url;
+                        const scrollOffset = currentPage.scrollOffsetY || 0;
+                        
+                        return (
+                            <div
+                                className="absolute inset-0 pointer-events-none transition-transform duration-500 ease-in-out z-20"
+                                style={{
+                                    transform: scrollUrl && !showScroll
+                                        ? 'translateY(100%)'
+                                        : 'translateY(0)'
+                                }}
+                            >
+                                {/* Use content.textBoxes first (if has items), fall back to root textBoxes (legacy) */}
+                                {(() => {
+                                    const contentBoxes = currentPage.content?.textBoxes;
+                                    const textBoxes = (contentBoxes && contentBoxes.length > 0) ? contentBoxes : currentPage.textBoxes;
+                                    return textBoxes;
+                                })()?.map((box, idx) => {
+                                    // Calculate scroll top position - use scrollMidHeight if available (all values are percentages)
+                                    const scrollHeightVal = currentPage.scrollMidHeight ? `${currentPage.scrollMidHeight}%` : (currentPage.scrollHeight ? `${currentPage.scrollHeight}%` : '30%');
+                                    // Add scroll offset to the calculation
+                                    const scrollTopVal = `calc(100% - ${scrollHeightVal} - ${scrollOffset}%)`;
 
-                            return (
-                                <div
-                                    key={idx}
-                                    className="absolute pointer-events-auto overflow-y-auto p-2"
-                                    style={{
-                                        left: `${box.x}%`,
-                                        // If scroll exists, ensure top is at least the scroll start position
-                                        top: currentPage.scrollUrl ? `max(${box.y}%, ${scrollTopVal})` : `${box.y}%`,
-                                        width: `${box.width || 30}%`,
-                                        transform: 'translate(0, 0)',
-                                        textAlign: box.alignment,
-                                        color: box.color || '#4a3b2a',
-                                        fontFamily: box.fontFamily || 'Comic Sans MS',
-                                        fontSize: `${box.fontSize || 24}px`,
-                                        // Calculate max height based on the effective top position
-                                        maxHeight: currentPage.scrollUrl
-                                            ? `calc(100% - max(${box.y}%, ${scrollTopVal}) - 40px)`
-                                            : `calc(100% - ${box.y}% - 40px)`,
-                                        overflowY: 'auto',
-                                        WebkitOverflowScrolling: 'touch',
-                                    }}
-                                >
-                                    {box.text}
-                                </div>
-                            );
-                        })}
-                    </div>
+                                    return (
+                                        <div
+                                            key={idx}
+                                            className="absolute pointer-events-auto overflow-y-auto p-2"
+                                            style={{
+                                                left: `${box.x}%`,
+                                                // If scroll exists, ensure top is at least the scroll start position
+                                                top: scrollUrl ? `max(${box.y}%, ${scrollTopVal})` : `${box.y}%`,
+                                                width: `${box.width || 30}%`,
+                                                transform: 'translate(0, 0)',
+                                                textAlign: box.alignment,
+                                                color: box.color || '#4a3b2a',
+                                                fontFamily: box.fontFamily || 'Comic Sans MS',
+                                                fontSize: `${box.fontSize || 24}px`,
+                                                // Calculate max height based on the effective top position
+                                                maxHeight: scrollUrl
+                                                    ? `calc(100% - max(${box.y}%, ${scrollTopVal}) - 40px)`
+                                                    : `calc(100% - ${box.y}% - 40px)`,
+                                                overflowY: 'auto',
+                                                WebkitOverflowScrolling: 'touch',
+                                            }}
+                                        >
+                                            {box.text}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        );
+                    })()}
 
                     {/* Scroll Overlay Layer */}
-                    {currentPage.scrollUrl && (
-                        <div
-                            className={`absolute bottom-0 left-0 right-0 transition-transform duration-500 ease-in-out z-10 ${showScroll ? 'translate-y-0' : 'translate-y-full'
-                                }`}
-                            style={{ height: currentPage.scrollMidHeight ? `${currentPage.scrollMidHeight}%` : (currentPage.scrollHeight ? `${currentPage.scrollHeight}%` : '30%') }}
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            {/* The Scroll Image */}
-                            <img
-                                src={resolveUrl(currentPage.scrollUrl)}
-                                alt="Scroll background"
-                                className="w-full h-full object-fill"
-                            />
-                        </div>
-                    )}
+                    {(() => {
+                        const scrollUrl = currentPage.scrollUrl || currentPage.files?.scroll?.url;
+                        const scrollOffset = currentPage.scrollOffsetY || 0;
+                        if (!scrollUrl) return null;
+                        
+                        return (
+                            <div
+                                className={`absolute left-0 right-0 transition-transform duration-500 ease-in-out z-10 ${showScroll ? 'translate-y-0' : 'translate-y-full'}`}
+                                style={{ 
+                                    height: currentPage.scrollMidHeight ? `${currentPage.scrollMidHeight}%` : (currentPage.scrollHeight ? `${currentPage.scrollHeight}%` : '30%'),
+                                    bottom: `${scrollOffset}%` // Apply vertical offset
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                {/* The Scroll Image */}
+                                <img
+                                    src={resolveUrl(scrollUrl)}
+                                    alt="Scroll background"
+                                    className="w-full h-full object-fill"
+                                />
+                            </div>
+                        );
+                    })()}
 
                     {/* Navigation Controls */}
                     <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-between px-4 pointer-events-none">

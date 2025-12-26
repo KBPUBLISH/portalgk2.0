@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, ArrowLeft, Save } from 'lucide-react';
+import { Upload, ArrowLeft, Save, Video, X } from 'lucide-react';
 import apiClient from '../services/apiClient';
 
 interface BookFormData {
@@ -13,6 +13,7 @@ interface BookFormData {
     status: string;
     orientation: 'portrait' | 'landscape';
     isMembersOnly: boolean;
+    introVideoUrl: string;
 }
 
 interface Category {
@@ -24,9 +25,12 @@ const BookForm: React.FC = () => {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [uploadingIntroVideo, setUploadingIntroVideo] = useState(false);
     const [categories, setCategories] = useState<Category[]>([]);
     const [previewUrl, setPreviewUrl] = useState<string>(''); // Local preview before upload
     const [coverFile, setCoverFile] = useState<File | null>(null); // Store file for re-upload after book creation
+    const [introVideoFile, setIntroVideoFile] = useState<File | null>(null); // Store intro video file
+    const [introVideoPreview, setIntroVideoPreview] = useState<string>(''); // Local preview for intro video
     const [formData, setFormData] = useState<BookFormData>({
         title: '',
         author: '',
@@ -37,6 +41,7 @@ const BookForm: React.FC = () => {
         status: 'draft',
         orientation: 'portrait',
         isMembersOnly: false,
+        introVideoUrl: '',
     });
 
     useEffect(() => {
@@ -80,18 +85,41 @@ const BookForm: React.FC = () => {
         // This allows us to use the organized folder structure
     };
 
+    const handleIntroVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Store the file for later upload (after book creation)
+        setIntroVideoFile(file);
+
+        // Show local preview immediately
+        const localPreview = URL.createObjectURL(file);
+        setIntroVideoPreview(localPreview);
+    };
+
+    const removeIntroVideo = () => {
+        if (introVideoPreview.startsWith('blob:')) {
+            URL.revokeObjectURL(introVideoPreview);
+        }
+        setIntroVideoFile(null);
+        setIntroVideoPreview('');
+        setFormData(prev => ({ ...prev, introVideoUrl: '' }));
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
 
         try {
-            // Step 1: Create the book first (without cover image)
-            const bookData = { ...formData, coverImage: '' };
+            // Step 1: Create the book first (without cover image or intro video)
+            const bookData = { ...formData, coverImage: '', introVideoUrl: '' };
             
             // Create book
             const response = await apiClient.post('/api/books', bookData);
             const newBook = response.data;
             const bookId = newBook._id;
+            
+            const updateData: { coverImage?: string; introVideoUrl?: string } = {};
             
             // Step 2: Upload cover image with bookId for organized structure
             if (coverFile) {
@@ -108,10 +136,7 @@ const BookForm: React.FC = () => {
                         }
                     );
                     
-                    // Update book with the uploaded cover image URL
-                    await apiClient.put(`/api/books/${bookId}`, {
-                        coverImage: uploadResponse.data.url
-                    });
+                    updateData.coverImage = uploadResponse.data.url;
                     
                     // Clean up local preview
                     if (previewUrl.startsWith('blob:')) {
@@ -119,14 +144,44 @@ const BookForm: React.FC = () => {
                     }
                 } catch (uploadError) {
                     console.error('Failed to upload cover image:', uploadError);
-                    // Book is created, but cover upload failed - user can add it later via edit
                     alert('Book created, but cover image upload failed. You can add it later by editing the book.');
                 } finally {
                     setUploading(false);
                 }
-            } else if (formData.coverImage) {
-                // If coverImage was already set (from editing), use it but update to organized structure if possible
-                // For now, just keep the existing URL
+            }
+            
+            // Step 3: Upload intro video with bookId
+            if (introVideoFile) {
+                setUploadingIntroVideo(true);
+                const videoFormData = new FormData();
+                videoFormData.append('file', introVideoFile);
+
+                try {
+                    const uploadResponse = await apiClient.post(
+                        `/api/upload/video?bookId=${bookId}&type=intro`,
+                        videoFormData,
+                        {
+                            headers: { 'Content-Type': 'multipart/form-data' },
+                        }
+                    );
+                    
+                    updateData.introVideoUrl = uploadResponse.data.url;
+                    
+                    // Clean up local preview
+                    if (introVideoPreview.startsWith('blob:')) {
+                        URL.revokeObjectURL(introVideoPreview);
+                    }
+                } catch (uploadError) {
+                    console.error('Failed to upload intro video:', uploadError);
+                    alert('Book created, but intro video upload failed. You can add it later by editing the book.');
+                } finally {
+                    setUploadingIntroVideo(false);
+                }
+            }
+            
+            // Step 4: Update book with uploaded files
+            if (Object.keys(updateData).length > 0) {
+                await apiClient.put(`/api/books/${bookId}`, updateData);
             }
             
             navigate('/books');
@@ -195,6 +250,61 @@ const BookForm: React.FC = () => {
                             </label>
                             <p className="text-sm text-gray-500 mt-2">
                                 Recommended: 400x600px, PNG or JPG
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Introduction Video */}
+                <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Introduction Video (Optional)
+                    </label>
+                    <p className="text-sm text-gray-500 mb-3">
+                        This video will play before the book starts. Great for production company intros.
+                    </p>
+                    <div className="flex items-start gap-4">
+                        {(introVideoPreview || formData.introVideoUrl) ? (
+                            <div className="relative">
+                                <video
+                                    src={introVideoPreview || formData.introVideoUrl}
+                                    className="w-48 h-32 object-cover rounded-lg border-2 border-gray-200"
+                                    controls
+                                />
+                                <button
+                                    type="button"
+                                    onClick={removeIntroVideo}
+                                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                                {uploadingIntroVideo && (
+                                    <div className="absolute inset-0 bg-black bg-opacity-50 rounded-lg flex items-center justify-center">
+                                        <div className="text-white text-sm">Uploading...</div>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="w-48 h-32 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center">
+                                <Video className="w-8 h-8 text-gray-400" />
+                            </div>
+                        )}
+                        <div>
+                            <input
+                                type="file"
+                                accept="video/mp4,video/*"
+                                onChange={handleIntroVideoSelect}
+                                className="hidden"
+                                id="intro-video-upload"
+                            />
+                            <label
+                                htmlFor="intro-video-upload"
+                                className="inline-block px-4 py-2 bg-purple-600 text-white rounded-lg cursor-pointer hover:bg-purple-700 transition-colors"
+                            >
+                                {uploadingIntroVideo ? 'Uploading...' : 'Select Intro Video'}
+                            </label>
+                            <p className="text-sm text-gray-500 mt-2">
+                                MP4 recommended. Will upload when you save.
                             </p>
                         </div>
                     </div>
@@ -383,7 +493,7 @@ const BookForm: React.FC = () => {
                     </button>
                     <button
                         type="submit"
-                        disabled={loading || uploading || !formData.title || !formData.author}
+                        disabled={loading || uploading || uploadingIntroVideo || !formData.title || !formData.author}
                         className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                     >
                         <Save className="w-5 h-5" />

@@ -53,6 +53,7 @@ const PageEditor: React.FC = () => {
     const [backgroundFile, setBackgroundFile] = useState<File | null>(null);
     const [scrollFile, setScrollFile] = useState<File | null>(null);
     const [scrollHeight, setScrollHeight] = useState<number>(33); // Percentage: 30%, 33%, 50%, 60%
+    const [scrollOffsetY, setScrollOffsetY] = useState<number>(0); // Vertical offset from bottom in percentage
     const [soundEffectFile, setSoundEffectFile] = useState<File | null>(null);
     const [textBoxes, setTextBoxes] = useState<TextBox[]>([]);
     const [loading, setLoading] = useState(false);
@@ -292,6 +293,11 @@ const PageEditor: React.FC = () => {
         const savedScrollHeight = page.scrollHeight || page.scrollMidHeight || page.files?.scroll?.height;
         console.log('📏 Scroll height:', savedScrollHeight);
         setScrollHeight(savedScrollHeight || 33);
+        
+        // Load scroll offset (default to 0)
+        const savedScrollOffsetY = page.scrollOffsetY || 0;
+        console.log('📍 Scroll offset Y:', savedScrollOffsetY);
+        setScrollOffsetY(savedScrollOffsetY);
 
         // Load sound effect if exists
         const soundEffectUrl = page.soundEffectUrl || page.files?.soundEffect?.url;
@@ -366,6 +372,7 @@ const PageEditor: React.FC = () => {
         setBackgroundPreview(null);
         setScrollFile(null);
         setScrollHeight(33); // Reset to default
+        setScrollOffsetY(0); // Reset offset
         setSoundEffectFile(null);
         setSoundEffectPreview(null);
         setSoundEffectFilename(null);
@@ -605,6 +612,9 @@ const PageEditor: React.FC = () => {
                 scrollUrl,
                 scrollHeight,
                 scrollMidHeight: scrollHeight, // Store as scrollMidHeight for app compatibility
+                // Calculate max height: if mid is low (30-40%), max is 60%; if mid is high (50-60%), max is 80-90%
+                scrollMaxHeight: scrollHeight <= 40 ? 60 : Math.min(scrollHeight + 30, 90),
+                scrollOffsetY, // Vertical offset for scroll position
                 soundEffectUrl, // Sound effect bubble audio
                 textBoxes: textBoxes.map(({ id, ...rest }) => rest), // Remove ID before sending
                 isColoringPage,
@@ -1019,9 +1029,9 @@ const PageEditor: React.FC = () => {
                         {/* Scroll Height Control */}
                         {scrollPreview && (
                             <div className="space-y-2">
-                                <label className="block text-xs text-gray-500">Overlay Height</label>
+                                <label className="block text-xs text-gray-500">Scroll Height (tap to toggle)</label>
                                 <div className="flex gap-2">
-                                    {[30, 33, 50, 60].map(height => (
+                                    {[30, 33, 40, 50].map(height => (
                                         <button
                                             key={height}
                                             type="button"
@@ -1036,6 +1046,46 @@ const PageEditor: React.FC = () => {
                                         </button>
                                     ))}
                                 </div>
+                                <p className="text-xs text-gray-400">
+                                    This is the "mid" height. Swipe up in app for "max" height ({scrollHeight <= 40 ? 60 : Math.min(scrollHeight + 30, 90)}%)
+                                </p>
+                            </div>
+                        )}
+                        
+                        {/* Scroll Position Control (Up/Down) */}
+                        {scrollPreview && (
+                            <div className="space-y-2">
+                                <label className="block text-xs text-gray-500">Vertical Position (from bottom)</label>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setScrollOffsetY(prev => Math.max(0, prev - 5))}
+                                        className="p-2 bg-gray-100 rounded hover:bg-gray-200 transition"
+                                        title="Move scroll down"
+                                    >
+                                        <ChevronDown className="w-4 h-4" />
+                                    </button>
+                                    <div className="flex-1 text-center">
+                                        <span className="text-sm font-medium text-gray-700">{scrollOffsetY}%</span>
+                                        <p className="text-xs text-gray-400">offset from bottom</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setScrollOffsetY(prev => Math.min(50, prev + 5))}
+                                        className="p-2 bg-gray-100 rounded hover:bg-gray-200 transition"
+                                        title="Move scroll up"
+                                    >
+                                        <ChevronUp className="w-4 h-4" />
+                                    </button>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="50"
+                                    value={scrollOffsetY}
+                                    onChange={(e) => setScrollOffsetY(parseInt(e.target.value))}
+                                    className="w-full"
+                                />
                             </div>
                         )}
                         
@@ -1347,30 +1397,64 @@ const PageEditor: React.FC = () => {
                         }}
                     />
                     {/* Background Layer */}
-                    {backgroundPreview && (
-                        <div className="absolute inset-0 pointer-events-none">
-                            {backgroundType === 'image' ? (
-                                <img src={backgroundPreview} className="w-full h-full object-cover" alt="Background" />
-                            ) : (
-                                <video 
-                                    src={backgroundPreview} 
-                                    className="w-full h-full object-cover" 
-                                    autoPlay 
-                                    loop 
-                                    muted 
-                                    playsInline
-                                    onError={(e) => console.error('❌ Video failed to load:', backgroundPreview, e)}
-                                    onLoadedData={() => console.log('✅ Video loaded successfully:', backgroundPreview)}
-                                />
-                            )}
-                        </div>
-                    )}
+                    {(() => {
+                        // If video sequence is enabled and has videos, show the first video as background
+                        if (useVideoSequence && videoSequence.length > 0) {
+                            const sortedVideos = [...videoSequence].sort((a, b) => a.order - b.order);
+                            const firstVideo = sortedVideos[0];
+                            const videoSrc = firstVideo.preview || resolveUrl(firstVideo.url);
+                            
+                            return (
+                                <div className="absolute inset-0 pointer-events-none">
+                                    <video 
+                                        src={videoSrc} 
+                                        className="w-full h-full object-cover" 
+                                        autoPlay 
+                                        loop 
+                                        muted 
+                                        playsInline
+                                    />
+                                    {/* Indicator that this is from video sequence */}
+                                    <div className="absolute top-2 left-2 bg-indigo-600 text-white text-xs px-2 py-1 rounded-full z-10">
+                                        📹 Video Sequence ({videoSequence.length} videos)
+                                    </div>
+                                </div>
+                            );
+                        }
+                        
+                        // Regular background
+                        if (backgroundPreview) {
+                            return (
+                                <div className="absolute inset-0 pointer-events-none">
+                                    {backgroundType === 'image' ? (
+                                        <img src={backgroundPreview} className="w-full h-full object-cover" alt="Background" />
+                                    ) : (
+                                        <video 
+                                            src={backgroundPreview} 
+                                            className="w-full h-full object-cover" 
+                                            autoPlay 
+                                            loop 
+                                            muted 
+                                            playsInline
+                                            onError={(e) => console.error('❌ Video failed to load:', backgroundPreview, e)}
+                                            onLoadedData={() => console.log('✅ Video loaded successfully:', backgroundPreview)}
+                                        />
+                                    )}
+                                </div>
+                            );
+                        }
+                        
+                        return null;
+                    })()}
 
                     {/* Scroll Overlay Layer */}
                     {scrollPreview && (
                         <div 
-                            className="absolute bottom-0 left-0 right-0 pointer-events-none z-10"
-                            style={{ height: `${scrollHeight}%` }}
+                            className="absolute left-0 right-0 pointer-events-none z-10"
+                            style={{ 
+                                height: `${scrollHeight}%`,
+                                bottom: `${scrollOffsetY}%` // Apply vertical offset
+                            }}
                         >
                             <img src={scrollPreview} className="w-full h-full object-fill" alt="Scroll" />
                         </div>
@@ -1380,7 +1464,8 @@ const PageEditor: React.FC = () => {
                     {textBoxes.map(box => {
                         // Calculate text position relative to scroll (like the app does)
                         // When scroll exists, text top should be at least at the top of the scroll
-                        const scrollTopPosition = scrollPreview ? `calc(100% - ${scrollHeight}% + 12px)` : `${box.y}%`;
+                        // Account for scroll offset (scrollOffsetY moves scroll up from bottom)
+                        const scrollTopPosition = scrollPreview ? `calc(100% - ${scrollHeight}% - ${scrollOffsetY}% + 12px)` : `${box.y}%`;
                         const textTop = scrollPreview 
                             ? `max(${box.y}%, ${scrollTopPosition})`
                             : `${box.y}%`;
@@ -1450,11 +1535,11 @@ const PageEditor: React.FC = () => {
                     )}
 
                     {/* Empty State Hint */}
-                    {!backgroundPreview && (
+                    {!backgroundPreview && !(useVideoSequence && videoSequence.length > 0) && (
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                             <div className="text-gray-400 text-center">
                                 <p className="text-xl font-semibold">Canvas Empty</p>
-                                <p className="text-sm">Upload a background to start</p>
+                                <p className="text-sm">Upload a background or add video sequence</p>
                             </div>
                         </div>
                     )}
