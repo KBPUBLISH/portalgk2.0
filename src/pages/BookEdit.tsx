@@ -28,7 +28,7 @@ const BookEdit: React.FC = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const dropZoneRef = useRef<HTMLDivElement>(null);
     const [audioFiles, setAudioFiles] = useState<Array<{ url: string; filename: string; uploadedAt?: string }>>([]);
-    const [audioUploadVolume, setAudioUploadVolume] = useState<number>(0.2); // 20% default attenuation on upload
+    const [audioUploadVolume, setAudioUploadVolume] = useState<number>(0.4); // 40% default attenuation on upload
     const [uploadingAudio, setUploadingAudio] = useState(false);
     const [reprocessingAudioIndex, setReprocessingAudioIndex] = useState<number | null>(null);
     const audioInputRef = useRef<HTMLInputElement>(null);
