@@ -572,6 +572,24 @@ const PageEditor: React.FC = () => {
                 });
                 scrollUrl = res.data.url;
                 console.log('📜 Uploaded scroll image:', scrollUrl);
+            } else if (scrollPreview && scrollPreview.startsWith('blob:')) {
+                // CRITICAL: If we have a blob URL but no file, we need to fetch and upload it
+                // This happens when user selected a scroll but the file reference was lost
+                console.log('⚠️ Blob URL detected without file - fetching and uploading...');
+                try {
+                    const response = await fetch(scrollPreview);
+                    const blob = await response.blob();
+                    const formData = new FormData();
+                    formData.append('file', blob, 'scroll-image.png');
+                    const res = await apiClient.post(`/api/upload/image?bookId=${bookId}&type=scroll`, formData, {
+                        headers: { 'Content-Type': 'multipart/form-data' },
+                    });
+                    scrollUrl = res.data.url;
+                    console.log('📜 Uploaded blob scroll image:', scrollUrl);
+                } catch (err) {
+                    console.error('❌ Failed to upload blob scroll:', err);
+                    alert('Warning: Scroll image could not be saved. Please re-upload the scroll image.');
+                }
             }
             
             console.log('📜 Final scroll URL to save:', scrollUrl || '(empty)');
@@ -647,7 +665,8 @@ const PageEditor: React.FC = () => {
                 videoSequence: uploadedVideoSequence,
             };
 
-            console.log('Sending payload:', JSON.stringify(payload, null, 2));
+            console.log('📤 Sending payload:', JSON.stringify(payload, null, 2));
+            console.log('📝 TextBoxes being saved:', textBoxes.map(b => ({ id: b.id, x: b.x, y: b.y, text: b.text.substring(0, 20) })));
 
             // Use PUT to update existing page, POST to create new
             if (editingPageId) {
@@ -658,6 +677,10 @@ const PageEditor: React.FC = () => {
 
                 // Reload the updated page into the editor to keep state in sync
                 const updatedPage = res.data.find((p: any) => p._id === editingPageId);
+                console.log('📥 Page returned from server after save:', {
+                    textBoxes: updatedPage?.textBoxes?.map((b: any) => ({ x: b.x, y: b.y, text: b.text?.substring(0, 20) })),
+                    contentTextBoxes: updatedPage?.content?.textBoxes?.map((b: any) => ({ x: b.x, y: b.y, text: b.text?.substring(0, 20) })),
+                });
                 if (updatedPage) {
                     loadPage(updatedPage);
                 }
@@ -1365,6 +1388,36 @@ const PageEditor: React.FC = () => {
                                 >
                                     <AlignRight className="w-4 h-4" />
                                 </button>
+                            </div>
+
+                            {/* Position Controls */}
+                            <div className="space-y-2 p-2 bg-white rounded border border-gray-200">
+                                <label className="text-xs font-semibold text-gray-600">Position</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label className="text-xs text-gray-500">X Position</label>
+                                        <input
+                                            type="number"
+                                            value={Math.round(selectedBox.x)}
+                                            onChange={e => updateTextBox(selectedBox.id, { x: Math.max(0, Math.min(100, Number(e.target.value))) })}
+                                            className="w-full text-sm p-1 border rounded focus:ring-2 focus:ring-indigo-300 outline-none"
+                                            min={0}
+                                            max={100}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-500">Y Position</label>
+                                        <input
+                                            type="number"
+                                            value={Math.round(selectedBox.y)}
+                                            onChange={e => updateTextBox(selectedBox.id, { y: Math.max(0, Math.min(100, Number(e.target.value))) })}
+                                            className="w-full text-sm p-1 border rounded focus:ring-2 focus:ring-indigo-300 outline-none"
+                                            min={0}
+                                            max={100}
+                                        />
+                                    </div>
+                                </div>
+                                <p className="text-xs text-gray-400">Lower Y = higher on page. Try Y: 40-45 for top of 60% scroll.</p>
                             </div>
 
                             {/* Font Family */}
