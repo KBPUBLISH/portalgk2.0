@@ -547,13 +547,24 @@ const PageEditor: React.FC = () => {
 
             // Upload scroll - include bookId and type=scroll for proper GCS path
             let scrollUrl = '';
-            // Only use existing URL if it's a real HTTP URL (not blob:)
-            if (scrollPreview && scrollPreview.startsWith('http') && !scrollPreview.startsWith('blob:')) {
+            
+            console.log('📜 Scroll save debug:', {
+                scrollPreview: scrollPreview?.substring(0, 50) + '...',
+                scrollFile: scrollFile ? scrollFile.name : null,
+                startsWithHttp: scrollPreview?.startsWith('http'),
+                startsWithBlob: scrollPreview?.startsWith('blob:'),
+                startsWithHttps: scrollPreview?.startsWith('https://'),
+            });
+            
+            // Only use existing URL if it's a real HTTPS URL (GCS, etc) - not blob:
+            if (scrollPreview && scrollPreview.startsWith('https://') && !scrollPreview.includes('blob:')) {
                 scrollUrl = scrollPreview;
+                console.log('📜 Using existing scroll URL:', scrollUrl);
             }
 
             // If we have a new file to upload, upload it
             if (scrollFile) {
+                console.log('📜 Uploading new scroll file:', scrollFile.name);
                 const formData = new FormData();
                 formData.append('file', scrollFile);
                 const res = await apiClient.post(`/api/upload/image?bookId=${bookId}&type=scroll`, formData, {
@@ -562,6 +573,8 @@ const PageEditor: React.FC = () => {
                 scrollUrl = res.data.url;
                 console.log('📜 Uploaded scroll image:', scrollUrl);
             }
+            
+            console.log('📜 Final scroll URL to save:', scrollUrl || '(empty)');
 
             // Upload sound effect - include bookId and pageNumber for proper GCS path
             let soundEffectUrl = '';
@@ -1007,6 +1020,47 @@ const PageEditor: React.FC = () => {
                     {/* Scroll Overlay */}
                     <div className="space-y-3">
                         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Scroll Overlay</label>
+                        
+                        {/* Existing scrolls from this book */}
+                        {(() => {
+                            // Get unique scroll URLs from existing pages (excluding blob: URLs)
+                            const existingScrolls = [...new Set(
+                                existingPages
+                                    .map(p => p.scrollUrl || p.files?.scroll?.url)
+                                    .filter(url => url && url.startsWith('https://') && !url.includes('blob:'))
+                            )];
+                            
+                            if (existingScrolls.length > 0) {
+                                return (
+                                    <div className="space-y-1">
+                                        <label className="block text-xs text-gray-400">Use existing scroll:</label>
+                                        <div className="flex gap-2 flex-wrap">
+                                            {existingScrolls.slice(0, 4).map((url, idx) => (
+                                                <button
+                                                    key={idx}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setScrollPreview(url);
+                                                        setScrollFile(null); // Clear file since we're using existing URL
+                                                    }}
+                                                    className={`w-12 h-12 rounded border-2 overflow-hidden transition ${
+                                                        scrollPreview === url 
+                                                            ? 'border-indigo-600 ring-2 ring-indigo-300' 
+                                                            : 'border-gray-200 hover:border-indigo-400'
+                                                    }`}
+                                                    title="Click to use this scroll"
+                                                >
+                                                    <img src={url} className="w-full h-full object-cover" alt={`Scroll ${idx + 1}`} />
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            }
+                            return null;
+                        })()}
+                        
+                        {/* Upload new scroll */}
                         <div className="relative group">
                             <input
                                 type="file"
@@ -1018,6 +1072,7 @@ const PageEditor: React.FC = () => {
                                     if (file) {
                                         setScrollFile(file);
                                         setScrollPreview(URL.createObjectURL(file));
+                                        console.log('📜 Selected new scroll file:', file.name);
                                     }
                                 }}
                             />
