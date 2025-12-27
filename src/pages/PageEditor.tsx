@@ -52,7 +52,7 @@ const PageEditor: React.FC = () => {
     const [backgroundType, setBackgroundType] = useState<'image' | 'video'>('image');
     const [backgroundFile, setBackgroundFile] = useState<File | null>(null);
     const [scrollFile, setScrollFile] = useState<File | null>(null);
-    const [scrollHeight, setScrollHeight] = useState<number>(60); // Percentage: 30%, 33%, 50%, 60% - Default to 60% (how all books were made)
+    const [scrollHeight, setScrollHeight] = useState<number>(60); // 3 states: 0% (hidden), 30% (mid), 60% (max) - Default to 60% for text positioning
     const [scrollOffsetY, setScrollOffsetY] = useState<number>(0); // Vertical offset from bottom in percentage
     const [soundEffectFile, setSoundEffectFile] = useState<File | null>(null);
     const [textBoxes, setTextBoxes] = useState<TextBox[]>([]);
@@ -1033,12 +1033,12 @@ const PageEditor: React.FC = () => {
                             </label>
                         </div>
                         
-                        {/* Scroll Height Control */}
+                        {/* Scroll Height Control - 3 states: hidden (0%), mid (30%), max (60%) */}
                         {scrollPreview && (
                             <div className="space-y-2">
-                                <label className="block text-xs text-gray-500">Scroll Height</label>
+                                <label className="block text-xs text-gray-500">Scroll Height (tap to toggle in app)</label>
                                 <div className="flex gap-2">
-                                    {[30, 40, 50, 60].map(height => (
+                                    {[0, 30, 60].map(height => (
                                         <button
                                             key={height}
                                             type="button"
@@ -1049,12 +1049,12 @@ const PageEditor: React.FC = () => {
                                                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                             }`}
                                         >
-                                            {height}%
+                                            {height === 0 ? 'Hidden' : height === 30 ? '30% (Mid)' : '60% (Max)'}
                                         </button>
                                     ))}
                                 </div>
                                 <p className="text-xs text-gray-400">
-                                    Default scroll height shown in app. Swipe down for smaller, tap to hide.
+                                    Set to 60% to position text. App starts at 30% (mid).
                                 </p>
                             </div>
                         )}
