@@ -81,6 +81,7 @@ const PageEditor: React.FC = () => {
     const [useImageSequence, setUseImageSequence] = useState(false);
     const [imageSequence, setImageSequence] = useState<ImageSequenceItem[]>([]);
     const [imageSequenceDuration, setImageSequenceDuration] = useState(3); // seconds per image
+    const [imageSequenceAnimation, setImageSequenceAnimation] = useState<string>('kenBurns'); // animation effect
 
     // Previews
     const [backgroundPreview, setBackgroundPreview] = useState<string | null>(null);
@@ -381,10 +382,12 @@ const PageEditor: React.FC = () => {
         console.log('🖼️ Image sequence settings:', {
             useImageSequence: page.useImageSequence,
             imageSequenceLength: page.imageSequence?.length || 0,
-            imageSequence: page.imageSequence
+            imageSequence: page.imageSequence,
+            imageSequenceAnimation: page.imageSequenceAnimation
         });
         setUseImageSequence(page.useImageSequence || false);
         setImageSequenceDuration(page.imageSequenceDuration || 3);
+        setImageSequenceAnimation(page.imageSequenceAnimation || 'kenBurns');
         if (page.imageSequence && page.imageSequence.length > 0) {
             const loadedImages: ImageSequenceItem[] = page.imageSequence.map((img: any, idx: number) => ({
                 id: `loaded-img-${page._id}-${idx}`,
@@ -433,6 +436,7 @@ const PageEditor: React.FC = () => {
         // Reset image sequence settings
         setUseImageSequence(false);
         setImageSequenceDuration(3);
+        setImageSequenceAnimation('kenBurns');
         imageSequence.forEach(img => {
             if (img.preview) URL.revokeObjectURL(img.preview);
         });
@@ -749,6 +753,7 @@ const PageEditor: React.FC = () => {
                 useImageSequence: useImageSequence && uploadedImageSequence.length > 0,
                 imageSequence: uploadedImageSequence,
                 imageSequenceDuration,
+                imageSequenceAnimation,
             };
 
             console.log('📤 Sending payload:', JSON.stringify(payload, null, 2));
@@ -1173,6 +1178,28 @@ const PageEditor: React.FC = () => {
                                         className="w-16 px-2 py-1 text-sm border rounded"
                                     />
                                     <span className="text-xs text-gray-500">seconds</span>
+                                </div>
+                                
+                                {/* Animation effect */}
+                                <div className="space-y-1">
+                                    <label className="text-xs text-gray-600">Camera Animation:</label>
+                                    <select
+                                        value={imageSequenceAnimation}
+                                        onChange={(e) => setImageSequenceAnimation(e.target.value)}
+                                        className="w-full px-2 py-1.5 text-sm border rounded bg-white"
+                                    >
+                                        <option value="kenBurns">🎬 Ken Burns (Pan + Zoom)</option>
+                                        <option value="zoomIn">🔍 Slow Zoom In</option>
+                                        <option value="zoomOut">🔎 Slow Zoom Out</option>
+                                        <option value="panLeft">⬅️ Pan Left</option>
+                                        <option value="panRight">➡️ Pan Right</option>
+                                        <option value="panUp">⬆️ Pan Up</option>
+                                        <option value="panDown">⬇️ Pan Down</option>
+                                        <option value="none">❌ No Animation (Static)</option>
+                                    </select>
+                                    <p className="text-xs text-gray-400">
+                                        Ken Burns creates a cinematic documentary-style effect
+                                    </p>
                                 </div>
                                 
                                 {/* Empty state message */}
