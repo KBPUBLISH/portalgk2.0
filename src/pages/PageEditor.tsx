@@ -1456,7 +1456,16 @@ const PageEditor: React.FC = () => {
                                 bottom: `${scrollOffsetY}%` // Apply vertical offset
                             }}
                         >
-                            <img src={scrollPreview} className="w-full h-full object-fill" alt="Scroll" />
+                            <img 
+                                src={scrollPreview} 
+                                className="w-full h-full object-fill" 
+                                alt="Scroll"
+                                onError={(e) => {
+                                    console.error('❌ Scroll image failed to load:', scrollPreview);
+                                    // Try to show what URL was attempted
+                                    alert(`Scroll image failed to load:\n${scrollPreview}`);
+                                }}
+                            />
                         </div>
                     )}
 
