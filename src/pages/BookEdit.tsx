@@ -1,8 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Upload, X, Music, Gamepad2, Globe, Trash2, Video } from 'lucide-react';
+import { Plus, Upload, X, Music, Gamepad2, Globe, Trash2, Video, Volume2, Gift } from 'lucide-react';
 import apiClient from '../services/apiClient';
 import ContentAnalytics from '../components/ContentAnalytics';
+
+interface Voice {
+    _id?: string;
+    voiceId: string;
+    name: string;
+    customName?: string;
+    characterImage?: string;
+    enabled: boolean;
+    isLockable?: boolean;
+}
 
 const BookEdit: React.FC = () => {
     const { bookId } = useParams<{ bookId: string }>();
@@ -51,6 +61,11 @@ const BookEdit: React.FC = () => {
     const [introVideoUrl, setIntroVideoUrl] = useState<string>('');
     const [uploadingIntroVideo, setUploadingIntroVideo] = useState(false);
     const introVideoInputRef = useRef<HTMLInputElement>(null);
+    
+    // Voice settings
+    const [availableVoices, setAvailableVoices] = useState<Voice[]>([]);
+    const [defaultVoiceId, setDefaultVoiceId] = useState<string>('');
+    const [rewardVoiceId, setRewardVoiceId] = useState<string>('');
 
     // Load existing book data
     useEffect(() => {
@@ -108,6 +123,10 @@ const BookEdit: React.FC = () => {
                 
                 // Load intro video URL
                 setIntroVideoUrl(b.introVideoUrl || '');
+                
+                // Load voice settings
+                setDefaultVoiceId(b.defaultVoiceId || '');
+                setRewardVoiceId(b.rewardVoiceId || '');
             } catch (err) {
                 console.error('Failed to fetch book:', err);
             } finally {
@@ -116,6 +135,19 @@ const BookEdit: React.FC = () => {
         };
         fetchBook();
     }, [bookId]);
+
+    // Fetch available voices
+    useEffect(() => {
+        const fetchVoices = async () => {
+            try {
+                const response = await apiClient.get('/api/voices');
+                setAvailableVoices(response.data || []);
+            } catch (error) {
+                console.error('Error fetching voices:', error);
+            }
+        };
+        fetchVoices();
+    }, []);
 
     useEffect(() => {
         const fetchCategories = async () => {
@@ -397,6 +429,8 @@ const BookEdit: React.FC = () => {
                 bookGames: bookGames,
                 bookVideos: bookVideos,
                 introVideoUrl: introVideoUrl || null, // Studio intro video
+                defaultVoiceId: defaultVoiceId || null, // Default voice for this book
+                rewardVoiceId: rewardVoiceId || null, // Voice unlocked when completing book
             };
             console.log('Updating book with payload:', payload);
             await apiClient.put(`/api/books/${bookId}`, payload);
@@ -1359,6 +1393,114 @@ const BookEdit: React.FC = () => {
                                 MP4 format, recommended: 3-10 seconds
                             </span>
                         </label>
+                    </div>
+                </div>
+                
+                {/* Voice Settings Section */}
+                <div className="border-t border-gray-200 pt-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <Volume2 className="w-4 h-4 inline mr-2" />
+                        Voice Settings
+                    </label>
+                    <p className="text-xs text-gray-500 mb-4">
+                        Configure the default narrator voice for this book and optionally set a reward voice that users unlock by completing the book.
+                    </p>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Default Voice */}
+                        <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                            <div className="flex items-center gap-2 mb-3">
+                                <Volume2 className="w-5 h-5 text-blue-600" />
+                                <span className="font-medium text-blue-900">Default Narrator Voice</span>
+                            </div>
+                            <p className="text-xs text-blue-700 mb-3">
+                                This voice will be used when reading this book, overriding the user's selected voice.
+                            </p>
+                            <select
+                                value={defaultVoiceId}
+                                onChange={(e) => setDefaultVoiceId(e.target.value)}
+                                className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                                <option value="">Use user's selected voice</option>
+                                {availableVoices.filter(v => v.enabled).map(voice => (
+                                    <option key={voice.voiceId} value={voice.voiceId}>
+                                        {voice.customName || voice.name}
+                                        {voice.characterImage && ' 🖼️'}
+                                    </option>
+                                ))}
+                            </select>
+                            {defaultVoiceId && (
+                                <div className="mt-3 flex items-center gap-2">
+                                    {(() => {
+                                        const voice = availableVoices.find(v => v.voiceId === defaultVoiceId);
+                                        return voice?.characterImage ? (
+                                            <img 
+                                                src={voice.characterImage} 
+                                                alt={voice.customName || voice.name} 
+                                                className="w-12 h-12 rounded-full object-cover border-2 border-blue-300"
+                                            />
+                                        ) : null;
+                                    })()}
+                                    <span className="text-sm text-blue-800">
+                                        {availableVoices.find(v => v.voiceId === defaultVoiceId)?.customName || 
+                                         availableVoices.find(v => v.voiceId === defaultVoiceId)?.name}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                        
+                        {/* Reward Voice */}
+                        <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
+                            <div className="flex items-center gap-2 mb-3">
+                                <Gift className="w-5 h-5 text-amber-600" />
+                                <span className="font-medium text-amber-900">Reward Voice (Unlockable)</span>
+                            </div>
+                            <p className="text-xs text-amber-700 mb-3">
+                                When users complete this book, they'll unlock this voice with a celebration popup!
+                            </p>
+                            <select
+                                value={rewardVoiceId}
+                                onChange={(e) => setRewardVoiceId(e.target.value)}
+                                className="w-full px-3 py-2 border border-amber-300 rounded-lg bg-white focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                            >
+                                <option value="">No reward voice</option>
+                                {availableVoices.filter(v => v.enabled).map(voice => (
+                                    <option key={voice.voiceId} value={voice.voiceId}>
+                                        {voice.customName || voice.name}
+                                        {voice.characterImage && ' 🖼️'}
+                                    </option>
+                                ))}
+                            </select>
+                            {rewardVoiceId && (
+                                <div className="mt-3 flex items-center gap-2">
+                                    {(() => {
+                                        const voice = availableVoices.find(v => v.voiceId === rewardVoiceId);
+                                        return voice?.characterImage ? (
+                                            <img 
+                                                src={voice.characterImage} 
+                                                alt={voice.customName || voice.name} 
+                                                className="w-12 h-12 rounded-full object-cover border-2 border-amber-300"
+                                            />
+                                        ) : null;
+                                    })()}
+                                    <div>
+                                        <span className="text-sm text-amber-800 block">
+                                            {availableVoices.find(v => v.voiceId === rewardVoiceId)?.customName || 
+                                             availableVoices.find(v => v.voiceId === rewardVoiceId)?.name}
+                                        </span>
+                                        <span className="text-xs text-amber-600">🎉 Unlocked on completion</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    
+                    {/* Tip */}
+                    <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <p className="text-xs text-gray-600">
+                            <strong>💡 Tip:</strong> For character-themed books, set the default voice to the character's voice (e.g., "Noah" for a Noah story). 
+                            You can also make the same voice the reward voice so users permanently unlock it after reading!
+                        </p>
                     </div>
                 </div>
                 
