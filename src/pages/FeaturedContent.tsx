@@ -45,6 +45,8 @@ interface FeaturedEpisode {
   coverImage?: string;
   playlistTitle: string;
   playlistType: string;
+  isFeatured?: boolean;
+  featuredOrder?: number;
 }
 
 type FeaturedItem = (Book | Playlist | FeaturedEpisode) & { itemType: 'book' | 'playlist' | 'episode' };
