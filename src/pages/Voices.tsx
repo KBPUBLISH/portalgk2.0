@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Volume2, Play, Pause, RefreshCw, XCircle, Image, Edit2, Save, X, Crown } from 'lucide-react';
-import { apiClient, getUploadUrl } from '../services/apiClient';
+import { apiClient } from '../services/apiClient';
 
 interface Voice {
     _id?: string;
@@ -199,7 +199,7 @@ const Voices: React.FC = () => {
         }
     };
 
-    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, _voiceId: string) => {
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, voiceId: string) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
@@ -208,20 +208,21 @@ const Voices: React.FC = () => {
         formData.append('file', file);
 
         try {
-            const response = await fetch(getUploadUrl('/api/upload'), {
-                method: 'POST',
-                body: formData
-            });
+            // Use the correct image upload endpoint with type=voices for organized storage
+            const response = await apiClient.post(
+                `/api/upload/image?type=voices&voiceId=${voiceId}`,
+                formData,
+                { headers: { 'Content-Type': 'multipart/form-data' } }
+            );
 
-            if (response.ok) {
-                const data = await response.json();
-                setEditForm(prev => ({ ...prev, characterImage: data.url }));
+            if (response.data?.url) {
+                setEditForm(prev => ({ ...prev, characterImage: response.data.url }));
             } else {
-                alert('Failed to upload image');
+                alert('Failed to upload image: No URL returned');
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error uploading image:', error);
-            alert('Failed to upload image');
+            alert(error.response?.data?.message || 'Failed to upload image');
         } finally {
             setUploadingImage(false);
         }
