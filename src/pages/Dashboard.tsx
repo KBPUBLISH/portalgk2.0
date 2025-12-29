@@ -31,9 +31,13 @@ interface UserData {
     lastActiveAt?: string;
 }
 
+type TimeRange = '1d' | '1w' | '1m' | '3m' | 'all';
+
 interface AnalyticsData {
+    timeRange: TimeRange;
     summary: {
         totalUsers: number;
+        totalUsersAllTime: number;
         totalCoins: number;
         totalKids: number;
         totalSessions: number;
@@ -86,6 +90,14 @@ const getApiBase = () => {
 };
 const API_BASE = getApiBase();
 
+const TIME_RANGE_OPTIONS: { value: TimeRange; label: string }[] = [
+    { value: '1d', label: '1 Day' },
+    { value: '1w', label: '1 Week' },
+    { value: '1m', label: '1 Month' },
+    { value: '3m', label: '3 Months' },
+    { value: 'all', label: 'All Time' },
+];
+
 const Dashboard: React.FC = () => {
     const [data, setData] = useState<AnalyticsData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -95,11 +107,12 @@ const Dashboard: React.FC = () => {
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
     const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
     const [timeView, setTimeView] = useState<'daily' | 'weekly'>('daily');
+    const [selectedTimeRange, setSelectedTimeRange] = useState<TimeRange>('all');
 
-    const fetchData = async () => {
+    const fetchData = async (timeRange: TimeRange = selectedTimeRange) => {
         setLoading(true);
         try {
-            const response = await fetch(`${API_BASE}/analytics/users`);
+            const response = await fetch(`${API_BASE}/analytics/users?timeRange=${timeRange}`);
             const result = await response.json();
             if (result.success) {
                 setData(result);
@@ -115,8 +128,8 @@ const Dashboard: React.FC = () => {
     };
 
     useEffect(() => {
-        fetchData();
-    }, []);
+        fetchData(selectedTimeRange);
+    }, [selectedTimeRange]);
 
     const formatDate = (dateStr: string) => {
         return new Date(dateStr).toLocaleDateString('en-US', {
@@ -213,7 +226,7 @@ const Dashboard: React.FC = () => {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                         <Users className="w-6 h-6 text-indigo-600" />
@@ -223,23 +236,59 @@ const Dashboard: React.FC = () => {
                         Monitor user activity, accounts, and engagement
                     </p>
                 </div>
-                <button 
-                    onClick={fetchData}
-                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-                >
-                    <RefreshCw className="w-4 h-4" />
-                    Refresh
-                </button>
+                <div className="flex items-center gap-3">
+                    {/* Time Range Filter */}
+                    <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-200 p-1">
+                        {TIME_RANGE_OPTIONS.map(option => (
+                            <button
+                                key={option.value}
+                                onClick={() => setSelectedTimeRange(option.value)}
+                                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                                    selectedTimeRange === option.value
+                                        ? 'bg-indigo-600 text-white'
+                                        : 'text-gray-600 hover:bg-gray-100'
+                                }`}
+                            >
+                                {option.label}
+                            </button>
+                        ))}
+                    </div>
+                    <button 
+                        onClick={() => fetchData(selectedTimeRange)}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                    >
+                        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                        Refresh
+                    </button>
+                </div>
             </div>
+
+            {/* Time Range Indicator */}
+            {selectedTimeRange !== 'all' && (
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-2 flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-indigo-600" />
+                    <span className="text-sm text-indigo-700">
+                        Showing data for: <strong>{TIME_RANGE_OPTIONS.find(o => o.value === selectedTimeRange)?.label}</strong>
+                        {data.summary.totalUsersAllTime && data.summary.totalUsers !== data.summary.totalUsersAllTime && (
+                            <span className="ml-2 text-indigo-500">
+                                ({data.summary.totalUsers} of {data.summary.totalUsersAllTime} total users active in this period)
+                            </span>
+                        )}
+                    </span>
+                </div>
+            )}
 
             {/* Summary Cards - Row 1: Users & Engagement */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                 <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
                     <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
                         <Users className="w-4 h-4" />
-                        Total Users
+                        {selectedTimeRange === 'all' ? 'Total Users' : 'Active Users'}
                     </div>
                     <p className="text-2xl font-bold text-gray-900">{data.summary.totalUsers.toLocaleString()}</p>
+                    {selectedTimeRange !== 'all' && data.summary.totalUsersAllTime && (
+                        <p className="text-xs text-gray-400">of {data.summary.totalUsersAllTime.toLocaleString()} total</p>
+                    )}
                 </div>
                 <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
                     <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
