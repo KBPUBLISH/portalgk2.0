@@ -66,6 +66,11 @@ const BookEdit: React.FC = () => {
     const [availableVoices, setAvailableVoices] = useState<Voice[]>([]);
     const [defaultVoiceId, setDefaultVoiceId] = useState<string>('');
     const [rewardVoiceId, setRewardVoiceId] = useState<string>('');
+    
+    // Multi-character voice system
+    const [defaultNarratorVoiceId, setDefaultNarratorVoiceId] = useState<string>('');
+    const [characterVoices, setCharacterVoices] = useState<Array<{ characterName: string; voiceId: string; color?: string }>>([]);
+    const [newCharacterName, setNewCharacterName] = useState<string>('');
 
     // Load existing book data
     useEffect(() => {
@@ -127,6 +132,14 @@ const BookEdit: React.FC = () => {
                 // Load voice settings
                 setDefaultVoiceId(b.defaultVoiceId || '');
                 setRewardVoiceId(b.rewardVoiceId || '');
+                
+                // Load multi-character voice settings
+                setDefaultNarratorVoiceId(b.defaultNarratorVoiceId || '');
+                if (b.characterVoices && Array.isArray(b.characterVoices)) {
+                    setCharacterVoices(b.characterVoices);
+                } else {
+                    setCharacterVoices([]);
+                }
             } catch (err) {
                 console.error('Failed to fetch book:', err);
             } finally {
@@ -158,9 +171,22 @@ const BookEdit: React.FC = () => {
                 const categoriesData = Array.isArray(response.data) 
                     ? response.data 
                     : (response.data.data || response.data.categories || []);
+                console.log('📚 Loaded categories:', categoriesData.length);
                 setCategories(categoriesData);
             } catch (error) {
                 console.error('Error fetching categories:', error);
+                // Fallback: try fetching all categories if type filter fails
+                try {
+                    const fallbackResponse = await apiClient.get('/api/categories');
+                    const fallbackData = Array.isArray(fallbackResponse.data) 
+                        ? fallbackResponse.data 
+                        : (fallbackResponse.data.data || fallbackResponse.data.categories || []);
+                    console.log('📚 Loaded categories (fallback):', fallbackData.length);
+                    setCategories(fallbackData);
+                } catch (fallbackError) {
+                    console.error('Error fetching categories (fallback):', fallbackError);
+                    setCategories([]);
+                }
             }
         };
         fetchCategories();
@@ -431,6 +457,8 @@ const BookEdit: React.FC = () => {
                 introVideoUrl: introVideoUrl || null, // Studio intro video
                 defaultVoiceId: defaultVoiceId || null, // Default voice for this book
                 rewardVoiceId: rewardVoiceId || null, // Voice unlocked when completing book
+                defaultNarratorVoiceId: defaultNarratorVoiceId || null, // Narrator voice (used when no @Character tag)
+                characterVoices: characterVoices, // Character-to-voice mappings for @Character tags
             };
             console.log('Updating book with payload:', payload);
             await apiClient.put(`/api/books/${bookId}`, payload);
@@ -1501,6 +1529,165 @@ const BookEdit: React.FC = () => {
                             <strong>💡 Tip:</strong> For character-themed books, set the default voice to the character's voice (e.g., "Noah" for a Noah story). 
                             You can also make the same voice the reward voice so users permanently unlock it after reading!
                         </p>
+                    </div>
+                </div>
+                
+                {/* Multi-Character Voice System */}
+                <div className="border-t border-gray-200 pt-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                        🎭 Multi-Character Voice System
+                    </label>
+                    <p className="text-xs text-gray-500 mb-4">
+                        Set up different voices for different characters. Use <code className="bg-gray-100 px-1 rounded">@CharacterName</code> at the start of text boxes to trigger that character's voice.
+                    </p>
+                    
+                    <div className="space-y-6">
+                        {/* Default Narrator Voice */}
+                        <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                            <div className="flex items-center gap-2 mb-3">
+                                <Volume2 className="w-5 h-5 text-purple-600" />
+                                <span className="font-medium text-purple-900">Default Narrator Voice</span>
+                            </div>
+                            <p className="text-xs text-purple-700 mb-3">
+                                This voice is used for all text that doesn't have a @Character tag. If left blank, the user's selected voice will be used.
+                            </p>
+                            <select
+                                value={defaultNarratorVoiceId}
+                                onChange={(e) => setDefaultNarratorVoiceId(e.target.value)}
+                                className="w-full px-3 py-2 border border-purple-300 rounded-lg bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                            >
+                                <option value="">Use user's selected voice (default)</option>
+                                {availableVoices.filter(v => v.enabled).map(voice => (
+                                    <option key={voice.voiceId} value={voice.voiceId}>
+                                        {voice.customName || voice.name}
+                                        {voice.characterImage && ' 🖼️'}
+                                    </option>
+                                ))}
+                            </select>
+                            {defaultNarratorVoiceId && (
+                                <div className="mt-3 flex items-center gap-2">
+                                    {(() => {
+                                        const voice = availableVoices.find(v => v.voiceId === defaultNarratorVoiceId);
+                                        return voice?.characterImage ? (
+                                            <img 
+                                                src={voice.characterImage} 
+                                                alt={voice.customName || voice.name} 
+                                                className="w-10 h-10 rounded-full object-cover border-2 border-purple-300"
+                                            />
+                                        ) : null;
+                                    })()}
+                                    <span className="text-sm text-purple-800">
+                                        {availableVoices.find(v => v.voiceId === defaultNarratorVoiceId)?.customName || 
+                                         availableVoices.find(v => v.voiceId === defaultNarratorVoiceId)?.name}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                        
+                        {/* Character Voices */}
+                        <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                            <div className="flex items-center gap-2 mb-3">
+                                <span className="text-xl">🎭</span>
+                                <span className="font-medium text-green-900">Character Voices</span>
+                            </div>
+                            <p className="text-xs text-green-700 mb-3">
+                                Map character names to voices. In text boxes, start with <code className="bg-green-100 px-1 rounded">@Moses</code> to use that character's voice.
+                                Character voices are <strong>fixed</strong> and cannot be changed by users.
+                            </p>
+                            
+                            {/* Add new character */}
+                            <div className="flex gap-2 mb-4">
+                                <input
+                                    type="text"
+                                    placeholder="Character name (e.g., Moses)"
+                                    value={newCharacterName}
+                                    onChange={(e) => setNewCharacterName(e.target.value)}
+                                    className="flex-1 px-3 py-2 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (newCharacterName.trim()) {
+                                            setCharacterVoices([...characterVoices, { 
+                                                characterName: newCharacterName.trim(), 
+                                                voiceId: '' 
+                                            }]);
+                                            setNewCharacterName('');
+                                        }
+                                    }}
+                                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                                >
+                                    <Plus className="w-5 h-5" />
+                                </button>
+                            </div>
+                            
+                            {/* Character list */}
+                            {characterVoices.length === 0 ? (
+                                <p className="text-sm text-green-600 italic">No characters configured yet. Add a character name above.</p>
+                            ) : (
+                                <div className="space-y-3">
+                                    {characterVoices.map((char, index) => (
+                                        <div key={index} className="flex items-center gap-3 bg-white rounded-lg p-3 border border-green-200">
+                                            <div className="flex-shrink-0 w-24">
+                                                <span className="text-sm font-medium text-green-800">@{char.characterName}</span>
+                                            </div>
+                                            <select
+                                                value={char.voiceId}
+                                                onChange={(e) => {
+                                                    const updated = [...characterVoices];
+                                                    updated[index].voiceId = e.target.value;
+                                                    setCharacterVoices(updated);
+                                                }}
+                                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                                            >
+                                                <option value="">Select a voice...</option>
+                                                {availableVoices.filter(v => v.enabled).map(voice => (
+                                                    <option key={voice.voiceId} value={voice.voiceId}>
+                                                        {voice.customName || voice.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            {char.voiceId && (() => {
+                                                const voice = availableVoices.find(v => v.voiceId === char.voiceId);
+                                                return voice?.characterImage ? (
+                                                    <img 
+                                                        src={voice.characterImage} 
+                                                        alt={voice.customName || voice.name} 
+                                                        className="w-10 h-10 rounded-full object-cover border-2 border-green-300"
+                                                    />
+                                                ) : null;
+                                            })()}
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setCharacterVoices(characterVoices.filter((_, i) => i !== index));
+                                                }}
+                                                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            
+                            {/* Example usage */}
+                            {characterVoices.length > 0 && (
+                                <div className="mt-4 p-3 bg-green-100 rounded-lg">
+                                    <p className="text-xs text-green-800 font-medium mb-1">Example text box usage:</p>
+                                    <code className="text-xs text-green-700 block">
+                                        @{characterVoices[0].characterName} "Let my people go!"
+                                    </code>
+                                    <p className="text-xs text-green-600 mt-1">
+                                        → This text will be read using {characterVoices[0].voiceId ? 
+                                            (availableVoices.find(v => v.voiceId === characterVoices[0].voiceId)?.customName || 
+                                             availableVoices.find(v => v.voiceId === characterVoices[0].voiceId)?.name || 
+                                             'the assigned voice') : 
+                                            'the selected voice'}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
                 
