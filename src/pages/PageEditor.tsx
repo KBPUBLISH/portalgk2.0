@@ -21,7 +21,9 @@ import {
     Plus,
     ChevronUp,
     ChevronDown,
-    Film
+    Film,
+    Globe,
+    Gamepad2
 } from 'lucide-react';
 
 interface TextBox {
@@ -56,6 +58,15 @@ interface ImageSequenceItem {
     preview?: string; // Object URL for preview
 }
 
+interface Game {
+    _id: string;
+    gameId: string;
+    name: string;
+    url?: string;
+    coverImage?: string;
+    gameType: 'modal' | 'webview';
+}
+
 const PageEditor: React.FC = () => {
     const { bookId } = useParams<{ bookId: string }>();
 
@@ -74,6 +85,15 @@ const PageEditor: React.FC = () => {
     // Coloring page settings
     const [isColoringPage, setIsColoringPage] = useState(false);
     const [coloringEndModalOnly, setColoringEndModalOnly] = useState(true); // Default: coloring pages show in end modal
+    
+    // Web View page settings (embed external URL or game)
+    const [isWebViewPage, setIsWebViewPage] = useState(false);
+    const [webViewSource, setWebViewSource] = useState<'url' | 'game'>('url');
+    const [webViewUrl, setWebViewUrl] = useState('');
+    const [webViewGameId, setWebViewGameId] = useState('');
+    const [webViewTitle, setWebViewTitle] = useState('');
+    const [webViewShowNavButton, setWebViewShowNavButton] = useState(true);
+    const [availableGames, setAvailableGames] = useState<Game[]>([]);
     
     // Video sequence settings (multiple videos that play in order)
     const [useVideoSequence, setUseVideoSequence] = useState(false);
@@ -147,6 +167,21 @@ const PageEditor: React.FC = () => {
         };
         fetchBookData();
     }, [bookId]);
+
+    // Fetch available games for web view page selector
+    useEffect(() => {
+        const fetchGames = async () => {
+            try {
+                const res = await apiClient.get('/api/games');
+                // Filter to only webview-type games that have URLs
+                const webviewGames = res.data.filter((g: Game) => g.gameType === 'webview' && g.url);
+                setAvailableGames(webviewGames);
+            } catch (err) {
+                console.error('Failed to fetch games:', err);
+            }
+        };
+        fetchGames();
+    }, []);
 
     // Fetch existing pages for this book
     useEffect(() => {
@@ -444,6 +479,27 @@ const PageEditor: React.FC = () => {
         setIsColoringPage(page.isColoringPage || false);
         setColoringEndModalOnly(page.coloringEndModalOnly !== false); // Default to true if not set
         
+        // Load web view page settings
+        setIsWebViewPage(page.isWebViewPage || false);
+        if (page.webView) {
+            setWebViewUrl(page.webView.url || '');
+            setWebViewGameId(page.webView.gameId?._id || page.webView.gameId || '');
+            setWebViewTitle(page.webView.title || '');
+            setWebViewShowNavButton(page.webView.showNavigationButton !== false);
+            // Determine source type
+            if (page.webView.gameId) {
+                setWebViewSource('game');
+            } else {
+                setWebViewSource('url');
+            }
+        } else {
+            setWebViewUrl('');
+            setWebViewGameId('');
+            setWebViewTitle('');
+            setWebViewShowNavButton(true);
+            setWebViewSource('url');
+        }
+        
         // Load video sequence settings
         console.log('🎬 Video sequence settings:', {
             useVideoSequence: page.useVideoSequence,
@@ -510,6 +566,14 @@ const PageEditor: React.FC = () => {
         // Reset coloring page settings
         setIsColoringPage(false);
         setColoringEndModalOnly(true);
+        
+        // Reset web view page settings
+        setIsWebViewPage(false);
+        setWebViewSource('url');
+        setWebViewUrl('');
+        setWebViewGameId('');
+        setWebViewTitle('');
+        setWebViewShowNavButton(true);
         
         // Reset video sequence settings
         setUseVideoSequence(false);
@@ -874,6 +938,14 @@ const PageEditor: React.FC = () => {
                 textBoxes: textBoxes.map(({ id, ...rest }) => rest), // Remove ID before sending
                 isColoringPage,
                 coloringEndModalOnly: isColoringPage ? coloringEndModalOnly : false, // Only relevant if it's a coloring page
+                // Web View page settings
+                isWebViewPage,
+                webView: isWebViewPage ? {
+                    url: webViewSource === 'url' ? webViewUrl : undefined,
+                    gameId: webViewSource === 'game' ? webViewGameId : undefined,
+                    title: webViewTitle || undefined,
+                    showNavigationButton: webViewShowNavButton,
+                } : undefined,
                 // Video sequence settings
                 useVideoSequence: useVideoSequence && uploadedVideoSequence.length > 0,
                 videoSequence: uploadedVideoSequence,
@@ -1783,6 +1855,129 @@ const PageEditor: React.FC = () => {
                                     <p className="text-xs text-gray-400">
                                         If checked, this coloring page appears in the "The End" modal. 
                                         If unchecked, it shows as a regular page in the book.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <hr className="border-gray-100" />
+
+                    {/* Web View Page Settings */}
+                    <div className="space-y-3">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                            <Globe className="w-4 h-4" />
+                            Web View Page
+                        </label>
+                        <div className="space-y-2">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={isWebViewPage}
+                                    onChange={(e) => setIsWebViewPage(e.target.checked)}
+                                    className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                                />
+                                <span className="text-sm text-gray-700">This is a web view page</span>
+                            </label>
+                            
+                            {isWebViewPage && (
+                                <div className="ml-2 space-y-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                    {/* Source Type Selection */}
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-medium text-gray-600">Content Source</label>
+                                        <div className="flex gap-4">
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    name="webViewSource"
+                                                    value="url"
+                                                    checked={webViewSource === 'url'}
+                                                    onChange={() => setWebViewSource('url')}
+                                                    className="text-indigo-600"
+                                                />
+                                                <span className="text-sm text-gray-700 flex items-center gap-1">
+                                                    <Globe className="w-3 h-3" /> External URL
+                                                </span>
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    name="webViewSource"
+                                                    value="game"
+                                                    checked={webViewSource === 'game'}
+                                                    onChange={() => setWebViewSource('game')}
+                                                    className="text-indigo-600"
+                                                />
+                                                <span className="text-sm text-gray-700 flex items-center gap-1">
+                                                    <Gamepad2 className="w-3 h-3" /> Game
+                                                </span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* URL Input */}
+                                    {webViewSource === 'url' && (
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-medium text-gray-600">Web URL</label>
+                                            <input
+                                                type="url"
+                                                value={webViewUrl}
+                                                onChange={(e) => setWebViewUrl(e.target.value)}
+                                                placeholder="https://example.com/game"
+                                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                                            />
+                                        </div>
+                                    )}
+                                    
+                                    {/* Game Selector */}
+                                    {webViewSource === 'game' && (
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-medium text-gray-600">Select Game</label>
+                                            <select
+                                                value={webViewGameId}
+                                                onChange={(e) => setWebViewGameId(e.target.value)}
+                                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                                            >
+                                                <option value="">Choose a game...</option>
+                                                {availableGames.map((game) => (
+                                                    <option key={game._id} value={game._id}>
+                                                        {game.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            {availableGames.length === 0 && (
+                                                <p className="text-xs text-amber-600">
+                                                    No webview games available. Create games with type "webview" in Games section.
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
+                                    
+                                    {/* Optional Title */}
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-medium text-gray-600">Overlay Title (optional)</label>
+                                        <input
+                                            type="text"
+                                            value={webViewTitle}
+                                            onChange={(e) => setWebViewTitle(e.target.value)}
+                                            placeholder="e.g., Play the Quiz!"
+                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                                        />
+                                    </div>
+                                    
+                                    {/* Navigation Button Toggle */}
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={webViewShowNavButton}
+                                            onChange={(e) => setWebViewShowNavButton(e.target.checked)}
+                                            className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                                        />
+                                        <span className="text-sm text-gray-700">Show "Continue Reading" button</span>
+                                    </label>
+                                    
+                                    <p className="text-xs text-gray-400">
+                                        Web view pages display interactive content. Regular page content (background, scroll, text) will be hidden.
                                     </p>
                                 </div>
                             )}
