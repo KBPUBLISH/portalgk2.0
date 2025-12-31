@@ -68,7 +68,7 @@ const Radio: React.FC = () => {
                 setEditName(stationRes.data.name || 'Praise Station Radio');
                 setEditTagline(stationRes.data.tagline || '');
                 setEditBreakDuration(stationRes.data.hostBreakDuration || 30);
-                setEditBreakFrequency(stationRes.data.hostBreakFrequency || 1);
+                setEditBreakFrequency(stationRes.data.hostBreakFrequency || 3);
                 setEditShuffleSongs(stationRes.data.settings?.shuffleSongs ?? true);
                 setEditRotateHosts(stationRes.data.settings?.rotateHosts ?? true);
             }
