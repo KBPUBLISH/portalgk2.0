@@ -1,8 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Play, Pause, SkipForward, SkipBack, Volume2, VolumeX, Radio, Music, Shuffle, RefreshCw, Mic2, Loader2 } from 'lucide-react';
 import axios from 'axios';
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || 'https://backendgk2-0.onrender.com') + '/api';
+
+// Crossfade settings
+const CROSSFADE_DURATION = 3000; // 3 seconds crossfade
+const CROSSFADE_CHECK_INTERVAL = 100; // Check every 100ms
 
 interface RadioTrack {
     _id: string;
@@ -35,7 +39,6 @@ interface QueueItem {
     type: 'song' | 'host_break';
     track?: RadioTrack;
     hostBreak?: HostBreakData;
-    // For pending host breaks that need to be generated
     pendingHostBreak?: {
         nextSong: RadioTrack;
         previousSong?: RadioTrack;
@@ -64,21 +67,39 @@ const RadioPreview: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [generatingHostBreak, setGeneratingHostBreak] = useState(false);
     const [hostBreaksEnabled, setHostBreaksEnabled] = useState(true);
+    const [crossfadeEnabled, setCrossfadeEnabled] = useState(true);
+    const [isCrossfading, setIsCrossfading] = useState(false);
     
-    const audioRef = useRef<HTMLAudioElement | null>(null);
+    // Audio refs for crossfade (current and next)
+    const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+    const nextAudioRef = useRef<HTMLAudioElement | null>(null);
     const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+    const crossfadeInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+    const crossfadeStarted = useRef(false);
 
     useEffect(() => {
         fetchData();
         return () => {
-            if (audioRef.current) {
-                audioRef.current.pause();
-            }
-            if (progressInterval.current) {
-                clearInterval(progressInterval.current);
-            }
+            cleanupAudio();
         };
     }, []);
+
+    const cleanupAudio = () => {
+        if (currentAudioRef.current) {
+            currentAudioRef.current.pause();
+            currentAudioRef.current = null;
+        }
+        if (nextAudioRef.current) {
+            nextAudioRef.current.pause();
+            nextAudioRef.current = null;
+        }
+        if (progressInterval.current) {
+            clearInterval(progressInterval.current);
+        }
+        if (crossfadeInterval.current) {
+            clearInterval(crossfadeInterval.current);
+        }
+    };
 
     const fetchData = async () => {
         try {
@@ -96,7 +117,6 @@ const RadioPreview: React.FC = () => {
             const enabledHosts = (hostsRes.data || []).filter((h: RadioHost) => h);
             setHosts(enabledHosts);
             
-            // Build initial queue
             const libraryTracks = libraryRes.data.tracks || [];
             
             if (libraryTracks.length > 0) {
@@ -111,9 +131,7 @@ const RadioPreview: React.FC = () => {
         }
     };
 
-    // Build a shuffled queue with songs and host breaks
     const buildQueue = (libraryTracks: RadioTrack[], includeHostBreaks: boolean = true) => {
-        // Weight tracks by rotation
         const weightedTracks: RadioTrack[] = [];
         libraryTracks.forEach(track => {
             const weight = track.rotation === 'high' ? 3 : track.rotation === 'medium' ? 2 : 1;
@@ -122,10 +140,8 @@ const RadioPreview: React.FC = () => {
             }
         });
         
-        // Shuffle
         const shuffled = weightedTracks.sort(() => Math.random() - 0.5);
         
-        // Remove consecutive duplicates
         const uniqueQueue: RadioTrack[] = [];
         shuffled.forEach(track => {
             if (uniqueQueue.length === 0 || uniqueQueue[uniqueQueue.length - 1]._id !== track._id) {
@@ -133,12 +149,10 @@ const RadioPreview: React.FC = () => {
             }
         });
         
-        // Build queue items with host breaks every 2-3 songs
         const queueItems: QueueItem[] = [];
         const hostBreakFrequency = station?.hostBreakFrequency || 3;
         
         uniqueQueue.slice(0, 15).forEach((track, index) => {
-            // Add host break before this song (except for the first song)
             if (includeHostBreaks && hostBreaksEnabled && hosts.length > 0 && index > 0 && index % hostBreakFrequency === 0) {
                 const previousTrack = uniqueQueue[index - 1];
                 queueItems.push({
@@ -150,7 +164,6 @@ const RadioPreview: React.FC = () => {
                 });
             }
             
-            // Add the song
             queueItems.push({
                 type: 'song',
                 track
@@ -162,7 +175,6 @@ const RadioPreview: React.FC = () => {
 
     const getCurrentItem = () => queue[currentIndex];
 
-    // Generate host break audio on-the-fly
     const generateHostBreak = async (nextSong: RadioTrack, previousSong?: RadioTrack): Promise<HostBreakData | null> => {
         try {
             setGeneratingHostBreak(true);
@@ -183,17 +195,116 @@ const RadioPreview: React.FC = () => {
         }
     };
 
+    // Smooth fade function
+    const fadeAudio = useCallback((audio: HTMLAudioElement, fromVol: number, toVol: number, durationMs: number, onComplete?: () => void) => {
+        const startTime = Date.now();
+        const volumeDiff = toVol - fromVol;
+        
+        const fade = () => {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(elapsed / durationMs, 1);
+            
+            // Ease-in-out curve for smoother fade
+            const easeProgress = progress < 0.5 
+                ? 2 * progress * progress 
+                : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+            
+            const newVolume = fromVol + (volumeDiff * easeProgress);
+            audio.volume = Math.max(0, Math.min(1, newVolume));
+            
+            if (progress < 1) {
+                requestAnimationFrame(fade);
+            } else {
+                if (onComplete) onComplete();
+            }
+        };
+        
+        requestAnimationFrame(fade);
+    }, []);
+
+    // Start crossfade to next track
+    const startCrossfade = useCallback(async (nextIndex: number) => {
+        if (crossfadeStarted.current || isCrossfading) return;
+        crossfadeStarted.current = true;
+        setIsCrossfading(true);
+
+        const nextItem = queue[nextIndex];
+        if (!nextItem) {
+            crossfadeStarted.current = false;
+            setIsCrossfading(false);
+            return;
+        }
+
+        // For host breaks, don't crossfade - just fade out current
+        if (nextItem.type === 'host_break') {
+            if (currentAudioRef.current) {
+                fadeAudio(currentAudioRef.current, currentAudioRef.current.volume, 0, CROSSFADE_DURATION / 2, () => {
+                    currentAudioRef.current?.pause();
+                    crossfadeStarted.current = false;
+                    setIsCrossfading(false);
+                    playItem(nextIndex);
+                });
+            }
+            return;
+        }
+
+        // Get next song URL
+        const nextUrl = nextItem.track?.audioUrl;
+        if (!nextUrl) {
+            crossfadeStarted.current = false;
+            setIsCrossfading(false);
+            handleNext();
+            return;
+        }
+
+        // Create and prepare next audio
+        const nextAudio = new Audio(nextUrl);
+        nextAudio.volume = 0;
+        nextAudioRef.current = nextAudio;
+
+        try {
+            // Start playing next audio at volume 0
+            await nextAudio.play();
+            
+            // Fade out current, fade in next
+            if (currentAudioRef.current) {
+                fadeAudio(currentAudioRef.current, currentAudioRef.current.volume, 0, CROSSFADE_DURATION);
+            }
+            fadeAudio(nextAudio, 0, isMuted ? 0 : volume, CROSSFADE_DURATION, () => {
+                // Crossfade complete - swap audio refs
+                if (currentAudioRef.current) {
+                    currentAudioRef.current.pause();
+                }
+                currentAudioRef.current = nextAudio;
+                nextAudioRef.current = null;
+                
+                setCurrentIndex(nextIndex);
+                setDuration(nextAudio.duration || 0);
+                crossfadeStarted.current = false;
+                setIsCrossfading(false);
+                
+                // Set up ended handler for new current audio
+                nextAudio.onended = () => handleNext();
+            });
+        } catch (err) {
+            console.error('Crossfade failed:', err);
+            crossfadeStarted.current = false;
+            setIsCrossfading(false);
+            handleNext();
+        }
+    }, [queue, volume, isMuted, fadeAudio, isCrossfading]);
+
     const playItem = async (index: number) => {
         const item = queue[index];
         if (!item) return;
 
+        crossfadeStarted.current = false;
         setCurrentIndex(index);
 
         // Handle host break
         if (item.type === 'host_break') {
             let hostBreakData = item.hostBreak;
             
-            // Generate if pending
             if (!hostBreakData && item.pendingHostBreak) {
                 hostBreakData = await generateHostBreak(
                     item.pendingHostBreak.nextSong,
@@ -201,12 +312,10 @@ const RadioPreview: React.FC = () => {
                 );
                 
                 if (hostBreakData) {
-                    // Update queue with generated data
                     const newQueue = [...queue];
                     newQueue[index] = { ...item, hostBreak: hostBreakData, pendingHostBreak: undefined };
                     setQueue(newQueue);
                 } else {
-                    // Skip host break if generation failed
                     handleNext();
                     return;
                 }
@@ -217,7 +326,15 @@ const RadioPreview: React.FC = () => {
                 return;
             }
 
-            await playAudio(hostBreakData.audioUrl);
+            // Fade out current song before host break
+            if (currentAudioRef.current && currentAudioRef.current.volume > 0) {
+                fadeAudio(currentAudioRef.current, currentAudioRef.current.volume, 0, 1000, async () => {
+                    currentAudioRef.current?.pause();
+                    await playAudio(hostBreakData!.audioUrl, false); // No crossfade for host breaks
+                });
+            } else {
+                await playAudio(hostBreakData.audioUrl, false);
+            }
             return;
         }
 
@@ -228,17 +345,18 @@ const RadioPreview: React.FC = () => {
                 handleNext();
                 return;
             }
-            await playAudio(url);
+            await playAudio(url, true);
         }
     };
 
-    const playAudio = async (url: string) => {
-        if (audioRef.current) {
-            audioRef.current.pause();
+    const playAudio = async (url: string, enableCrossfadeCheck: boolean = true) => {
+        if (currentAudioRef.current) {
+            currentAudioRef.current.pause();
         }
 
         const audio = new Audio(url);
         audio.volume = isMuted ? 0 : volume;
+        currentAudioRef.current = audio;
         
         audio.onloadedmetadata = () => {
             setDuration(audio.duration);
@@ -253,40 +371,55 @@ const RadioPreview: React.FC = () => {
             handleNext();
         };
 
-        audioRef.current = audio;
-        
         try {
             await audio.play();
             setIsPlaying(true);
-            startProgressTracking();
+            startProgressTracking(enableCrossfadeCheck);
         } catch (err) {
             console.error('Failed to play:', err);
         }
     };
 
-    const startProgressTracking = () => {
+    const startProgressTracking = (enableCrossfadeCheck: boolean = true) => {
         if (progressInterval.current) {
             clearInterval(progressInterval.current);
         }
+        
         progressInterval.current = setInterval(() => {
-            if (audioRef.current) {
-                setProgress(audioRef.current.currentTime);
+            if (currentAudioRef.current) {
+                const currentTime = currentAudioRef.current.currentTime;
+                const totalDuration = currentAudioRef.current.duration;
+                setProgress(currentTime);
+                
+                // Check if we should start crossfade (for songs only)
+                if (
+                    enableCrossfadeCheck &&
+                    crossfadeEnabled && 
+                    !crossfadeStarted.current && 
+                    !isCrossfading &&
+                    totalDuration > 0 &&
+                    totalDuration - currentTime <= CROSSFADE_DURATION / 1000 &&
+                    currentIndex + 1 < queue.length
+                ) {
+                    // Check if next item is a song (crossfade) or host break (fade out only)
+                    startCrossfade(currentIndex + 1);
+                }
             }
-        }, 100);
+        }, CROSSFADE_CHECK_INTERVAL);
     };
 
     const handlePlayPause = () => {
-        if (!audioRef.current && queue.length > 0) {
+        if (!currentAudioRef.current && queue.length > 0) {
             playItem(currentIndex);
             return;
         }
 
-        if (audioRef.current) {
+        if (currentAudioRef.current) {
             if (isPlaying) {
-                audioRef.current.pause();
+                currentAudioRef.current.pause();
                 setIsPlaying(false);
             } else {
-                audioRef.current.play();
+                currentAudioRef.current.play();
                 setIsPlaying(true);
                 startProgressTracking();
             }
@@ -294,10 +427,10 @@ const RadioPreview: React.FC = () => {
     };
 
     const handleNext = () => {
+        crossfadeStarted.current = false;
         if (currentIndex + 1 < queue.length) {
             playItem(currentIndex + 1);
         } else {
-            // Loop back or rebuild queue
             buildQueue(tracks, hosts.length > 0);
             setCurrentIndex(0);
             if (isPlaying) {
@@ -307,6 +440,7 @@ const RadioPreview: React.FC = () => {
     };
 
     const handlePrev = () => {
+        crossfadeStarted.current = false;
         if (currentIndex > 0) {
             playItem(currentIndex - 1);
         }
@@ -314,8 +448,8 @@ const RadioPreview: React.FC = () => {
 
     const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
         const time = parseFloat(e.target.value);
-        if (audioRef.current) {
-            audioRef.current.currentTime = time;
+        if (currentAudioRef.current) {
+            currentAudioRef.current.currentTime = time;
             setProgress(time);
         }
     };
@@ -323,38 +457,38 @@ const RadioPreview: React.FC = () => {
     const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const vol = parseFloat(e.target.value);
         setVolume(vol);
-        if (audioRef.current) {
-            audioRef.current.volume = isMuted ? 0 : vol;
+        if (currentAudioRef.current) {
+            currentAudioRef.current.volume = isMuted ? 0 : vol;
         }
     };
 
     const toggleMute = () => {
         setIsMuted(!isMuted);
-        if (audioRef.current) {
-            audioRef.current.volume = isMuted ? volume : 0;
+        if (currentAudioRef.current) {
+            currentAudioRef.current.volume = isMuted ? volume : 0;
         }
     };
 
     const handleShuffle = () => {
-        if (audioRef.current) {
-            audioRef.current.pause();
-        }
+        cleanupAudio();
         setIsPlaying(false);
         setCurrentIndex(0);
         setProgress(0);
+        crossfadeStarted.current = false;
         buildQueue(tracks, hosts.length > 0);
     };
 
     const toggleHostBreaks = () => {
         setHostBreaksEnabled(!hostBreaksEnabled);
-        // Rebuild queue with new setting
-        if (audioRef.current) {
-            audioRef.current.pause();
-        }
+        cleanupAudio();
         setIsPlaying(false);
         setCurrentIndex(0);
         setProgress(0);
         buildQueue(tracks, !hostBreaksEnabled && hosts.length > 0);
+    };
+
+    const toggleCrossfade = () => {
+        setCrossfadeEnabled(!crossfadeEnabled);
     };
 
     const formatTime = (seconds: number) => {
@@ -410,7 +544,15 @@ const RadioPreview: React.FC = () => {
     }
 
     return (
-        <div className="bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-800 rounded-2xl overflow-hidden shadow-2xl">
+        <div className="bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-800 rounded-2xl overflow-hidden shadow-2xl relative">
+            {/* Crossfade indicator */}
+            {isCrossfading && (
+                <div className="absolute top-4 right-4 bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full text-xs text-white flex items-center gap-2 z-20">
+                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                    Crossfading...
+                </div>
+            )}
+
             {/* Station Header */}
             <div className="p-6 text-white text-center border-b border-white/10">
                 <div className="flex items-center justify-center gap-2 mb-1">
@@ -422,7 +564,7 @@ const RadioPreview: React.FC = () => {
             </div>
 
             {/* Now Playing */}
-            <div className="p-8">
+            <div className="p-8 relative">
                 {generatingHostBreak && (
                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10 rounded-2xl">
                         <div className="text-center text-white">
@@ -434,7 +576,9 @@ const RadioPreview: React.FC = () => {
                 
                 <div className="flex flex-col md:flex-row items-center gap-6">
                     {/* Album Art / Host Avatar */}
-                    <div className={`w-48 h-48 rounded-xl overflow-hidden shadow-2xl flex-shrink-0 ${isHostBreak ? 'bg-gradient-to-br from-yellow-500 to-orange-600' : 'bg-black/30'}`}>
+                    <div className={`w-48 h-48 rounded-xl overflow-hidden shadow-2xl flex-shrink-0 transition-all duration-500 ${
+                        isHostBreak ? 'bg-gradient-to-br from-yellow-500 to-orange-600' : 'bg-black/30'
+                    } ${isCrossfading ? 'scale-95 opacity-80' : 'scale-100 opacity-100'}`}>
                         {isHostBreak ? (
                             <div className="w-full h-full flex items-center justify-center">
                                 {currentItem?.hostBreak?.hostAvatar ? (
@@ -565,8 +709,8 @@ const RadioPreview: React.FC = () => {
                     </button>
                 </div>
 
-                {/* Volume & Host Breaks Toggle */}
-                <div className="flex items-center justify-center gap-6 mt-4">
+                {/* Volume & Toggles */}
+                <div className="flex flex-wrap items-center justify-center gap-4 mt-4">
                     <div className="flex items-center gap-2">
                         <Volume2 className="w-4 h-4 text-white/50" />
                         <input
@@ -576,9 +720,23 @@ const RadioPreview: React.FC = () => {
                             step="0.1"
                             value={volume}
                             onChange={handleVolumeChange}
-                            className="w-24 h-1 bg-white/20 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
+                            className="w-20 h-1 bg-white/20 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
                         />
                     </div>
+                    
+                    {/* Crossfade Toggle */}
+                    <button
+                        onClick={toggleCrossfade}
+                        className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs transition ${
+                            crossfadeEnabled 
+                                ? 'bg-green-500/20 text-green-300 border border-green-500/30' 
+                                : 'bg-white/10 text-white/50 border border-white/10'
+                        }`}
+                        title="DJ-style crossfade between songs"
+                    >
+                        <span className="text-sm">🎧</span>
+                        Crossfade {crossfadeEnabled ? 'ON' : 'OFF'}
+                    </button>
                     
                     {hosts.length > 0 && (
                         <button
@@ -603,8 +761,10 @@ const RadioPreview: React.FC = () => {
                     {queue.slice(currentIndex + 1, currentIndex + 6).map((item, idx) => (
                         <div
                             key={`queue-${currentIndex + 1 + idx}`}
-                            className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-pointer"
-                            onClick={() => playItem(currentIndex + 1 + idx)}
+                            className={`flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-pointer transition ${
+                                idx === 0 && isCrossfading ? 'bg-white/10 ring-1 ring-green-400/50' : ''
+                            }`}
+                            onClick={() => !isCrossfading && playItem(currentIndex + 1 + idx)}
                         >
                             <div className={`w-10 h-10 rounded flex items-center justify-center flex-shrink-0 overflow-hidden ${
                                 item.type === 'host_break' ? 'bg-yellow-500/30' : 'bg-white/10'
@@ -632,6 +792,9 @@ const RadioPreview: React.FC = () => {
                                     </>
                                 )}
                             </div>
+                            {idx === 0 && isCrossfading && (
+                                <span className="text-xs text-green-400">Fading in...</span>
+                            )}
                         </div>
                     ))}
                     {queue.length <= currentIndex + 1 && (
@@ -646,7 +809,7 @@ const RadioPreview: React.FC = () => {
                 <span>•</span>
                 <span>{hosts.length} hosts</span>
                 <span>•</span>
-                <span>{queue.filter(q => q.type === 'host_break').length} host breaks</span>
+                <span>🎧 {crossfadeEnabled ? '3s' : 'Off'}</span>
             </div>
         </div>
     );
