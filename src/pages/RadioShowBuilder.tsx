@@ -124,6 +124,7 @@ const RadioShowBuilder: React.FC = () => {
             
             const response = await axios.post(`${API_URL}/radio/segments/generate`, {
                 playlistIds: selectedPlaylists,
+                hostIds: hosts.map(h => h._id),
                 clearExisting: true,
             });
             
