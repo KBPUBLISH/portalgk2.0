@@ -247,7 +247,7 @@ const RadioPreview: React.FC = () => {
         previousSong?: RadioTrack,
         contentType: string = 'song',
         contentDescription?: string
-    ): Promise<HostBreakData | null> => {
+    ): Promise<HostBreakData | undefined> => {
         try {
             setGeneratingHostBreak(true);
             
@@ -269,7 +269,7 @@ const RadioPreview: React.FC = () => {
             return response.data.hostBreak;
         } catch (err) {
             console.error('Failed to generate host break:', err);
-            return null;
+            return undefined;
         } finally {
             setGeneratingHostBreak(false);
         }
