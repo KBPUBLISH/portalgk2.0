@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Play, Pause, RefreshCw, Trash2, Music, Mic2, ChevronDown, ChevronUp, Sparkles, Volume2, AlertCircle, CheckCircle, Clock, Edit2, Save } from 'lucide-react';
+import { ArrowLeft, Play, Pause, RefreshCw, Trash2, Music, Mic2, Sparkles, Volume2, AlertCircle, Edit2, Save } from 'lucide-react';
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
@@ -248,11 +248,9 @@ const RadioShowBuilder: React.FC = () => {
         }
 
         try {
-            const host = hosts.find(h => h._id === (segment.hostId as any)?._id || segment.hostId);
-            
             const ttsRes = await axios.post(`${API_URL}/google-tts/generate`, {
                 text: segment.scriptText,
-                voiceName: 'en-US-Studio-O', // Could get from host config
+                voiceName: 'en-US-Studio-O', // TODO: Get from host config
             });
 
             await axios.put(`${API_URL}/radio/segments/${segment._id}`, {

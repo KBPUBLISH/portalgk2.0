@@ -48,7 +48,7 @@ const RadioPreview: React.FC = () => {
     const [loading, setLoading] = useState(true);
     
     const audioRef = useRef<HTMLAudioElement | null>(null);
-    const progressInterval = useRef<NodeJS.Timeout | null>(null);
+    const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
     useEffect(() => {
         fetchData();
