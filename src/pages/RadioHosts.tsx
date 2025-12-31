@@ -10,6 +10,7 @@ interface GoogleVoice {
     gender: string;
     description: string;
     languageCode: string;
+    tier?: string;
 }
 
 interface RadioHost {
@@ -77,7 +78,7 @@ const RadioHosts: React.FC = () => {
         setEditingHost(null);
         setFormName('');
         setFormPersonality('Warm, friendly, and encouraging Christian radio host who loves sharing God\'s love through music.');
-        setFormVoiceName('en-US-Studio-O');
+        setFormVoiceName('en-US-Chirp3-HD-Enceladus');
         setFormPitch(0);
         setFormSpeakingRate(1.0);
         setFormEnabled(true);
@@ -367,7 +368,7 @@ const RadioHosts: React.FC = () => {
                                 >
                                     {availableVoices.map((voice) => (
                                         <option key={voice.name} value={voice.name}>
-                                            {voice.description} ({voice.gender})
+                                            {voice.tier === 'chirp3-hd' ? '⭐ ' : ''}{voice.description} ({voice.gender}){voice.tier === 'chirp3-hd' ? ' - Chirp 3 HD' : voice.tier ? ` - ${voice.tier}` : ''}
                                         </option>
                                     ))}
                                 </select>

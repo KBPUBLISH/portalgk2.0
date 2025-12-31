@@ -82,7 +82,9 @@ const RadioShowBuilder: React.FC = () => {
             ]);
             
             // Filter to only published playlists with items
-            const publishedPlaylists = (playlistsRes.data || []).filter(
+            // Note: playlists API returns { data: [...], pagination: {...} }
+            const playlistsData = playlistsRes.data?.data || playlistsRes.data || [];
+            const publishedPlaylists = (Array.isArray(playlistsData) ? playlistsData : []).filter(
                 (p: Playlist) => p.items && p.items.length > 0
             );
             
