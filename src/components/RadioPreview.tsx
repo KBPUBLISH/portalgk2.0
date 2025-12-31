@@ -81,7 +81,6 @@ const RadioPreview: React.FC = () => {
             
             // Build initial queue
             const libraryTracks = libraryRes.data.tracks || [];
-            const radioHosts = hostsRes.data || [];
             
             if (libraryTracks.length > 0) {
                 buildQueue(libraryTracks);
