@@ -128,7 +128,8 @@ const RadioPreview: React.FC = () => {
                 axios.get(`${API_URL}/radio/hosts`),
             ]);
             
-            setStation(stationRes.data);
+            const stationData = stationRes.data;
+            setStation(stationData);
             setTracks(libraryRes.data.tracks || []);
             const enabledHosts = (hostsRes.data || []).filter((h: RadioHost) => h);
             setHosts(enabledHosts);
@@ -136,7 +137,8 @@ const RadioPreview: React.FC = () => {
             const libraryTracks = libraryRes.data.tracks || [];
             
             if (libraryTracks.length > 0) {
-                buildQueue(libraryTracks, enabledHosts);
+                // Pass station data directly to avoid stale state issue
+                buildQueue(libraryTracks, enabledHosts, stationData);
             }
         } catch (err: unknown) {
             console.error('Error fetching data:', err);
@@ -147,7 +149,7 @@ const RadioPreview: React.FC = () => {
         }
     };
 
-    const buildQueue = (libraryTracks: RadioTrack[], hostsToUse: RadioHost[] = []) => {
+    const buildQueue = (libraryTracks: RadioTrack[], hostsToUse: RadioHost[] = [], stationData?: RadioStation | null) => {
         const weightedTracks: RadioTrack[] = [];
         libraryTracks.forEach(track => {
             const weight = track.rotation === 'high' ? 3 : track.rotation === 'medium' ? 2 : 1;
@@ -166,20 +168,19 @@ const RadioPreview: React.FC = () => {
         });
         
         const queueItems: QueueItem[] = [];
-        const hostBreakFrequency = station?.hostBreakFrequency || 3;
+        // Use passed station data or fall back to state
+        const currentStation = stationData || station;
+        const hostBreakFrequency = currentStation?.hostBreakFrequency || 3;
+        console.log(`📻 Building queue with host break frequency: ${hostBreakFrequency}`);
         
         // Use passed hosts array OR fall back to state (for rebuilds)
         const availableHosts = hostsToUse.length > 0 ? hostsToUse : hosts;
         const shouldIncludeHostBreaks = hostBreaksEnabled && availableHosts.length > 0;
         
         // Helper to determine if a track is a story/audiobook
-        // Check category OR title keywords for better auto-detection
-        const storyKeywords = ['story', 'audiobook', 'episode', 'chapter', 'tale', 'adventure', 'book'];
+        // Only check category - don't auto-detect from title to avoid false positives
         const isStoryContent = (track: RadioTrack) => {
-            if (track.category === 'story' || track.category === 'kids') return true;
-            // Also check title for story keywords
-            const titleLower = track.title.toLowerCase();
-            return storyKeywords.some(keyword => titleLower.includes(keyword));
+            return track.category === 'story';
         };
         
         const isDevotional = (track: RadioTrack) => 
@@ -620,14 +621,14 @@ const RadioPreview: React.FC = () => {
             playItem(idx + 1);
         } else {
             // End of queue - rebuild and restart
-            buildQueue(tracks, hosts);
+            buildQueue(tracks, hosts, station);
             setCurrentIndex(0);
             currentIndexRef.current = 0;
             if (isPlaying) {
                 setTimeout(() => playItem(0), 100);
             }
         }
-    }, [tracks, hosts.length, isPlaying]);
+    }, [tracks, hosts.length, isPlaying, station]);
 
     const handlePrev = () => {
         crossfadeStarted.current = false;
@@ -665,7 +666,7 @@ const RadioPreview: React.FC = () => {
         setCurrentIndex(0);
         setProgress(0);
         crossfadeStarted.current = false;
-        buildQueue(tracks, hosts);
+        buildQueue(tracks, hosts, station);
     };
 
     const toggleHostBreaks = () => {
@@ -674,7 +675,7 @@ const RadioPreview: React.FC = () => {
         setIsPlaying(false);
         setCurrentIndex(0);
         setProgress(0);
-        buildQueue(tracks, hosts);
+        buildQueue(tracks, hosts, station);
     };
 
     const toggleCrossfade = () => {
