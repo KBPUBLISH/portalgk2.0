@@ -23,6 +23,10 @@ interface RadioStation {
     playlists: any[];
     hostBreakDuration: number;
     hostBreakFrequency: number;
+    devotionalFrequency: number;
+    devotionalDuration: number;
+    enableDuoDiscussions: boolean;
+    customIntroScript?: string;
     isLive: boolean;
     coverImageUrl?: string;
     settings: {
@@ -43,8 +47,12 @@ const Radio: React.FC = () => {
     // Editable station fields
     const [editName, setEditName] = useState('');
     const [editTagline, setEditTagline] = useState('');
-    const [editBreakDuration, setEditBreakDuration] = useState(30);
-    const [editBreakFrequency, setEditBreakFrequency] = useState(1);
+    const [editCustomIntro, setEditCustomIntro] = useState('');
+    const [editBreakDuration, setEditBreakDuration] = useState(10);
+    const [editBreakFrequency, setEditBreakFrequency] = useState(3);
+    const [editDevotionalFrequency, setEditDevotionalFrequency] = useState(10);
+    const [editDevotionalDuration, setEditDevotionalDuration] = useState(60);
+    const [editEnableDuo, setEditEnableDuo] = useState(true);
     const [editShuffleSongs, setEditShuffleSongs] = useState(true);
     const [editRotateHosts, setEditRotateHosts] = useState(true);
 
@@ -67,8 +75,12 @@ const Radio: React.FC = () => {
             if (stationRes.data) {
                 setEditName(stationRes.data.name || 'Praise Station Radio');
                 setEditTagline(stationRes.data.tagline || '');
-                setEditBreakDuration(stationRes.data.hostBreakDuration || 30);
+                setEditCustomIntro(stationRes.data.customIntroScript || '');
+                setEditBreakDuration(stationRes.data.hostBreakDuration || 10);
                 setEditBreakFrequency(stationRes.data.hostBreakFrequency || 3);
+                setEditDevotionalFrequency(stationRes.data.devotionalFrequency || 10);
+                setEditDevotionalDuration(stationRes.data.devotionalDuration || 60);
+                setEditEnableDuo(stationRes.data.enableDuoDiscussions ?? true);
                 setEditShuffleSongs(stationRes.data.settings?.shuffleSongs ?? true);
                 setEditRotateHosts(stationRes.data.settings?.rotateHosts ?? true);
             }
@@ -86,8 +98,12 @@ const Radio: React.FC = () => {
             await axios.put(`${API_URL}/radio/station`, {
                 name: editName,
                 tagline: editTagline,
+                customIntroScript: editCustomIntro,
                 hostBreakDuration: editBreakDuration,
                 hostBreakFrequency: editBreakFrequency,
+                devotionalFrequency: editDevotionalFrequency,
+                devotionalDuration: editDevotionalDuration,
+                enableDuoDiscussions: editEnableDuo,
                 settings: {
                     shuffleSongs: editShuffleSongs,
                     rotateHosts: editRotateHosts,
@@ -317,39 +333,124 @@ const Radio: React.FC = () => {
                         />
                     </div>
 
-                    <div>
+                    {/* Custom Station Intro */}
+                    <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 rounded-lg">
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Host Break Duration (seconds)
+                            🎙️ Custom Station Introduction (Optional)
                         </label>
-                        <input
-                            type="number"
-                            value={editBreakDuration}
-                            onChange={(e) => setEditBreakDuration(parseInt(e.target.value) || 30)}
-                            min={10}
-                            max={120}
+                        <textarea
+                            value={editCustomIntro}
+                            onChange={(e) => setEditCustomIntro(e.target.value)}
+                            rows={4}
                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            placeholder={`Example for duo hosts:
+Mike: [excited] Hey everyone! Welcome to Praise Station Radio! I'm Mike!
+Amy: [warm] And I'm Amy! We're so glad you're here with us!
+Mike: [joyful] Get ready for uplifting music for the whole family!
+Amy: [upbeat] Let's have some fun!`}
                         />
-                        <p className="text-xs text-gray-500 mt-1">How long each host segment should be (10-120 seconds)</p>
+                        <p className="text-xs text-gray-600 mt-2">
+                            Write your own intro script. Use <code className="bg-gray-200 px-1 rounded">HostName: text</code> format for duo mode.
+                            Add <code className="bg-gray-200 px-1 rounded">[excited]</code>, <code className="bg-gray-200 px-1 rounded">[warm]</code>, <code className="bg-gray-200 px-1 rounded">[gentle]</code> for emotional cues.
+                            Leave empty to auto-generate.
+                        </p>
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Host Break Frequency
+                    {/* Regular Host Breaks */}
+                    <div className="bg-gray-50 p-4 rounded-lg space-y-4">
+                        <h4 className="font-medium text-gray-900">Regular Host Breaks</h4>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Duration (seconds)
+                                </label>
+                                <input
+                                    type="number"
+                                    value={editBreakDuration}
+                                    onChange={(e) => setEditBreakDuration(parseInt(e.target.value) || 10)}
+                                    min={5}
+                                    max={30}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">5-30 seconds</p>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Frequency
+                                </label>
+                                <select
+                                    value={editBreakFrequency}
+                                    onChange={(e) => setEditBreakFrequency(parseInt(e.target.value))}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                >
+                                    <option value={2}>Every 2 songs</option>
+                                    <option value={3}>Every 3 songs</option>
+                                    <option value={4}>Every 4 songs</option>
+                                    <option value={5}>Every 5 songs</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Devotional Segments */}
+                    <div className="bg-purple-50 p-4 rounded-lg space-y-4">
+                        <h4 className="font-medium text-purple-900">✨ Special Devotional Segments</h4>
+                        <p className="text-sm text-purple-700">Longer, meaningful discussions between hosts</p>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Duration (seconds)
+                                </label>
+                                <select
+                                    value={editDevotionalDuration}
+                                    onChange={(e) => setEditDevotionalDuration(parseInt(e.target.value))}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                >
+                                    <option value={30}>30 seconds</option>
+                                    <option value={45}>45 seconds</option>
+                                    <option value={60}>1 minute</option>
+                                    <option value={90}>1.5 minutes</option>
+                                    <option value={120}>2 minutes</option>
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Frequency
+                                </label>
+                                <select
+                                    value={editDevotionalFrequency}
+                                    onChange={(e) => setEditDevotionalFrequency(parseInt(e.target.value))}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                >
+                                    <option value={5}>Every 5 songs</option>
+                                    <option value={7}>Every 7 songs</option>
+                                    <option value={10}>Every 10 songs</option>
+                                    <option value={15}>Every 15 songs</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Toggle Options */}
+                    <div className="space-y-3">
+                        <label className="flex items-center gap-3 cursor-pointer p-3 bg-indigo-50 rounded-lg">
+                            <input
+                                type="checkbox"
+                                checked={editEnableDuo}
+                                onChange={(e) => setEditEnableDuo(e.target.checked)}
+                                className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                            />
+                            <div>
+                                <span className="font-medium text-gray-900">🎙️ Duo Discussions</span>
+                                <p className="text-xs text-gray-600">Both hosts talk to each other during breaks</p>
+                            </div>
                         </label>
-                        <select
-                            value={editBreakFrequency}
-                            onChange={(e) => setEditBreakFrequency(parseInt(e.target.value))}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                        >
-                            <option value={1}>After every song</option>
-                            <option value={2}>Every 2 songs</option>
-                            <option value={3}>Every 3 songs</option>
-                            <option value={5}>Every 5 songs</option>
-                        </select>
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                        <label className="flex items-center gap-2 cursor-pointer">
+                        
+                        <label className="flex items-center gap-3 cursor-pointer p-3 hover:bg-gray-50 rounded-lg">
                             <input
                                 type="checkbox"
                                 checked={editShuffleSongs}
@@ -358,10 +459,8 @@ const Radio: React.FC = () => {
                             />
                             <span className="text-sm text-gray-700">Shuffle songs</span>
                         </label>
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                        <label className="flex items-center gap-2 cursor-pointer">
+                        
+                        <label className="flex items-center gap-3 cursor-pointer p-3 hover:bg-gray-50 rounded-lg">
                             <input
                                 type="checkbox"
                                 checked={editRotateHosts}

@@ -43,8 +43,9 @@ interface QueueItem {
     pendingHostBreak?: {
         nextSong: RadioTrack;
         previousSong?: RadioTrack;
-        contentType?: 'song' | 'story_intro' | 'story_outro' | 'devotional' | 'station_intro';
+        contentType?: 'song' | 'story_intro' | 'story_outro' | 'devotional' | 'station_intro' | 'devotional_segment';
         contentDescription?: string;
+        isDuo?: boolean;
     };
 }
 
@@ -53,6 +54,10 @@ interface RadioStation {
     tagline: string;
     coverImageUrl?: string;
     hostBreakFrequency?: number;
+    hostBreakDuration?: number;
+    devotionalFrequency?: number;
+    devotionalDuration?: number;
+    enableDuoDiscussions?: boolean;
 }
 
 const RadioPreview: React.FC = () => {
@@ -171,29 +176,51 @@ const RadioPreview: React.FC = () => {
         // Use passed station data or fall back to state
         const currentStation = stationData || station;
         const hostBreakFrequency = currentStation?.hostBreakFrequency || 3;
-        console.log(`📻 Building queue with host break frequency: ${hostBreakFrequency}`);
+        const devotionalFrequency = currentStation?.devotionalFrequency || 10;
+        const enableDuo = currentStation?.enableDuoDiscussions !== false;
+        console.log(`📻 Building queue with host break freq: ${hostBreakFrequency}, devotional freq: ${devotionalFrequency}`);
         
         // Use passed hosts array OR fall back to state (for rebuilds)
         const availableHosts = hostsToUse.length > 0 ? hostsToUse : hosts;
         const shouldIncludeHostBreaks = hostBreaksEnabled && availableHosts.length > 0;
+        const hasTwoHosts = availableHosts.length >= 2;
         
-        // Add station intro at the very beginning
+        // Add station intro at the very beginning (duo if possible)
         if (shouldIncludeHostBreaks && uniqueQueue.length > 0) {
             queueItems.push({
                 type: 'host_break',
                 pendingHostBreak: {
                     nextSong: uniqueQueue[0],
                     contentType: 'station_intro',
+                    isDuo: enableDuo && hasTwoHosts,
                 }
             });
         }
         
+        // Track song count for devotional scheduling
+        let songsSinceDevotional = 0;
+        
         uniqueQueue.slice(0, 15).forEach((track, index) => {
             const previousTrack = index > 0 ? uniqueQueue[index - 1] : undefined;
             
-            if (shouldIncludeHostBreaks) {
-                // Regular host break every N songs
-                if (index > 0 && index % hostBreakFrequency === 0) {
+            if (shouldIncludeHostBreaks && index > 0) {
+                songsSinceDevotional++;
+                
+                // Devotional segment (longer, can be duo) - takes priority
+                if (songsSinceDevotional >= devotionalFrequency) {
+                    queueItems.push({
+                        type: 'host_break',
+                        pendingHostBreak: {
+                            nextSong: track,
+                            previousSong: previousTrack,
+                            contentType: 'devotional_segment',
+                            isDuo: enableDuo && hasTwoHosts,
+                        }
+                    });
+                    songsSinceDevotional = 0; // Reset counter
+                }
+                // Regular host break every N songs (short)
+                else if (index % hostBreakFrequency === 0) {
                     queueItems.push({
                         type: 'host_break',
                         pendingHostBreak: {
@@ -235,7 +262,8 @@ const RadioPreview: React.FC = () => {
                     item.pendingHostBreak.nextSong,
                     item.pendingHostBreak.previousSong,
                     item.pendingHostBreak.contentType || 'song',
-                    item.pendingHostBreak.contentDescription
+                    item.pendingHostBreak.contentDescription,
+                    item.pendingHostBreak.isDuo
                 );
                 
                 if (hostBreakData) {
@@ -264,12 +292,19 @@ const RadioPreview: React.FC = () => {
         nextSong: RadioTrack, 
         previousSong?: RadioTrack,
         contentType: string = 'song',
-        contentDescription?: string
+        contentDescription?: string,
+        isDuo?: boolean
     ): Promise<HostBreakData | undefined> => {
         try {
-            const targetDuration = contentType === 'station_intro' ? 25 :
-                                   contentType === 'story_intro' ? 20 : 
-                                   contentType === 'story_outro' ? 18 : 15;
+            // Get durations from station settings
+            const hostBreakDuration = station?.hostBreakDuration || 10;
+            const devotionalDuration = station?.devotionalDuration || 60;
+            
+            // Determine target duration based on content type
+            const targetDuration = 
+                contentType === 'station_intro' ? 20 :
+                contentType === 'devotional_segment' ? devotionalDuration :
+                hostBreakDuration; // Regular breaks use station setting
             
             const response = await axios.post(`${API_URL}/radio/host-break/generate`, {
                 nextSongTitle: nextSong.title,
@@ -279,7 +314,8 @@ const RadioPreview: React.FC = () => {
                 targetDuration,
                 contentType,
                 contentDescription,
-                contentCategory: nextSong.category
+                contentCategory: nextSong.category,
+                isDuo: isDuo || false,
             });
             
             return response.data.hostBreak;
