@@ -77,6 +77,7 @@ const PageEditor: React.FC = () => {
     const [scrollFile, setScrollFile] = useState<File | null>(null);
     const [scrollHeight, setScrollHeight] = useState<number>(60); // 3 states: 0% (hidden), 30% (mid), 60% (max) - Default to 60% for text positioning
     const [scrollOffsetY, setScrollOffsetY] = useState<number>(0); // Vertical offset from bottom in percentage
+    const [scrollWidth, setScrollWidth] = useState<number>(100); // Width as percentage (100 = full width)
     const [soundEffectFile, setSoundEffectFile] = useState<File | null>(null);
     const [textBoxes, setTextBoxes] = useState<TextBox[]>([]);
     const [loading, setLoading] = useState(false);
@@ -434,6 +435,11 @@ const PageEditor: React.FC = () => {
         const savedScrollOffsetY = page.scrollOffsetY || 0;
         console.log('📍 Scroll offset Y:', savedScrollOffsetY);
         setScrollOffsetY(savedScrollOffsetY);
+        
+        // Load scroll width (default to 100%)
+        const savedScrollWidth = page.scrollWidth || 100;
+        console.log('📐 Scroll width:', savedScrollWidth);
+        setScrollWidth(savedScrollWidth);
 
         // Load sound effect if exists
         const soundEffectUrl = page.soundEffectUrl || page.files?.soundEffect?.url;
@@ -933,6 +939,7 @@ const PageEditor: React.FC = () => {
                 scrollMidHeight: Math.max(30, scrollHeight - 30), // Mid is 30% less than max, minimum 30%
                 scrollMaxHeight: scrollHeight, // Max is the selected height (default in app)
                 scrollOffsetY, // Vertical offset for scroll position
+                scrollWidth, // Width as percentage (100 = full width)
                 soundEffectUrl, // Sound effect bubble audio
                 textBoxes: textBoxes.map(({ id, ...rest }) => rest), // Remove ID before sending
                 isColoringPage,
@@ -989,6 +996,7 @@ const PageEditor: React.FC = () => {
                                 scrollMidHeight: Math.max(30, scrollHeight - 30),
                                 scrollMaxHeight: scrollHeight,
                                 scrollOffsetY,
+                                scrollWidth,
                                 // Copy text boxes but update the text content from existing page
                                 textBoxes: textBoxes.map(({ id, ...rest }) => ({
                                     ...rest,
@@ -1738,6 +1746,43 @@ const PageEditor: React.FC = () => {
                             </div>
                         )}
                         
+                        {/* Scroll Width Control */}
+                        {scrollPreview && (
+                            <div className="space-y-2">
+                                <label className="block text-xs text-gray-500">Scroll Width</label>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setScrollWidth(prev => Math.max(50, prev - 5))}
+                                        className="p-2 bg-gray-100 rounded hover:bg-gray-200 transition"
+                                        title="Make scroll narrower"
+                                    >
+                                        <span className="text-sm font-bold">−</span>
+                                    </button>
+                                    <div className="flex-1 text-center">
+                                        <span className="text-sm font-medium text-gray-700">{scrollWidth}%</span>
+                                        <p className="text-xs text-gray-400">of page width</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setScrollWidth(prev => Math.min(100, prev + 5))}
+                                        className="p-2 bg-gray-100 rounded hover:bg-gray-200 transition"
+                                        title="Make scroll wider"
+                                    >
+                                        <span className="text-sm font-bold">+</span>
+                                    </button>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="50"
+                                    max="100"
+                                    value={scrollWidth}
+                                    onChange={(e) => setScrollWidth(parseInt(e.target.value))}
+                                    className="w-full"
+                                />
+                            </div>
+                        )}
+                        
                         {/* Clear Scroll Button */}
                         {scrollPreview && (
                             <button
@@ -2376,9 +2421,11 @@ const PageEditor: React.FC = () => {
                     {/* Scroll Overlay Layer */}
                     {scrollPreview && (
                         <div 
-                            className="absolute left-0 right-0 pointer-events-none z-10"
+                            className="absolute left-1/2 pointer-events-none z-10"
                             style={{ 
                                 height: `${scrollHeight}%`,
+                                width: `${scrollWidth}%`,
+                                transform: 'translateX(-50%)', // Center horizontally
                                 bottom: `${scrollOffsetY}%` // Apply vertical offset
                             }}
                         >
