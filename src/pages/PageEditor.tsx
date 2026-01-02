@@ -77,7 +77,10 @@ const PageEditor: React.FC = () => {
     const [scrollFile, setScrollFile] = useState<File | null>(null);
     const [scrollHeight, setScrollHeight] = useState<number>(60); // 3 states: 0% (hidden), 30% (mid), 60% (max) - Default to 60% for text positioning
     const [scrollOffsetY, setScrollOffsetY] = useState<number>(0); // Vertical offset from bottom in percentage
+    const [scrollOffsetX, setScrollOffsetX] = useState<number>(0); // Horizontal offset from center in percentage
     const [scrollWidth, setScrollWidth] = useState<number>(100); // Width as percentage (100 = full width)
+    const [isDraggingScroll, setIsDraggingScroll] = useState(false); // Track scroll image dragging
+    const [scrollDragStart, setScrollDragStart] = useState({ x: 0, y: 0 }); // Starting position for drag
     const [soundEffectFile, setSoundEffectFile] = useState<File | null>(null);
     const [textBoxes, setTextBoxes] = useState<TextBox[]>([]);
     const [loading, setLoading] = useState(false);
@@ -440,6 +443,11 @@ const PageEditor: React.FC = () => {
         const savedScrollWidth = page.scrollWidth || 100;
         console.log('📐 Scroll width:', savedScrollWidth);
         setScrollWidth(savedScrollWidth);
+        
+        // Load scroll horizontal offset (default to 0)
+        const savedScrollOffsetX = page.scrollOffsetX || 0;
+        console.log('📍 Scroll offset X:', savedScrollOffsetX);
+        setScrollOffsetX(savedScrollOffsetX);
 
         // Load sound effect if exists
         const soundEffectUrl = page.soundEffectUrl || page.files?.soundEffect?.url;
@@ -562,7 +570,8 @@ const PageEditor: React.FC = () => {
         setBackgroundPreview(null);
         setScrollFile(null);
         setScrollHeight(33); // Reset to default
-        setScrollOffsetY(0); // Reset offset
+        setScrollOffsetY(0); // Reset vertical offset
+        setScrollOffsetX(0); // Reset horizontal offset
         setSoundEffectFile(null);
         setSoundEffectPreview(null);
         setSoundEffectFilename(null);
@@ -682,6 +691,7 @@ const PageEditor: React.FC = () => {
         setIsResizingLeft(false);
         setIsResizingRight(false);
         setIsResizingCanvas(false);
+        setIsDraggingScroll(false);
     };
 
     // Panel resize handlers
@@ -715,6 +725,27 @@ const PageEditor: React.FC = () => {
         }
     };
 
+    // Handle scroll image dragging
+    const handleScrollDrag = (e: React.MouseEvent) => {
+        if (!isDraggingScroll || !canvasRef.current) return;
+        
+        const canvasRect = canvasRef.current.getBoundingClientRect();
+        const deltaX = e.clientX - scrollDragStart.x;
+        const deltaY = e.clientY - scrollDragStart.y;
+        
+        // Convert pixel movement to percentage
+        const deltaXPercent = (deltaX / canvasRect.width) * 100;
+        const deltaYPercent = (deltaY / canvasRect.height) * 100;
+        
+        // Update offset X (horizontal) - clamp between -30 and 30
+        setScrollOffsetX(prev => Math.max(-30, Math.min(30, prev + deltaXPercent)));
+        // Update offset Y (vertical) - moving up increases Y, clamp between 0 and 50
+        setScrollOffsetY(prev => Math.max(0, Math.min(50, prev - deltaYPercent)));
+        
+        // Reset drag start for continuous dragging
+        setScrollDragStart({ x: e.clientX, y: e.clientY });
+    };
+
     // Combined mouse move handler
     const handleGlobalMouseMove = (e: React.MouseEvent) => {
         handleMouseMove(e);
@@ -722,6 +753,7 @@ const PageEditor: React.FC = () => {
         handleLeftResize(e);
         handleRightResize(e);
         handleCanvasResize(e);
+        handleScrollDrag(e);
     };
 
     // Clear TTS cache for this book - forces regeneration of all audio
@@ -939,6 +971,7 @@ const PageEditor: React.FC = () => {
                 scrollMidHeight: Math.max(30, scrollHeight - 30), // Mid is 30% less than max, minimum 30%
                 scrollMaxHeight: scrollHeight, // Max is the selected height (default in app)
                 scrollOffsetY, // Vertical offset for scroll position
+                scrollOffsetX, // Horizontal offset from center
                 scrollWidth, // Width as percentage (100 = full width)
                 soundEffectUrl, // Sound effect bubble audio
                 textBoxes: textBoxes.map(({ id, ...rest }) => rest), // Remove ID before sending
@@ -996,6 +1029,7 @@ const PageEditor: React.FC = () => {
                                 scrollMidHeight: Math.max(30, scrollHeight - 30),
                                 scrollMaxHeight: scrollHeight,
                                 scrollOffsetY,
+                                scrollOffsetX,
                                 scrollWidth,
                                 // Copy text boxes but update the text content from existing page
                                 textBoxes: textBoxes.map(({ id, ...rest }) => ({
@@ -2418,20 +2452,30 @@ const PageEditor: React.FC = () => {
                         return null;
                     })()}
 
-                    {/* Scroll Overlay Layer */}
+                    {/* Scroll Overlay Layer - Draggable for positioning */}
                     {scrollPreview && (
                         <div 
-                            className="absolute left-1/2 pointer-events-none z-10"
+                            className={`absolute z-10 cursor-move ${isDraggingScroll ? 'ring-2 ring-indigo-500' : 'hover:ring-2 hover:ring-indigo-300'}`}
                             style={{ 
                                 height: `${scrollHeight}%`,
                                 width: `${scrollWidth}%`,
+                                left: `calc(50% + ${scrollOffsetX}%)`,
                                 transform: 'translateX(-50%)', // Center horizontally
                                 bottom: `${scrollOffsetY}%` // Apply vertical offset
                             }}
+                            onMouseDown={(e) => {
+                                e.stopPropagation();
+                                setIsDraggingScroll(true);
+                                setScrollDragStart({ 
+                                    x: e.clientX, 
+                                    y: e.clientY 
+                                });
+                            }}
+                            title="Drag to reposition scroll"
                         >
                             <img 
                                 src={scrollPreview} 
-                                className="w-full h-full object-fill" 
+                                className="w-full h-full object-fill pointer-events-none" 
                                 alt="Scroll"
                                 crossOrigin="anonymous"
                                 onLoad={() => console.log('✅ Scroll image loaded:', scrollPreview)}
@@ -2439,6 +2483,10 @@ const PageEditor: React.FC = () => {
                                     console.error('❌ Scroll image failed to load:', scrollPreview);
                                 }}
                             />
+                            {/* Drag indicator */}
+                            <div className="absolute top-1 left-1/2 -translate-x-1/2 bg-black/50 text-white text-xs px-2 py-0.5 rounded opacity-0 hover:opacity-100 transition-opacity">
+                                Drag to move
+                            </div>
                         </div>
                     )}
 
