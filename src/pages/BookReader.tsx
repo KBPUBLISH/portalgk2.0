@@ -582,9 +582,19 @@ const BookReader: React.FC = () => {
                         // Should hide text boxes when scroll is hidden
                         const shouldHideTextBoxes = scrollUrl && scrollState === 'hidden';
                         
+                        // Calculate clip-path to hide text above scroll area
+                        const clipInsetTop = scrollUrl 
+                            ? (scrollState === 'hidden' ? 100 : 100 - currentScrollHeight - scrollOffset)
+                            : 0;
+                        
                         return (
                             <div
-                                className={`absolute inset-0 pointer-events-none transition-all duration-500 ease-in-out z-20 ${shouldHideTextBoxes ? 'opacity-0' : 'opacity-100'}`}
+                                className={`absolute inset-0 pointer-events-none transition-all duration-500 ease-in-out z-20`}
+                                style={scrollUrl ? {
+                                    // Clip text to scroll bounds - prevents text appearing above scroll
+                                    clipPath: `inset(${clipInsetTop}% 0 0 0)`,
+                                    transition: 'clip-path 0.5s ease-in-out',
+                                } : {}}
                             >
                                 {/* Use content.textBoxes first (if has items), fall back to root textBoxes (legacy) */}
                                 {(() => {
