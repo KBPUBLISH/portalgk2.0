@@ -2382,17 +2382,17 @@ const PageEditor: React.FC = () => {
                                 
                                 {/* Background Color (only shown when showBackground is true) */}
                                 {selectedBox.showBackground && (
-                                    <div className="space-y-1">
+                                    <div className="space-y-2">
                                         <label className="text-xs font-semibold text-gray-600">Background Color</label>
                                         <div className="grid grid-cols-4 gap-2">
                                             {[
                                                 'rgba(255,255,255,0.85)', 
                                                 'rgba(255,255,255,0.95)', 
+                                                'rgba(0,0,0,0.5)', 
                                                 'rgba(0,0,0,0.7)', 
                                                 'rgba(255,248,220,0.9)', 
                                                 'rgba(240,248,255,0.9)',
                                                 'rgba(255,228,225,0.9)',
-                                                'rgba(240,255,240,0.9)',
                                                 'rgba(245,245,220,0.9)'
                                             ].map(bgColor => (
                                                 <button
@@ -2403,6 +2403,31 @@ const PageEditor: React.FC = () => {
                                                     title={bgColor}
                                                 />
                                             ))}
+                                        </div>
+                                        
+                                        {/* Opacity Slider */}
+                                        <div className="space-y-1 pt-2">
+                                            <label className="text-xs font-semibold text-gray-600">
+                                                Opacity: {Math.round((selectedBox.backgroundColor?.match(/[\d.]+(?=\)$)/) || ['0.85'])[0] as unknown as number * 100)}%
+                                            </label>
+                                            <input
+                                                type="range"
+                                                min="30"
+                                                max="100"
+                                                value={Math.round((parseFloat((selectedBox.backgroundColor?.match(/[\d.]+(?=\)$)/) || ['0.85'])[0]) || 0.85) * 100)}
+                                                onChange={e => {
+                                                    const opacity = parseInt(e.target.value) / 100;
+                                                    // Extract RGB from current color or default to white
+                                                    const currentBg = selectedBox.backgroundColor || 'rgba(255,255,255,0.85)';
+                                                    const rgbMatch = currentBg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+                                                    if (rgbMatch) {
+                                                        updateTextBox(selectedBox.id, { 
+                                                            backgroundColor: `rgba(${rgbMatch[1]},${rgbMatch[2]},${rgbMatch[3]},${opacity})` 
+                                                        });
+                                                    }
+                                                }}
+                                                className="w-full"
+                                            />
                                         </div>
                                     </div>
                                 )}
