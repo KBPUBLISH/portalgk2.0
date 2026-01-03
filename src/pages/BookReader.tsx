@@ -483,6 +483,14 @@ const BookReader: React.FC = () => {
                                                     : `calc(100% - ${box.y}% - 40px)`,
                                                 overflowY: 'auto',
                                                 WebkitOverflowScrolling: 'touch',
+                                                // Background box styling
+                                                backgroundColor: box.showBackground ? (box.backgroundColor || 'rgba(255,255,255,0.85)') : 'transparent',
+                                                borderRadius: box.showBackground ? '12px' : '0',
+                                                padding: box.showBackground ? '12px 16px' : '8px',
+                                                // Text shadow - strong when no background for readability over images
+                                                textShadow: box.showBackground 
+                                                    ? '1px 1px 2px rgba(255,255,255,0.8)'
+                                                    : '0 0 8px rgba(0,0,0,0.9), 0 0 16px rgba(0,0,0,0.7), 2px 2px 4px rgba(0,0,0,0.8)',
                                             }}
                                         >
                                             {box.text}

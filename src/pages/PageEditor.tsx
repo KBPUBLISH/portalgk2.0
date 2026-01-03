@@ -37,6 +37,8 @@ interface TextBox {
     height?: number; // percentage (0-100) - optional, auto if not set
     alignment: 'left' | 'center' | 'right';
     fontFamily: string;
+    showBackground?: boolean;
+    backgroundColor?: string;
     fontSize: number;
     color: string;
 }
@@ -2342,7 +2344,7 @@ const PageEditor: React.FC = () => {
 
                             {/* Color */}
                             <div className="space-y-1">
-                                <label className="text-xs font-semibold text-gray-600">Color</label>
+                                <label className="text-xs font-semibold text-gray-600">Text Color</label>
                                 <div className="grid grid-cols-5 gap-2">
                                     {['#4a3b2a', '#000000', '#ffffff', '#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7', '#fd79a8', '#a29bfe'].map(color => (
                                         <button
@@ -2359,6 +2361,51 @@ const PageEditor: React.FC = () => {
                                     onChange={e => updateTextBox(selectedBox.id, { color: e.target.value })}
                                     className="w-full h-8 rounded border"
                                 />
+                            </div>
+
+                            {/* Background Box Toggle */}
+                            <div className="space-y-2 pt-2 border-t border-gray-200">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedBox.showBackground || false}
+                                        onChange={e => updateTextBox(selectedBox.id, { showBackground: e.target.checked })}
+                                        className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                                    />
+                                    <span className="text-xs font-semibold text-gray-600">Show Background Box</span>
+                                </label>
+                                <p className="text-xs text-gray-400">
+                                    {selectedBox.showBackground 
+                                        ? 'Text has a background box for readability'
+                                        : 'Text has shadow effect for readability over images'}
+                                </p>
+                                
+                                {/* Background Color (only shown when showBackground is true) */}
+                                {selectedBox.showBackground && (
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-semibold text-gray-600">Background Color</label>
+                                        <div className="grid grid-cols-4 gap-2">
+                                            {[
+                                                'rgba(255,255,255,0.85)', 
+                                                'rgba(255,255,255,0.95)', 
+                                                'rgba(0,0,0,0.7)', 
+                                                'rgba(255,248,220,0.9)', 
+                                                'rgba(240,248,255,0.9)',
+                                                'rgba(255,228,225,0.9)',
+                                                'rgba(240,255,240,0.9)',
+                                                'rgba(245,245,220,0.9)'
+                                            ].map(bgColor => (
+                                                <button
+                                                    key={bgColor}
+                                                    onClick={() => updateTextBox(selectedBox.id, { backgroundColor: bgColor })}
+                                                    className={`w-8 h-8 rounded border-2 ${selectedBox.backgroundColor === bgColor ? 'border-indigo-600 scale-110' : 'border-gray-300'} transition-transform`}
+                                                    style={{ backgroundColor: bgColor }}
+                                                    title={bgColor}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
@@ -2543,7 +2590,7 @@ const PageEditor: React.FC = () => {
                         <div
                             key={box.id}
                             onMouseDown={(e) => handleMouseDown(e, box.id)}
-                            className={`absolute cursor-move p-2 z-20 group ${selectedBoxId === box.id ? 'ring-2 ring-indigo-500 bg-white/20 backdrop-blur-sm rounded' : 'hover:ring-1 hover:ring-indigo-300'
+                            className={`absolute cursor-move p-2 z-20 group ${selectedBoxId === box.id ? 'ring-2 ring-indigo-500' : 'hover:ring-1 hover:ring-indigo-300'
                                 }`}
                             style={{
                                 left: `${box.x}%`,
@@ -2558,6 +2605,13 @@ const PageEditor: React.FC = () => {
                                 minHeight: '50px',
                                 // Smooth transition when scroll height changes
                                 transition: 'top 0.3s ease-in-out',
+                                // Show background styling preview
+                                backgroundColor: box.showBackground ? (box.backgroundColor || 'rgba(255,255,255,0.85)') : 'transparent',
+                                borderRadius: box.showBackground ? '12px' : '0',
+                                // Text shadow for readability (stronger when no background)
+                                textShadow: box.showBackground 
+                                    ? '1px 1px 2px rgba(255,255,255,0.8)'
+                                    : '0 0 8px rgba(0,0,0,0.9), 0 0 16px rgba(0,0,0,0.7), 2px 2px 4px rgba(0,0,0,0.8)',
                             }}
                         >
                             {/* Drag Handle Icon (visible on hover or select) */}
