@@ -131,6 +131,11 @@ const PageEditor: React.FC = () => {
     const [loadingPages, setLoadingPages] = useState(true);
     const [editingPageId, setEditingPageId] = useState<string | null>(null);
     
+    // Page reordering drag-and-drop
+    const [draggingPageId, setDraggingPageId] = useState<string | null>(null);
+    const [dragOverPageId, setDragOverPageId] = useState<string | null>(null);
+    const [isReordering, setIsReordering] = useState(false);
+    
     // Character voices for @ autocomplete
     const [characterVoices, setCharacterVoices] = useState<Array<{ characterName: string; voiceId: string; color?: string }>>([]);
     
@@ -1110,6 +1115,89 @@ const PageEditor: React.FC = () => {
         } catch (error) {
             console.error('Failed to delete page:', error);
             alert('Failed to delete page. Please try again.');
+        }
+    };
+    
+    // Handle page drag start
+    const handlePageDragStart = (e: React.DragEvent, pageId: string) => {
+        setDraggingPageId(pageId);
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', pageId);
+        // Add a small delay to make the visual feedback smooth
+        setTimeout(() => {
+            const target = e.target as HTMLElement;
+            target.style.opacity = '0.5';
+        }, 0);
+    };
+    
+    // Handle page drag end
+    const handlePageDragEnd = (e: React.DragEvent) => {
+        const target = e.target as HTMLElement;
+        target.style.opacity = '1';
+        setDraggingPageId(null);
+        setDragOverPageId(null);
+    };
+    
+    // Handle page drag over
+    const handlePageDragOver = (e: React.DragEvent, pageId: string) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (pageId !== draggingPageId) {
+            setDragOverPageId(pageId);
+        }
+    };
+    
+    // Handle page drop - reorder pages
+    const handlePageDrop = async (e: React.DragEvent, targetPageId: string) => {
+        e.preventDefault();
+        setDragOverPageId(null);
+        
+        if (!draggingPageId || draggingPageId === targetPageId) {
+            setDraggingPageId(null);
+            return;
+        }
+        
+        // Find indices
+        const draggedIndex = existingPages.findIndex(p => p._id === draggingPageId);
+        const targetIndex = existingPages.findIndex(p => p._id === targetPageId);
+        
+        if (draggedIndex === -1 || targetIndex === -1) {
+            setDraggingPageId(null);
+            return;
+        }
+        
+        // Create new order
+        const newPages = [...existingPages];
+        const [draggedPage] = newPages.splice(draggedIndex, 1);
+        newPages.splice(targetIndex, 0, draggedPage);
+        
+        // Update local state immediately for responsiveness
+        setExistingPages(newPages);
+        setDraggingPageId(null);
+        
+        // Create pageOrder array with new page numbers
+        const pageOrder = newPages.map((page, index) => ({
+            pageId: page._id,
+            newPageNumber: index + 1
+        }));
+        
+        // Call API to persist the new order
+        setIsReordering(true);
+        try {
+            const res = await apiClient.post('/api/pages/reorder', {
+                bookId,
+                pageOrder
+            });
+            // Update with server response to ensure consistency
+            setExistingPages(res.data);
+        } catch (error) {
+            console.error('Failed to reorder pages:', error);
+            alert('Failed to reorder pages. Please try again.');
+            // Revert to previous order on error
+            const res = await apiClient.get(`/api/pages/book/${bookId}`);
+            setExistingPages(res.data);
+        } finally {
+            setIsReordering(false);
         }
     };
 
@@ -2763,65 +2851,93 @@ const PageEditor: React.FC = () => {
                     ) : existingPages.length === 0 ? (
                         <div className="text-center text-gray-400 text-sm py-8">No pages yet</div>
                     ) : (
-                        existingPages.map((page) => (
-                            <div
-                                key={page._id}
-                                className={`border rounded-lg overflow-hidden transition cursor-pointer group ${editingPageId === page._id
-                                    ? 'border-indigo-600 ring-2 ring-indigo-300'
-                                    : 'border-gray-200 hover:border-indigo-400'
-                                    }`}
-                                onClick={() => loadPage(page)}
-                            >
-                                <div className="aspect-[4/3] bg-gray-100 relative overflow-hidden">
-                                    {/* Check all possible background URL locations */}
-                                    {(page.backgroundUrl || page.files?.background?.url) ? (
-                                        (page.backgroundType || page.files?.background?.type) === 'video' ? (
-                                            <video
-                                                src={resolveUrl(page.backgroundUrl || page.files?.background?.url)}
-                                                className="w-full h-full object-cover"
-                                                muted
-                                                autoPlay
-                                                loop
-                                                playsInline
-                                            />
-                                        ) : (
-                                            <img
-                                                src={resolveUrl(page.backgroundUrl || page.files?.background?.url)}
-                                                alt={`Page ${page.pageNumber}`}
-                                                className="w-full h-full object-cover"
-                                            />
-                                        )
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-gray-300">
-                                            <ImageIcon className="w-8 h-8" />
-                                        </div>
-                                    )}
-
-                                    {/* Page number badge */}
-                                    <div className="absolute top-2 left-2 bg-indigo-600 text-white text-xs font-bold px-2 py-1 rounded">
-                                        #{page.pageNumber}
-                                    </div>
-                                    
-                                    {/* Delete button - visible on hover */}
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleDeletePage(page._id, page.pageNumber);
-                                        }}
-                                        className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-all"
-                                        title="Delete page"
-                                    >
-                                        <X className="w-3 h-3" />
-                                    </button>
-                                </div>
-
-                                <div className="p-2 bg-white group-hover:bg-indigo-50 transition">
-                                    <p className="text-xs text-gray-600 truncate">
-                                        {(page.content?.textBoxes?.length || page.textBoxes?.length || 0)} text box{(page.content?.textBoxes?.length || page.textBoxes?.length || 0) !== 1 ? 'es' : ''}
-                                    </p>
-                                </div>
+                        <>
+                            {/* Drag hint */}
+                            <div className="text-xs text-gray-400 text-center mb-2 flex items-center justify-center gap-1">
+                                <Move className="w-3 h-3" />
+                                Drag to reorder
                             </div>
-                        ))
+                            {isReordering && (
+                                <div className="text-xs text-indigo-600 text-center mb-2 animate-pulse">
+                                    Saving order...
+                                </div>
+                            )}
+                            {existingPages.map((page) => (
+                                <div
+                                    key={page._id}
+                                    draggable
+                                    onDragStart={(e) => handlePageDragStart(e, page._id)}
+                                    onDragEnd={handlePageDragEnd}
+                                    onDragOver={(e) => handlePageDragOver(e, page._id)}
+                                    onDrop={(e) => handlePageDrop(e, page._id)}
+                                    className={`border rounded-lg overflow-hidden transition cursor-grab active:cursor-grabbing group ${
+                                        editingPageId === page._id
+                                            ? 'border-indigo-600 ring-2 ring-indigo-300'
+                                            : dragOverPageId === page._id
+                                                ? 'border-green-500 ring-2 ring-green-300 bg-green-50'
+                                                : draggingPageId === page._id
+                                                    ? 'opacity-50 border-gray-300'
+                                                    : 'border-gray-200 hover:border-indigo-400'
+                                    }`}
+                                    onClick={() => loadPage(page)}
+                                >
+                                    <div className="aspect-[4/3] bg-gray-100 relative overflow-hidden">
+                                        {/* Check all possible background URL locations */}
+                                        {(page.backgroundUrl || page.files?.background?.url) ? (
+                                            (page.backgroundType || page.files?.background?.type) === 'video' ? (
+                                                <video
+                                                    src={resolveUrl(page.backgroundUrl || page.files?.background?.url)}
+                                                    className="w-full h-full object-cover pointer-events-none"
+                                                    muted
+                                                    autoPlay
+                                                    loop
+                                                    playsInline
+                                                />
+                                            ) : (
+                                                <img
+                                                    src={resolveUrl(page.backgroundUrl || page.files?.background?.url)}
+                                                    alt={`Page ${page.pageNumber}`}
+                                                    className="w-full h-full object-cover pointer-events-none"
+                                                    draggable={false}
+                                                />
+                                            )
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center text-gray-300">
+                                                <ImageIcon className="w-8 h-8" />
+                                            </div>
+                                        )}
+
+                                        {/* Page number badge */}
+                                        <div className="absolute top-2 left-2 bg-indigo-600 text-white text-xs font-bold px-2 py-1 rounded">
+                                            #{page.pageNumber}
+                                        </div>
+                                        
+                                        {/* Drag handle indicator */}
+                                        <div className="absolute bottom-2 left-2 text-white/70 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <Move className="w-4 h-4" />
+                                        </div>
+                                        
+                                        {/* Delete button - visible on hover */}
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDeletePage(page._id, page.pageNumber);
+                                            }}
+                                            className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-all"
+                                            title="Delete page"
+                                        >
+                                            <X className="w-3 h-3" />
+                                        </button>
+                                    </div>
+
+                                    <div className="p-2 bg-white group-hover:bg-indigo-50 transition">
+                                        <p className="text-xs text-gray-600 truncate">
+                                            {(page.content?.textBoxes?.length || page.textBoxes?.length || 0)} text box{(page.content?.textBoxes?.length || page.textBoxes?.length || 0) !== 1 ? 'es' : ''}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
+                        </>
                     )}
                 </div>
             </div>
