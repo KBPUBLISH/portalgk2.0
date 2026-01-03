@@ -582,17 +582,19 @@ const BookReader: React.FC = () => {
                         // Should hide text boxes when scroll is hidden
                         const shouldHideTextBoxes = scrollUrl && scrollState === 'hidden';
                         
-                        // Calculate clip-path to hide text above scroll area
+                        // Calculate clip-path to hide text outside scroll area (top AND bottom)
                         const clipInsetTop = scrollUrl 
                             ? (scrollState === 'hidden' ? 100 : 100 - currentScrollHeight - scrollOffset)
                             : 0;
+                        const clipInsetBottom = scrollUrl ? scrollOffset + 5 : 0; // 5% buffer from bottom
                         
                         return (
                             <div
                                 className={`absolute inset-0 pointer-events-none transition-all duration-500 ease-in-out z-20`}
                                 style={scrollUrl ? {
-                                    // Clip text to scroll bounds - prevents text appearing above scroll
-                                    clipPath: `inset(${clipInsetTop}% 0 0 0)`,
+                                    // Clip text to scroll bounds - prevents text appearing above OR below scroll
+                                    // inset(top right bottom left)
+                                    clipPath: `inset(${clipInsetTop}% 0 ${clipInsetBottom}% 0)`,
                                     transition: 'clip-path 0.5s ease-in-out',
                                 } : {}}
                             >
@@ -603,10 +605,15 @@ const BookReader: React.FC = () => {
                                     return textBoxes;
                                 })()?.map((box, idx) => {
                                     // Calculate where scroll starts (from top)
-                                    const scrollStartPercent = 100 - currentScrollHeight - scrollOffset + 5;
+                                    const scrollStartPercent = 100 - currentScrollHeight - scrollOffset + 3;
                                     const boxY = typeof box.y === 'number' ? box.y : 0;
                                     // Ensure text stays inside scroll area
                                     const effectiveTop = scrollUrl ? Math.max(boxY, scrollStartPercent) : boxY;
+                                    // Calculate max height to stay within scroll bounds
+                                    const scrollBottomBuffer = scrollUrl ? scrollOffset + 8 : 0;
+                                    const effectiveMaxHeight = scrollUrl 
+                                        ? `calc(${100 - scrollBottomBuffer}% - ${effectiveTop}%)`
+                                        : `calc(100% - ${effectiveTop}% - 40px)`;
 
                                     return (
                                         <div
@@ -628,7 +635,7 @@ const BookReader: React.FC = () => {
                                                     ? `${Math.round((box.fontSize || 24) * 1.2)}px`
                                                     : `${box.fontSize || 24}px`,
                                                 // Calculate max height based on the effective top position
-                                                maxHeight: `calc(100% - ${effectiveTop}% - 40px)`,
+                                                maxHeight: effectiveMaxHeight,
                                                 overflowY: 'auto',
                                                 WebkitOverflowScrolling: 'touch',
                                                 // Background box styling
