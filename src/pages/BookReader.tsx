@@ -14,6 +14,7 @@ interface TextBox {
     color?: string;
     showBackground?: boolean;
     backgroundColor?: string;
+    shadowColor?: string;
 }
 
 interface VideoSequenceItem {
@@ -489,10 +490,12 @@ const BookReader: React.FC = () => {
                                                 backgroundColor: box.showBackground ? (box.backgroundColor || 'rgba(255,255,255,0.85)') : 'transparent',
                                                 borderRadius: box.showBackground ? '12px' : '0',
                                                 padding: box.showBackground ? '12px 16px' : '8px',
-                                                // Text shadow - strong when no background for readability over images
+                                                // Text shadow/glow - color controlled by shadowColor setting
                                                 textShadow: box.showBackground 
                                                     ? '1px 1px 2px rgba(255,255,255,0.8)'
-                                                    : '0 0 8px rgba(0,0,0,0.9), 0 0 16px rgba(0,0,0,0.7), 2px 2px 4px rgba(0,0,0,0.8)',
+                                                    : box.shadowColor === 'black'
+                                                        ? '0 0 8px rgba(0,0,0,0.9), 0 0 16px rgba(0,0,0,0.7), 1px 1px 4px rgba(0,0,0,0.8)'
+                                                        : '0 0 8px rgba(255,255,255,0.9), 0 0 16px rgba(255,255,255,0.7), 1px 1px 4px rgba(255,255,255,0.8)',
                                             }}
                                         >
                                             {box.text}

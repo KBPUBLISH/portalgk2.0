@@ -39,6 +39,7 @@ interface TextBox {
     fontFamily: string;
     showBackground?: boolean;
     backgroundColor?: string;
+    shadowColor?: string;
     fontSize: number;
     color: string;
 }
@@ -2377,8 +2378,42 @@ const PageEditor: React.FC = () => {
                                 <p className="text-xs text-gray-400">
                                     {selectedBox.showBackground 
                                         ? 'Text has a background box for readability'
-                                        : 'Text has shadow effect for readability over images'}
+                                        : 'Text has shadow/glow effect for readability'}
                                 </p>
+                                
+                                {/* Shadow Color (only shown when showBackground is false) */}
+                                {!selectedBox.showBackground && (
+                                    <div className="space-y-1 pt-2">
+                                        <label className="text-xs font-semibold text-gray-600">Shadow/Glow Color</label>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => updateTextBox(selectedBox.id, { shadowColor: 'white' })}
+                                                className={`flex-1 py-2 px-3 rounded border-2 text-xs font-medium transition ${
+                                                    (!selectedBox.shadowColor || selectedBox.shadowColor === 'white') 
+                                                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700' 
+                                                        : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'
+                                                }`}
+                                            >
+                                                ☀️ White Glow
+                                            </button>
+                                            <button
+                                                onClick={() => updateTextBox(selectedBox.id, { shadowColor: 'black' })}
+                                                className={`flex-1 py-2 px-3 rounded border-2 text-xs font-medium transition ${
+                                                    selectedBox.shadowColor === 'black' 
+                                                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700' 
+                                                        : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'
+                                                }`}
+                                            >
+                                                🌙 Dark Shadow
+                                            </button>
+                                        </div>
+                                        <p className="text-xs text-gray-400 mt-1">
+                                            {(!selectedBox.shadowColor || selectedBox.shadowColor === 'white') 
+                                                ? 'White glow works best on dark backgrounds'
+                                                : 'Dark shadow works best on light backgrounds'}
+                                        </p>
+                                    </div>
+                                )}
                                 
                                 {/* Background Color (only shown when showBackground is true) */}
                                 {selectedBox.showBackground && (
@@ -2633,10 +2668,12 @@ const PageEditor: React.FC = () => {
                                 // Show background styling preview
                                 backgroundColor: box.showBackground ? (box.backgroundColor || 'rgba(255,255,255,0.85)') : 'transparent',
                                 borderRadius: box.showBackground ? '12px' : '0',
-                                // Text shadow for readability (stronger when no background)
+                                // Text shadow/glow - color controlled by shadowColor setting
                                 textShadow: box.showBackground 
                                     ? '1px 1px 2px rgba(255,255,255,0.8)'
-                                    : '0 0 8px rgba(0,0,0,0.9), 0 0 16px rgba(0,0,0,0.7), 2px 2px 4px rgba(0,0,0,0.8)',
+                                    : box.shadowColor === 'black'
+                                        ? '0 0 8px rgba(0,0,0,0.9), 0 0 16px rgba(0,0,0,0.7), 1px 1px 4px rgba(0,0,0,0.8)'
+                                        : '0 0 8px rgba(255,255,255,0.9), 0 0 16px rgba(255,255,255,0.7), 1px 1px 4px rgba(255,255,255,0.8)',
                             }}
                         >
                             {/* Drag Handle Icon (visible on hover or select) */}
