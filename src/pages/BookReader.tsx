@@ -1,7 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiClient, getMediaUrl } from '../services/apiClient';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Play, Square, Volume2, ChevronDown } from 'lucide-react';
+
+interface Voice {
+    voice_id: string;
+    name: string;
+}
 
 interface TextBox {
     text: string;
@@ -37,7 +42,10 @@ interface Page {
     scrollUrl?: string;
     scrollHeight?: number;
     scrollMidHeight?: number;
+    scrollMaxHeight?: number;
     scrollOffsetY?: number;
+    scrollOffsetX?: number;
+    scrollWidth?: number;
     textBoxes?: TextBox[]; // Legacy field
     content?: {
         textBoxes?: TextBox[]; // Primary location from DB
@@ -67,7 +75,8 @@ const BookReader: React.FC = () => {
     const [pages, setPages] = useState<Page[]>([]);
     const [currentPageIndex, setCurrentPageIndex] = useState(0);
     const [loading, setLoading] = useState(true);
-    const [showScroll, setShowScroll] = useState(true);
+    // Scroll state: 'hidden' | 'mid' | 'max' - matches app behavior
+    const [scrollState, setScrollState] = useState<'hidden' | 'mid' | 'max'>('mid');
     const [viewMode, setViewMode] = useState<'fullscreen' | 'tablet-p' | 'tablet-l' | 'phone-p' | 'phone-l'>('fullscreen');
     
     // Image sequence state
@@ -78,6 +87,16 @@ const BookReader: React.FC = () => {
     // Video sequence state
     const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
     const videoRef = useRef<HTMLVideoElement>(null);
+    
+    // TTS State
+    const [voices, setVoices] = useState<Voice[]>([]);
+    const [selectedVoice, setSelectedVoice] = useState<string>('');
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [showVoiceSelector, setShowVoiceSelector] = useState(false);
+    const [ttsLoading, setTtsLoading] = useState(false);
+    const [currentTextBoxIndex, setCurrentTextBoxIndex] = useState(0);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+    const allTextBoxesRef = useRef<TextBox[]>([]);
 
     // Device dimensions
     const deviceStyles = {
@@ -102,21 +121,141 @@ const BookReader: React.FC = () => {
         };
         fetchPages();
     }, [bookId]);
+    
+    // Fetch available TTS voices
+    useEffect(() => {
+        const fetchVoices = async () => {
+            try {
+                const res = await apiClient.get('/api/tts/voices');
+                if (res.data?.voices) {
+                    setVoices(res.data.voices);
+                    // Set default voice if none selected
+                    if (!selectedVoice && res.data.voices.length > 0) {
+                        // Try to find a good default narrator voice
+                        const defaultVoice = res.data.voices.find((v: Voice) => 
+                            v.name?.toLowerCase().includes('aria') || 
+                            v.name?.toLowerCase().includes('jessica')
+                        ) || res.data.voices[0];
+                        setSelectedVoice(defaultVoice.voice_id);
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to fetch voices:', err);
+            }
+        };
+        fetchVoices();
+    }, []);
 
     const currentPage = pages[currentPageIndex];
     
-    // Reset image/video index when page changes
+    // Reset image/video index when page changes (but preserve scroll state!)
     useEffect(() => {
         setCurrentImageIndex(0);
         setCurrentVideoIndex(0);
         setImageTransition('none');
+        setCurrentTextBoxIndex(0);
+        
+        // Stop any playing audio when changing pages
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current = null;
+        }
+        setIsPlaying(false);
         
         // Clear any existing image sequence timer
         if (imageSequenceTimerRef.current) {
             clearInterval(imageSequenceTimerRef.current);
             imageSequenceTimerRef.current = null;
         }
+        
+        // NOTE: We intentionally do NOT reset scrollState here
+        // This allows scroll position to persist across pages like in the app
     }, [currentPageIndex]);
+    
+    // Generate TTS for text and play it
+    const generateAndPlayTTS = useCallback(async (text: string, textBoxIdx: number) => {
+        if (!text || !selectedVoice) return;
+        
+        setTtsLoading(true);
+        setCurrentTextBoxIndex(textBoxIdx);
+        
+        try {
+            const res = await apiClient.post('/api/tts/generate', {
+                text: text.trim(),
+                voiceId: selectedVoice,
+                bookId: bookId
+            });
+            
+            if (res.data?.audioUrl) {
+                // Stop any existing audio
+                if (audioRef.current) {
+                    audioRef.current.pause();
+                }
+                
+                const audio = new Audio(getMediaUrl(res.data.audioUrl));
+                audioRef.current = audio;
+                
+                audio.onended = () => {
+                    setIsPlaying(false);
+                    // Try to play next text box if there is one
+                    const allBoxes = allTextBoxesRef.current;
+                    const nextIdx = textBoxIdx + 1;
+                    if (nextIdx < allBoxes.length) {
+                        generateAndPlayTTS(allBoxes[nextIdx].text, nextIdx);
+                    }
+                };
+                
+                audio.onerror = () => {
+                    console.error('Audio playback error');
+                    setIsPlaying(false);
+                    setTtsLoading(false);
+                };
+                
+                await audio.play();
+                setIsPlaying(true);
+            }
+        } catch (err) {
+            console.error('TTS generation failed:', err);
+        } finally {
+            setTtsLoading(false);
+        }
+    }, [selectedVoice, bookId]);
+    
+    // Play all text boxes on current page
+    const handlePlay = useCallback(() => {
+        if (isPlaying) {
+            // Stop playback
+            if (audioRef.current) {
+                audioRef.current.pause();
+                audioRef.current = null;
+            }
+            setIsPlaying(false);
+            return;
+        }
+        
+        // Get text boxes for current page
+        const currentPage = pages[currentPageIndex];
+        const contentBoxes = currentPage?.content?.textBoxes;
+        const textBoxes = (contentBoxes && contentBoxes.length > 0) ? contentBoxes : currentPage?.textBoxes;
+        
+        if (!textBoxes || textBoxes.length === 0) {
+            console.log('No text boxes to read');
+            return;
+        }
+        
+        // Store all text boxes and start playing from first
+        allTextBoxesRef.current = textBoxes;
+        generateAndPlayTTS(textBoxes[0].text, 0);
+    }, [isPlaying, pages, currentPageIndex, generateAndPlayTTS]);
+    
+    // Toggle scroll state: hidden -> mid -> max -> hidden
+    const cycleScrollState = useCallback(() => {
+        setScrollState(prev => {
+            if (prev === 'hidden') return 'mid';
+            if (prev === 'mid') return 'max';
+            return 'hidden';
+        });
+    }, []);
     
     // Image sequence cycling effect
     useEffect(() => {
@@ -166,7 +305,7 @@ const BookReader: React.FC = () => {
         e.stopPropagation();
         if (currentPageIndex < pages.length - 1) {
             setCurrentPageIndex(prev => prev + 1);
-            setShowScroll(true); // Reset scroll visibility on page turn
+            // NOTE: Scroll state is preserved across pages
         }
     };
 
@@ -174,12 +313,8 @@ const BookReader: React.FC = () => {
         e.stopPropagation();
         if (currentPageIndex > 0) {
             setCurrentPageIndex(prev => prev - 1);
-            setShowScroll(true);
+            // NOTE: Scroll state is preserved across pages
         }
-    };
-
-    const toggleScroll = () => {
-        setShowScroll(prev => !prev);
     };
 
     const resolveUrl = (url?: string) => {
@@ -301,7 +436,7 @@ const BookReader: React.FC = () => {
                         transform: viewMode !== 'fullscreen' ? 'scale(0.9)' : 'none', // Slight scale down to fit nicely
                         transformOrigin: 'center center'
                     }}
-                    onClick={toggleScroll}
+                    onClick={cycleScrollState}
                 >
                     {/* Close Button (Hidden in preview mode, use toolbar back instead) */}
                     {viewMode === 'fullscreen' && (
@@ -435,19 +570,21 @@ const BookReader: React.FC = () => {
                         })()}
                     </div>
 
-                    {/* Text Boxes Layer - positioned relative to full page, moves with scroll */}
+                    {/* Text Boxes Layer - positioned relative to scroll state */}
                     {(() => {
                         const scrollUrl = currentPage.scrollUrl || currentPage.files?.scroll?.url;
                         const scrollOffset = currentPage.scrollOffsetY || 0;
+                        // Calculate scroll height based on state (like app)
+                        const currentScrollHeight = scrollState === 'max' 
+                            ? (currentPage.scrollMaxHeight || 60)
+                            : (currentPage.scrollMidHeight || 30);
+                        
+                        // Should hide text boxes when scroll is hidden
+                        const shouldHideTextBoxes = scrollUrl && scrollState === 'hidden';
                         
                         return (
                             <div
-                                className="absolute inset-0 pointer-events-none transition-transform duration-500 ease-in-out z-20"
-                                style={{
-                                    transform: scrollUrl && !showScroll
-                                        ? 'translateY(100%)'
-                                        : 'translateY(0)'
-                                }}
+                                className={`absolute inset-0 pointer-events-none transition-all duration-500 ease-in-out z-20 ${shouldHideTextBoxes ? 'opacity-0' : 'opacity-100'}`}
                             >
                                 {/* Use content.textBoxes first (if has items), fall back to root textBoxes (legacy) */}
                                 {(() => {
@@ -455,19 +592,19 @@ const BookReader: React.FC = () => {
                                     const textBoxes = (contentBoxes && contentBoxes.length > 0) ? contentBoxes : currentPage.textBoxes;
                                     return textBoxes;
                                 })()?.map((box, idx) => {
-                                    // Calculate scroll top position - use scrollMidHeight if available (all values are percentages)
-                                    const scrollHeightVal = currentPage.scrollMidHeight ? `${currentPage.scrollMidHeight}%` : (currentPage.scrollHeight ? `${currentPage.scrollHeight}%` : '30%');
-                                    // Add scroll offset to the calculation
-                                    const scrollTopVal = `calc(100% - ${scrollHeightVal} - ${scrollOffset}%)`;
+                                    // Calculate where scroll starts (from top)
+                                    const scrollStartPercent = 100 - currentScrollHeight - scrollOffset + 5;
+                                    const boxY = typeof box.y === 'number' ? box.y : 0;
+                                    // Ensure text stays inside scroll area
+                                    const effectiveTop = scrollUrl ? Math.max(boxY, scrollStartPercent) : boxY;
 
                                     return (
                                         <div
                                             key={idx}
-                                            className="absolute pointer-events-auto overflow-y-auto p-2"
+                                            className={`absolute pointer-events-auto overflow-y-auto p-2 ${currentTextBoxIndex === idx && isPlaying ? 'ring-2 ring-orange-400 ring-opacity-75' : ''}`}
                                             style={{
                                                 left: `${box.x}%`,
-                                                // If scroll exists, ensure top is at least the scroll start position
-                                                top: scrollUrl ? `max(${box.y}%, ${scrollTopVal})` : `${box.y}%`,
+                                                top: `${effectiveTop}%`,
                                                 width: `${box.width || 30}%`,
                                                 transform: 'translate(0, 0)',
                                                 textAlign: box.alignment,
@@ -481,9 +618,7 @@ const BookReader: React.FC = () => {
                                                     ? `${Math.round((box.fontSize || 24) * 1.2)}px`
                                                     : `${box.fontSize || 24}px`,
                                                 // Calculate max height based on the effective top position
-                                                maxHeight: scrollUrl
-                                                    ? `calc(100% - max(${box.y}%, ${scrollTopVal}) - 40px)`
-                                                    : `calc(100% - ${box.y}% - 40px)`,
+                                                maxHeight: `calc(100% - ${effectiveTop}% - 40px)`,
                                                 overflowY: 'auto',
                                                 WebkitOverflowScrolling: 'touch',
                                                 // Background box styling
@@ -493,7 +628,7 @@ const BookReader: React.FC = () => {
                                                 // Text shadow/glow - color controlled by shadowColor setting
                                                 textShadow: box.showBackground 
                                                     ? '1px 1px 2px rgba(255,255,255,0.8)'
-                                                    : box.shadowColor === 'black'
+                                                    : box.shadowColor === 'dark'
                                                         ? '0 0 8px rgba(0,0,0,0.9), 0 0 16px rgba(0,0,0,0.7), 1px 1px 4px rgba(0,0,0,0.8)'
                                                         : '0 0 8px rgba(255,255,255,0.9), 0 0 16px rgba(255,255,255,0.7), 1px 1px 4px rgba(255,255,255,0.8)',
                                             }}
@@ -510,14 +645,25 @@ const BookReader: React.FC = () => {
                     {(() => {
                         const scrollUrl = currentPage.scrollUrl || currentPage.files?.scroll?.url;
                         const scrollOffset = currentPage.scrollOffsetY || 0;
+                        const scrollOffsetX = currentPage.scrollOffsetX || 0;
+                        const scrollWidth = currentPage.scrollWidth || 100;
                         if (!scrollUrl) return null;
+                        
+                        // Calculate height based on scroll state
+                        const currentScrollHeight = scrollState === 'max'
+                            ? (currentPage.scrollMaxHeight || 60)
+                            : (currentPage.scrollMidHeight || 30);
                         
                         return (
                             <div
-                                className={`absolute left-0 right-0 transition-transform duration-500 ease-in-out z-10 ${showScroll ? 'translate-y-0' : 'translate-y-full'}`}
+                                className={`absolute left-1/2 transition-all duration-500 ease-in-out z-10`}
                                 style={{ 
-                                    height: currentPage.scrollMidHeight ? `${currentPage.scrollMidHeight}%` : (currentPage.scrollHeight ? `${currentPage.scrollHeight}%` : '30%'),
-                                    bottom: `${scrollOffset}%` // Apply vertical offset
+                                    height: `${currentScrollHeight}%`,
+                                    width: `${scrollWidth}%`,
+                                    bottom: `${scrollOffset}%`,
+                                    transform: scrollState === 'hidden'
+                                        ? `translateX(calc(-50% + ${scrollOffsetX}%)) translateY(100%)`
+                                        : `translateX(calc(-50% + ${scrollOffsetX}%))`,
                                 }}
                                 onClick={(e) => e.stopPropagation()}
                             >
@@ -556,6 +702,83 @@ const BookReader: React.FC = () => {
                     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/40 text-white px-3 py-1 rounded-full text-sm backdrop-blur-sm pointer-events-none">
                         Page {currentPageIndex + 1} of {pages.length}
                     </div>
+                    
+                    {/* Play Button - positioned like in app */}
+                    <div 
+                        className="absolute left-4 pointer-events-auto z-30"
+                        style={{
+                            bottom: (!currentPage?.scrollUrl || scrollState === 'hidden') ? '1rem' : '2rem'
+                        }}
+                    >
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handlePlay();
+                            }}
+                            disabled={ttsLoading}
+                            className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all ${
+                                isPlaying 
+                                    ? 'bg-red-500 hover:bg-red-600' 
+                                    : 'bg-orange-500 hover:bg-orange-600'
+                            } ${ttsLoading ? 'opacity-75 cursor-wait' : ''}`}
+                        >
+                            {ttsLoading ? (
+                                <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            ) : isPlaying ? (
+                                <Square className="w-6 h-6 text-white" fill="white" />
+                            ) : (
+                                <Play className="w-6 h-6 text-white ml-1" fill="white" />
+                            )}
+                        </button>
+                    </div>
+                    
+                    {/* Voice Selector - top right */}
+                    <div className="absolute top-4 right-4 pointer-events-auto z-30">
+                        <div className="relative">
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowVoiceSelector(!showVoiceSelector);
+                                }}
+                                className="flex items-center gap-2 bg-black/60 text-white px-3 py-2 rounded-lg backdrop-blur-sm hover:bg-black/80 transition"
+                            >
+                                <Volume2 className="w-4 h-4" />
+                                <span className="text-sm max-w-[120px] truncate">
+                                    {voices.find(v => v.voice_id === selectedVoice)?.name || 'Select Voice'}
+                                </span>
+                                <ChevronDown className={`w-4 h-4 transition-transform ${showVoiceSelector ? 'rotate-180' : ''}`} />
+                            </button>
+                            
+                            {showVoiceSelector && (
+                                <div 
+                                    className="absolute right-0 top-full mt-1 bg-gray-800 rounded-lg shadow-xl border border-gray-700 max-h-60 overflow-y-auto w-48 z-50"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    {voices.map(voice => (
+                                        <button
+                                            key={voice.voice_id}
+                                            onClick={() => {
+                                                setSelectedVoice(voice.voice_id);
+                                                setShowVoiceSelector(false);
+                                            }}
+                                            className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-700 transition ${
+                                                selectedVoice === voice.voice_id ? 'bg-indigo-600 text-white' : 'text-gray-300'
+                                            }`}
+                                        >
+                                            {voice.name}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    
+                    {/* Scroll State Indicator */}
+                    {currentPage?.scrollUrl && (
+                        <div className="absolute bottom-4 right-4 bg-black/40 text-white px-2 py-1 rounded text-xs backdrop-blur-sm pointer-events-none">
+                            Scroll: {scrollState}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
