@@ -579,9 +579,6 @@ const BookReader: React.FC = () => {
                             ? (currentPage.scrollMaxHeight || 60)
                             : (currentPage.scrollMidHeight || 30);
                         
-                        // Should hide text boxes when scroll is hidden
-                        const shouldHideTextBoxes = scrollUrl && scrollState === 'hidden';
-                        
                         // Calculate clip-path to hide text outside scroll area (top AND bottom)
                         const clipInsetTop = scrollUrl 
                             ? (scrollState === 'hidden' ? 100 : 100 - currentScrollHeight - scrollOffset)
