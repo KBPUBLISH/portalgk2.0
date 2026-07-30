@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Book, BookOpen, Music, Layout as LayoutIcon, Home, Tag, Volume2, Gamepad2, Video, LogOut, Bell, Music2, Star, CalendarDays, BarChart3, Library, Sparkles, TrendingUp, Radio, Mail, Heart, Users, ClipboardCheck, ShoppingCart, BookHeart, Disc, Image, Mic, Film } from 'lucide-react';
+import { Book, BookOpen, Music, Layout as LayoutIcon, Home, Tag, Volume2, Gamepad2, Video, LogOut, Bell, Music2, Star, CalendarDays, BarChart3, Library, Sparkles, TrendingUp, Radio, Mail, Heart, Users, ClipboardCheck, ShoppingCart, BookHeart, Disc, Image, Mic, Film, Map } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const Layout: React.FC = () => {
@@ -8,7 +8,13 @@ const Layout: React.FC = () => {
     const navigate = useNavigate();
     const { logout } = useAuth();
 
-    const isActive = (path: string) => location.pathname === path;
+    const isActive = (path: string) => {
+        if (path === '/') return location.pathname === '/';
+        if (path === '/bible-map') {
+            return location.pathname === path || location.pathname.startsWith(`${path}/`);
+        }
+        return location.pathname === path;
+    };
 
     const handleLogout = () => {
         logout();
@@ -22,6 +28,7 @@ const Layout: React.FC = () => {
         { path: '/featured', icon: Star, label: 'Featured' },
         { path: '/new-user-welcome', icon: Sparkles, label: 'New User Welcome' },
         { path: '/books', icon: Book, label: 'Books' },
+        { path: '/bible-map', icon: Map, label: 'Bible Map' },
         { path: '/monthly-books', icon: BookOpen, label: 'Kids Monthly Book Character Design' },
         { path: '/book-series', icon: Library, label: 'Book Series' },
         { path: '/playlists', icon: Music, label: 'Playlists' },

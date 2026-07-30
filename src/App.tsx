@@ -51,6 +51,9 @@ import KaraokeManagement from './pages/KaraokeManagement';
 import KaraokeForm from './pages/KaraokeForm';
 import MusicVideoManagement from './pages/MusicVideoManagement';
 import MusicVideoForm from './pages/MusicVideoForm';
+import BibleMapHub from './pages/BibleMapHub';
+import BibleMapIslandForm from './pages/BibleMapIslandForm';
+import BibleMapStoryForm from './pages/BibleMapStoryForm';
 
 // Godly Hub - Creator Portal
 import CreatorLogin from './pages/CreatorLogin';
@@ -151,6 +154,12 @@ function App() {
             <Route path="music-videos" element={<MusicVideoManagement />} />
             <Route path="music-videos/new" element={<MusicVideoForm />} />
             <Route path="music-videos/edit/:id" element={<MusicVideoForm />} />
+
+            <Route path="bible-map" element={<BibleMapHub />} />
+            <Route path="bible-map/islands/new" element={<BibleMapIslandForm />} />
+            <Route path="bible-map/islands/:id" element={<BibleMapIslandForm />} />
+            <Route path="bible-map/stories/new" element={<BibleMapStoryForm />} />
+            <Route path="bible-map/stories/:id" element={<BibleMapStoryForm />} />
             
             {/* Godly Hub Admin */}
             <Route path="hub/creators" element={<HubCreators />} />
