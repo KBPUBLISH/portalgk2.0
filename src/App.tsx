@@ -30,6 +30,7 @@ import MusicManagement from './pages/MusicManagement';
 import FeaturedContent from './pages/FeaturedContent';
 import NewUserWelcome from './pages/NewUserWelcome';
 import AnalyticsDashboard from './pages/AnalyticsDashboard';
+import AiInsights from './pages/AiInsights';
 import OnboardingAnalytics from './pages/OnboardingAnalytics';
 import KidsMonthlyCharactersPage from './pages/KidsMonthlyCharactersPage';
 import Radio from './pages/Radio';
@@ -49,6 +50,9 @@ import MonthlyBookTemplates from './pages/MonthlyBookTemplates';
 import MonthlyBookTemplateForm from './pages/MonthlyBookTemplateForm';
 import KaraokeManagement from './pages/KaraokeManagement';
 import KaraokeForm from './pages/KaraokeForm';
+import BibleMapHub from './pages/BibleMapHub';
+import BibleMapIslandForm from './pages/BibleMapIslandForm';
+import BibleMapStoryForm from './pages/BibleMapStoryForm';
 import MusicVideoManagement from './pages/MusicVideoManagement';
 import MusicVideoForm from './pages/MusicVideoForm';
 import BibleMapHub from './pages/BibleMapHub';
@@ -128,6 +132,7 @@ function App() {
             <Route path="featured" element={<FeaturedContent />} />
             <Route path="new-user-welcome" element={<NewUserWelcome />} />
             <Route path="analytics" element={<AnalyticsDashboard />} />
+            <Route path="ai-insights" element={<AiInsights />} />
             <Route path="onboarding-analytics" element={<OnboardingAnalytics />} />
             <Route path="onboarding-analytics/kids-characters" element={<KidsMonthlyCharactersPage />} />
             <Route path="radio" element={<Radio />} />
