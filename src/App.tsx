@@ -55,9 +55,6 @@ import BibleMapIslandForm from './pages/BibleMapIslandForm';
 import BibleMapStoryForm from './pages/BibleMapStoryForm';
 import MusicVideoManagement from './pages/MusicVideoManagement';
 import MusicVideoForm from './pages/MusicVideoForm';
-import BibleMapHub from './pages/BibleMapHub';
-import BibleMapIslandForm from './pages/BibleMapIslandForm';
-import BibleMapStoryForm from './pages/BibleMapStoryForm';
 
 // Godly Hub - Creator Portal
 import CreatorLogin from './pages/CreatorLogin';

@@ -1,15 +1,16 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     BookOpen,
-    ExternalLink,
+    ImagePlus,
     Loader2,
+    Palette,
     Plus,
     Save,
     Sparkles,
     Trash2,
+    X,
 } from 'lucide-react';
-import apiClient from '../../services/apiClient';
+import apiClient, { getMediaUrl } from '../../services/apiClient';
 import BookPageEditor from './BookPageEditor';
 import {
     emptyReadingPage,
@@ -29,6 +30,13 @@ interface BibleMapBookBuilderProps {
     creatingBook: boolean;
 }
 
+interface PortalCharacter {
+    _id: string;
+    displayName: string;
+    referenceImageUrl?: string;
+    status?: string;
+}
+
 const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
     storyId,
     bookId,
@@ -46,7 +54,18 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
     const [level, setLevel] = useState<ReadingLevelKey>('ages_3_5');
     const [loading, setLoading] = useState(false);
     const [generating, setGenerating] = useState(false);
+    const [generatingImages, setGeneratingImages] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [characters, setCharacters] = useState<PortalCharacter[]>([]);
+    const [selectedCharacterIds, setSelectedCharacterIds] = useState<string[]>([]);
+    const [autoImages, setAutoImages] = useState(true);
+    /** gemini = Vertex + character refs; openai = ChatGPT GPT Image (gpt-image-2) */
+    const [imageProvider, setImageProvider] = useState<'gemini' | 'openai'>('gemini');
+    /** Story-wide art style reference — matched exactly on every page image */
+    const [styleReferenceImageUrl, setStyleReferenceImageUrl] = useState('');
+    const [uploadingStyleRef, setUploadingStyleRef] = useState(false);
+    const styleRefInputRef = useRef<HTMLInputElement>(null);
+    const [imageStatus, setImageStatus] = useState<string | null>(null);
 
     const loadPages = useCallback(async () => {
         if (!storyId) return;
@@ -76,12 +95,83 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
         if (verse && !sourceText) setSourceText(verse);
     }, [verse, sourceText]);
 
+    useEffect(() => {
+        const loadChars = async () => {
+            try {
+                const [charsRes, storyRes] = await Promise.all([
+                    apiClient.get('/api/bible-map/characters'),
+                    apiClient.get(`/api/bible-map/stories/${storyId}`),
+                ]);
+                const list = Array.isArray(charsRes.data?.characters)
+                    ? charsRes.data.characters
+                    : Array.isArray(charsRes.data)
+                      ? charsRes.data
+                      : [];
+                setCharacters(
+                    list.filter(
+                        (c: PortalCharacter) =>
+                            c.referenceImageUrl && String(c.referenceImageUrl).trim(),
+                    ),
+                );
+                const saved = Array.isArray(storyRes.data?.referenceCharacterIds)
+                    ? storyRes.data.referenceCharacterIds.map((id: string) => String(id))
+                    : [];
+                if (saved.length) setSelectedCharacterIds(saved);
+                const provider = String(storyRes.data?.imageProvider || '').toLowerCase();
+                if (provider === 'openai' || provider === 'chatgpt') {
+                    setImageProvider('openai');
+                } else if (provider === 'gemini') {
+                    setImageProvider('gemini');
+                }
+                const styleUrl = String(storyRes.data?.styleReferenceImageUrl || '').trim();
+                if (styleUrl) setStyleReferenceImageUrl(styleUrl);
+            } catch (err) {
+                console.error(err);
+            }
+        };
+        void loadChars();
+    }, [storyId]);
+
+    const toggleCharacter = (id: string) => {
+        setSelectedCharacterIds((prev) =>
+            prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id].slice(0, 4),
+        );
+    };
+
+    const persistStyleReference = async (url: string | null) => {
+        await apiClient.put(`/api/bible-map/stories/${storyId}`, {
+            styleReferenceImageUrl: url,
+        });
+        setStyleReferenceImageUrl(url || '');
+    };
+
+    const uploadStyleReference = async (file: File) => {
+        setUploadingStyleRef(true);
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            const q = bookId
+                ? `bookId=${encodeURIComponent(bookId)}&type=map-art`
+                : 'type=map-art';
+            const res = await apiClient.post(`/api/upload/image?${q}`, formData);
+            const url = String(res.data?.url || '').trim();
+            if (!url) throw new Error('No URL returned');
+            await persistStyleReference(url);
+        } catch (err) {
+            console.error(err);
+            alert('Failed to upload style reference image');
+        } finally {
+            setUploadingStyleRef(false);
+        }
+    };
+
     const handleGenerate = async () => {
         if (!sourceText.trim()) {
             alert('Paste a source story or scripture first');
             return;
         }
         setGenerating(true);
+        setImageStatus(null);
         try {
             const res = await apiClient.post(
                 `/api/bible-map/stories/${storyId}/generate-reading-levels`,
@@ -90,7 +180,14 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                     pageCount,
                     scriptureRef,
                     title: packTitle,
+                    referenceCharacterIds: selectedCharacterIds,
+                    generateImages: autoImages,
+                    onlyMissingImages: true,
+                    imageProvider,
+                    styleReferenceImageUrl: styleReferenceImageUrl || undefined,
                 },
+                // Image gen can take several minutes
+                { timeout: 600000 },
             );
             if (res.data.bookId) {
                 onBookLinked(res.data.bookId);
@@ -100,7 +197,26 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                 : [];
             setPages(list);
             setActivePage(0);
-            alert(`Generated ${list.length} pages for all age levels`);
+
+            const images = Array.isArray(res.data.images) ? res.data.images : null;
+            if (autoImages && images) {
+                const ok = images.filter((r: { backgroundUrl?: string; skipped?: boolean }) =>
+                    r.backgroundUrl && !r.skipped,
+                ).length;
+                const skipped = images.filter((r: { skipped?: boolean }) => r.skipped).length;
+                const failed = images.filter((r: { error?: string }) => r.error).length;
+                setImageStatus(
+                    `Images: ${ok} generated${skipped ? `, ${skipped} kept` : ''}${
+                        failed ? `, ${failed} failed` : ''
+                    }`,
+                );
+            }
+
+            alert(
+                autoImages
+                    ? `Generated ${list.length} age-leveled pages + page images`
+                    : `Generated ${list.length} pages for all age levels`,
+            );
         } catch (err: unknown) {
             console.error(err);
             const msg =
@@ -111,6 +227,48 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
             alert(msg);
         } finally {
             setGenerating(false);
+        }
+    };
+
+    const handleGenerateImages = async (onlyMissing: boolean) => {
+        if (!bookId && pages.length === 0) {
+            alert('Generate age scripts first');
+            return;
+        }
+        setGeneratingImages(true);
+        setImageStatus(null);
+        try {
+            const res = await apiClient.post(
+                `/api/bible-map/stories/${storyId}/generate-page-images`,
+                {
+                    referenceCharacterIds: selectedCharacterIds,
+                    onlyMissing,
+                    imageProvider,
+                    styleReferenceImageUrl: styleReferenceImageUrl || undefined,
+                },
+                { timeout: 600000 },
+            );
+            const list = Array.isArray(res.data.pages)
+                ? res.data.pages.map((p: Record<string, unknown>) => pageFromApi(p))
+                : pages;
+            setPages(list);
+            const results = Array.isArray(res.data.results) ? res.data.results : [];
+            const ok = results.filter((r: { backgroundUrl?: string; error?: string }) =>
+                r.backgroundUrl && !r.error,
+            ).length;
+            const failed = results.filter((r: { error?: string }) => r.error).length;
+            setImageStatus(`Images: ${ok} ready${failed ? `, ${failed} failed` : ''}`);
+            alert(`Page images updated (${ok} ok${failed ? `, ${failed} failed` : ''})`);
+        } catch (err: unknown) {
+            console.error(err);
+            const msg =
+                (err as { response?: { data?: { message?: string; error?: string } } })?.response
+                    ?.data?.message ||
+                (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+                'Image generation failed';
+            alert(msg);
+        } finally {
+            setGeneratingImages(false);
         }
     };
 
@@ -160,6 +318,152 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
         setActivePage(Math.min(idx, next.length - 1));
     };
 
+    const characterPicker = (
+        <div className="space-y-3">
+            <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50/80 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label className="text-xs font-medium text-amber-950 inline-flex items-center gap-1.5">
+                        <Palette className="w-3.5 h-3.5" />
+                        Story style reference (required for consistent art)
+                    </label>
+                    <input
+                        ref={styleRefInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            e.target.value = '';
+                            if (f) void uploadStyleReference(f);
+                        }}
+                    />
+                    <button
+                        type="button"
+                        disabled={uploadingStyleRef}
+                        onClick={() => styleRefInputRef.current?.click()}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-amber-300 bg-white text-xs text-amber-950 hover:bg-amber-100 disabled:opacity-50"
+                    >
+                        {uploadingStyleRef ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                            <ImagePlus className="w-3.5 h-3.5" />
+                        )}
+                        {styleReferenceImageUrl ? 'Replace style image' : 'Upload style image'}
+                    </button>
+                </div>
+                {styleReferenceImageUrl ? (
+                    <div className="flex items-start gap-3">
+                        <img
+                            src={getMediaUrl(styleReferenceImageUrl)}
+                            alt="Story style reference"
+                            className="w-20 h-20 rounded-lg object-cover border border-amber-300 shadow-sm"
+                        />
+                        <div className="min-w-0 flex-1">
+                            <p className="text-[11px] text-amber-900/90">
+                                Every page will match this image&apos;s art style, lighting, and
+                                rendering. Character photos below supply identity only.
+                            </p>
+                            <button
+                                type="button"
+                                onClick={() => void persistStyleReference(null)}
+                                className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-amber-800 hover:text-red-700"
+                            >
+                                <X className="w-3 h-3" />
+                                Remove
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <p className="text-[11px] text-amber-900/80">
+                        Upload one reference illustration for the whole story. Gemini and ChatGPT
+                        will match it exactly across pages.
+                    </p>
+                )}
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="text-xs font-medium text-violet-900">
+                    Character references (for page images)
+                </label>
+                <label className="text-xs text-violet-800 flex items-center gap-1.5">
+                    <input
+                        type="checkbox"
+                        checked={autoImages}
+                        onChange={(e) => setAutoImages(e.target.checked)}
+                        className="rounded border-violet-300"
+                    />
+                    Auto-generate images after scripts
+                </label>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+                <span className="text-xs font-medium text-violet-900">Image provider</span>
+                <label className="text-xs text-violet-800 flex items-center gap-1.5">
+                    <input
+                        type="radio"
+                        name="bible-map-image-provider"
+                        checked={imageProvider === 'gemini'}
+                        onChange={() => setImageProvider('gemini')}
+                        className="border-violet-300"
+                    />
+                    Gemini (character refs)
+                </label>
+                <label className="text-xs text-violet-800 flex items-center gap-1.5">
+                    <input
+                        type="radio"
+                        name="bible-map-image-provider"
+                        checked={imageProvider === 'openai'}
+                        onChange={() => setImageProvider('openai')}
+                        className="border-violet-300"
+                    />
+                    ChatGPT / OpenAI
+                </label>
+            </div>
+            {characters.length === 0 ? (
+                <p className="text-[11px] text-violet-700/80">
+                    No character reference images found. Add them under Kids Monthly character
+                    library (reference photo required).
+                </p>
+            ) : (
+                <div className="flex flex-wrap gap-2">
+                    {characters.map((c) => {
+                        const selected = selectedCharacterIds.includes(c._id);
+                        return (
+                            <button
+                                key={c._id}
+                                type="button"
+                                onClick={() => toggleCharacter(c._id)}
+                                className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 text-xs transition ${
+                                    selected
+                                        ? 'border-violet-600 bg-violet-100 text-violet-900'
+                                        : 'border-violet-200 bg-white text-gray-700 hover:bg-violet-50'
+                                }`}
+                            >
+                                {c.referenceImageUrl ? (
+                                    <img
+                                        src={getMediaUrl(c.referenceImageUrl)}
+                                        alt=""
+                                        className="w-8 h-8 rounded-full object-cover"
+                                    />
+                                ) : (
+                                    <span className="w-8 h-8 rounded-full bg-violet-200 inline-block" />
+                                )}
+                                {c.displayName}
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+            <p className="text-[11px] text-violet-700/80">
+                {imageProvider === 'openai'
+                    ? 'Uses OpenAI gpt-image-2. Style image + character photos go to images/edits with high fidelity. Requires OPENAI_API_KEY.'
+                    : 'Uses Vertex Gemini flash-image: style image first, then character identity refs.'}{' '}
+                Pick up to 4 characters (e.g. Jesus, Noah). Page art is 3:4 above the parchment scroll.
+            </p>
+            {imageStatus && (
+                <p className="text-[11px] text-emerald-800 font-medium">{imageStatus}</p>
+            )}
+        </div>
+    );
+
     const current = pages[activePage];
 
     if (!bookId) {
@@ -182,9 +486,10 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                     )}
                     Create draft Bible Map book
                 </button>
-                <div className="border-t border-gray-200 pt-4 space-y-2">
+                <div className="border-t border-gray-200 pt-4 space-y-3">
                     <p className="text-xs text-gray-500">
-                        Or paste a source story and generate — a book will be created automatically.
+                        Or paste a source story and generate — a book will be created automatically,
+                        then page images from character references.
                     </p>
                     <textarea
                         value={sourceText}
@@ -193,6 +498,7 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                         placeholder="Paste the Bible story or scripture passage…"
                     />
+                    {characterPicker}
                     <div className="flex flex-wrap items-center gap-3">
                         <label className="text-xs text-gray-600 flex items-center gap-1">
                             Pages
@@ -216,7 +522,7 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                             ) : (
                                 <Sparkles className="w-4 h-4" />
                             )}
-                            Generate age scripts
+                            {autoImages ? 'Generate scripts + images' : 'Generate age scripts'}
                         </button>
                     </div>
                 </div>
@@ -234,20 +540,19 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    <Link
-                        to={`/pages/new/${bookId}`}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-300 text-xs hover:bg-gray-50"
+                    <button
+                        type="button"
+                        disabled={generatingImages || pages.length === 0}
+                        onClick={() => void handleGenerateImages(false)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-violet-300 text-violet-800 text-xs hover:bg-violet-50 disabled:opacity-50"
                     >
-                        Advanced editor
-                        <ExternalLink className="w-3 h-3" />
-                    </Link>
-                    <Link
-                        to={`/books/read/${bookId}`}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-300 text-xs hover:bg-gray-50"
-                    >
-                        Full preview
-                        <ExternalLink className="w-3 h-3" />
-                    </Link>
+                        {generatingImages ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                            <ImagePlus className="w-3.5 h-3.5" />
+                        )}
+                        Regenerate all images
+                    </button>
                     <button
                         type="button"
                         disabled={saving || pages.length === 0}
@@ -275,6 +580,7 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                     className="w-full border border-violet-200 rounded-lg px-3 py-2 text-sm bg-white"
                     placeholder="Paste once, then generate all three age scripts…"
                 />
+                {characterPicker}
                 <div className="flex flex-wrap items-center gap-3">
                     <label className="text-xs text-violet-800 flex items-center gap-1">
                         Pages
@@ -298,13 +604,49 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                         ) : (
                             <Sparkles className="w-4 h-4" />
                         )}
-                        Generate age scripts
+                        {autoImages ? 'Generate scripts + images' : 'Generate age scripts'}
+                    </button>
+                    <button
+                        type="button"
+                        disabled={generatingImages || pages.length === 0}
+                        onClick={() => void handleGenerateImages(true)}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-violet-300 text-violet-800 text-sm hover:bg-white disabled:opacity-50"
+                    >
+                        {generatingImages ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                            <ImagePlus className="w-4 h-4" />
+                        )}
+                        Fill missing images
                     </button>
                 </div>
+                {(generating || generatingImages) && (
+                    <p className="text-xs text-violet-800">
+                        {generating
+                            ? 'Generating age scripts' +
+                              (autoImages ? ', then page images (this can take a few minutes)…' : '…')
+                            : `Generating page images via ${
+                                  imageProvider === 'openai' ? 'ChatGPT / OpenAI' : 'Gemini'
+                              }…`}
+                    </p>
+                )}
             </div>
 
             {loading ? (
                 <div className="text-sm text-gray-500 py-8 text-center">Loading pages…</div>
+            ) : pages.length === 0 ? (
+                <div className="text-sm text-gray-500 py-8 text-center border border-dashed border-gray-300 rounded-lg">
+                    No pages yet — generate from a source story or add a blank page.
+                    <div className="mt-3">
+                        <button
+                            type="button"
+                            onClick={addPage}
+                            className="inline-flex items-center gap-1 text-indigo-600 text-sm"
+                        >
+                            <Plus className="w-4 h-4" /> Add page
+                        </button>
+                    </div>
+                </div>
             ) : (
                 <>
                     <div className="flex flex-wrap items-center gap-2">
@@ -313,39 +655,35 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                                 key={p._id || i}
                                 type="button"
                                 onClick={() => setActivePage(i)}
-                                className={`px-3 py-1.5 rounded-lg text-xs border ${
-                                    activePage === i
+                                className={`px-2.5 py-1 rounded-lg text-xs border ${
+                                    i === activePage
                                         ? 'bg-indigo-600 text-white border-indigo-600'
                                         : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                                 }`}
                             >
-                                Page {i + 1}
+                                {p.pageNumber}
+                                {p.backgroundUrl ? ' · img' : ''}
                             </button>
                         ))}
                         <button
                             type="button"
                             onClick={addPage}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-dashed border-gray-300 text-xs text-gray-600 hover:bg-gray-50"
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-dashed border-gray-300 text-xs text-gray-600 hover:bg-gray-50"
                         >
-                            <Plus className="w-3.5 h-3.5" />
-                            Add page
+                            <Plus className="w-3.5 h-3.5" /> Page
                         </button>
-                        {pages.length > 0 && (
-                            <button
-                                type="button"
-                                onClick={() => removePage(activePage)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-red-600 hover:bg-red-50"
-                            >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                Remove
-                            </button>
-                        )}
+                        <button
+                            type="button"
+                            onClick={() => removePage(activePage)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-red-600 hover:bg-red-50"
+                        >
+                            <Trash2 className="w-3.5 h-3.5" /> Remove
+                        </button>
                     </div>
 
-                    {current ? (
+                    {current && (
                         <BookPageEditor
                             page={current}
-                            bookId={bookId}
                             level={level}
                             onLevelChange={setLevel}
                             onChange={(next) =>
@@ -353,11 +691,8 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                                     prev.map((p, i) => (i === activePage ? next : p)),
                                 )
                             }
+                            bookId={bookId}
                         />
-                    ) : (
-                        <p className="text-sm text-gray-500 py-6 text-center">
-                            No pages yet — generate from a source story or add a page.
-                        </p>
                     )}
                 </>
             )}

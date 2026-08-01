@@ -1472,6 +1472,8 @@ const BibleMapStoryForm: React.FC = () => {
                         quizMode={form.quizMode}
                         onQuizModeChange={(mode) => update('quizMode', mode)}
                         hasBook={!!form.bookId}
+                        storyId={!isNew ? id : null}
+                        bookId={form.bookId}
                         levels={form.quizLevels}
                         defaultLevel={form.quizDefaultLevel}
                         onLevelsChange={(levels) => update('quizLevels', levels)}

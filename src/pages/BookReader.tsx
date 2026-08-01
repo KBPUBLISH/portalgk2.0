@@ -11,10 +11,12 @@ import { ChevronLeft, ChevronRight, X, Play, Square, Volume2, VolumeX, ChevronDo
 import TrimmedPlaybackVideo from '../components/TrimmedPlaybackVideo';
 import { removeEmotionalCues } from '../utils/readAlongText';
 import {
+    blankSlotUnits,
     collectPageInteractiveTargets,
     playInteractiveWordDing,
     sanitizeInteractiveWordIndices,
     splitInteractiveWords,
+    wordForSpeech,
 } from '../utils/interactiveWords';
 
 interface Voice {
@@ -245,6 +247,17 @@ const BookReader: React.FC = () => {
 
     const currentPage = pages[currentPageIndex];
 
+    /** Bible Map: keep parchment in the lower third so art above is never covered. */
+    const bibleMapScrollHeight = useMemo(() => {
+        if (!currentPage || bookType !== 'bible_map') return null;
+        const clamp = (n: number, fallback: number, max: number) =>
+            Number.isFinite(n) && n > 0 ? Math.min(n, max) : fallback;
+        const mid = clamp(Number(currentPage.scrollMidHeight), 36, 36);
+        const max = clamp(Number(currentPage.scrollMaxHeight), 40, 40);
+        const offset = Number(currentPage.scrollOffsetY) || 0;
+        return { mid, max, offset };
+    }, [currentPage, bookType]);
+
     const currentPageTextBoxes = useMemo(() => {
         if (!currentPage) return [] as TextBox[];
         const contentBoxes = currentPage.content?.textBoxes;
@@ -441,7 +454,7 @@ const BookReader: React.FC = () => {
 
     generateAndPlayTTSRef.current = generateAndPlayTTS;
 
-    // Play all text boxes on current page
+    // Play all text boxes on current page (gated until interactive blanks are done)
     const handlePlay = useCallback(() => {
         if (isPlaying) {
             tearDownPlayback();
@@ -451,6 +464,11 @@ const BookReader: React.FC = () => {
             }
             setIsPlaying(false);
             setSequentialReadActive(false);
+            return;
+        }
+
+        if (isInteractivePreview && interactiveTargets.length > 0 && !allInteractiveTapped) {
+            setShowTapHint(true);
             return;
         }
 
@@ -466,7 +484,15 @@ const BookReader: React.FC = () => {
         allTextBoxesRef.current = textBoxes;
         setSequentialReadActive(textBoxes.length > 1);
         void generateAndPlayTTSRef.current(textBoxes[0].text, 0);
-    }, [isPlaying, pages, currentPageIndex, tearDownPlayback]);
+    }, [
+        isPlaying,
+        pages,
+        currentPageIndex,
+        tearDownPlayback,
+        isInteractivePreview,
+        interactiveTargets.length,
+        allInteractiveTapped,
+    ]);
 
     // Unmount cleanup
     useEffect(() => () => {
@@ -530,7 +556,53 @@ const BookReader: React.FC = () => {
         setCurrentVideoIndex(prev => (prev + 1) % sortedVideos.length);
     };
 
-    const handleTapInteractiveWord = (boxIndex: number, wordIndex: number) => {
+    const speakWordOnly = useCallback(
+        async (rawWord: string) => {
+            const spoken = wordForSpeech(rawWord);
+            if (!spoken || !selectedVoice) return;
+            // Stop full-page playback if running — interactive mode is word-at-a-time
+            if (isPlaying) {
+                tearDownPlayback();
+                if (audioRef.current) {
+                    audioRef.current.pause();
+                    audioRef.current = null;
+                }
+                setIsPlaying(false);
+                setSequentialReadActive(false);
+            }
+            try {
+                const res = await apiClient.post('/api/tts/generate', {
+                    text: spoken,
+                    voiceId: selectedVoice,
+                    bookId,
+                    pageNumber: currentPageIndex + 1,
+                    textBoxIndex: 0,
+                });
+                if (!res.data?.audioUrl) return;
+                if (audioRef.current) {
+                    audioRef.current.pause();
+                    audioRef.current = null;
+                }
+                const audio = new Audio(getMediaUrl(res.data.audioUrl));
+                audioRef.current = audio;
+                audio.onended = () => {
+                    if (audioRef.current === audio) audioRef.current = null;
+                };
+                await audio.play();
+            } catch (err) {
+                console.error('Word TTS failed:', err);
+            }
+        },
+        [
+            selectedVoice,
+            bookId,
+            currentPageIndex,
+            isPlaying,
+            tearDownPlayback,
+        ],
+    );
+
+    const handleTapInteractiveWord = (boxIndex: number, wordIndex: number, word: string) => {
         const key = `${boxIndex}:${wordIndex}`;
         setTappedInteractiveKeys((prev) => {
             if (prev.has(key)) return prev;
@@ -540,6 +612,7 @@ const BookReader: React.FC = () => {
         });
         playInteractiveWordDing();
         setShowTapHint(false);
+        void speakWordOnly(word);
     };
 
     const handleNext = (e: React.MouseEvent) => {
@@ -704,8 +777,28 @@ const BookReader: React.FC = () => {
                         </button>
                     )}
 
-                    {/* Background Layer */}
-                    <div className="absolute inset-0 flex items-center justify-center">
+                    {/* Background Layer — bible_map: fit art fully in band above scroll */}
+                    <div
+                        className={
+                            bookType === 'bible_map'
+                                ? 'absolute top-0 left-0 right-0 overflow-hidden bg-[#2d5a3d]'
+                                : 'absolute inset-0 flex items-center justify-center'
+                        }
+                        style={
+                            bookType === 'bible_map' && bibleMapScrollHeight
+                                ? {
+                                      height: `${Math.max(
+                                          58,
+                                          100 -
+                                              (scrollState === 'max'
+                                                  ? bibleMapScrollHeight.max
+                                                  : bibleMapScrollHeight.mid) -
+                                              bibleMapScrollHeight.offset,
+                                      )}%`,
+                                  }
+                                : undefined
+                        }
+                    >
                         {(() => {
                             // Check for image sequence first
                             if (currentPage.useImageSequence && currentPage.imageSequence && currentPage.imageSequence.length > 0) {
@@ -738,7 +831,9 @@ const BookReader: React.FC = () => {
                                             key={currentImage.url}
                                             src={resolveUrl(currentImage.url)}
                                             alt={`Page ${currentPage.pageNumber} - Image ${currentImageIndex + 1}`}
-                                            className={`w-full h-full object-cover transition-all duration-500 ${getTransitionClass()}`}
+                                            className={`w-full h-full transition-all duration-500 ${
+                                                bookType === 'bible_map' ? 'object-contain object-center' : 'object-cover'
+                                            } ${getTransitionClass()}`}
                                             onError={(e) => {
                                                 e.currentTarget.style.display = 'none';
                                             }}
@@ -802,7 +897,7 @@ const BookReader: React.FC = () => {
                                     <TrimmedPlaybackVideo
                                         ref={videoRef}
                                         src={resolveUrl(bgUrl)}
-                                        className="w-full h-full object-cover"
+                                        className={bookType === 'bible_map' ? 'w-full h-full object-contain object-center' : 'w-full h-full object-cover'}
                                         autoPlay
                                         loop
                                         muted={!pageVideoSoundOn}
@@ -818,7 +913,7 @@ const BookReader: React.FC = () => {
                                 <img
                                     src={resolveUrl(bgUrl)}
                                     alt={`Page ${currentPage.pageNumber}`}
-                                    className="w-full h-full object-cover"
+                                    className={bookType === 'bible_map' ? 'w-full h-full object-contain object-center' : 'w-full h-full object-cover'}
                                     onError={(e) => {
                                         // Hide broken image and show placeholder
                                         e.currentTarget.style.display = 'none';
@@ -833,9 +928,16 @@ const BookReader: React.FC = () => {
                         const scrollUrl = currentPage.scrollUrl || currentPage.files?.scroll?.url;
                         const scrollOffset = currentPage.scrollOffsetY || 0;
                         // Calculate scroll height based on state (like app)
-                        const currentScrollHeight = scrollState === 'max' 
-                            ? (currentPage.scrollMaxHeight || 60)
-                            : (currentPage.scrollMidHeight || 30);
+                        const defaultMid = bookType === 'bible_map' ? 36 : 30;
+                        const defaultMax = bookType === 'bible_map' ? 40 : 60;
+                        const currentScrollHeight =
+                            bookType === 'bible_map' && bibleMapScrollHeight
+                                ? scrollState === 'max'
+                                    ? bibleMapScrollHeight.max
+                                    : bibleMapScrollHeight.mid
+                                : scrollState === 'max'
+                                  ? currentPage.scrollMaxHeight || defaultMax
+                                  : currentPage.scrollMidHeight || defaultMid;
                         
                         // Calculate clip-path to hide text outside scroll area (top AND bottom)
                         const clipInsetTop = scrollUrl 
@@ -933,27 +1035,45 @@ const BookReader: React.FC = () => {
                                                         if (!isTarget) {
                                                             return <span key={wIdx}>{word}{' '}</span>;
                                                         }
+                                                        if (!tapped) {
+                                                            const units = blankSlotUnits(word);
+                                                            return (
+                                                                <button
+                                                                    key={wIdx}
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleTapInteractiveWord(idx, wIdx, word);
+                                                                    }}
+                                                                    className="inline-flex items-center justify-center mx-0.5 px-2 py-0.5 rounded-md border-2 border-dashed border-emerald-600/80 bg-white/90 align-baseline hover:bg-emerald-50 cursor-pointer transition"
+                                                                    style={{
+                                                                        font: 'inherit',
+                                                                        color: 'transparent',
+                                                                        minWidth: `${Math.max(units * 0.55, 1.8)}em`,
+                                                                    }}
+                                                                    aria-label="Tap to reveal word"
+                                                                >
+                                                                    <span className="block w-full border-b-2 border-emerald-700/80 leading-none">
+                                                                        {'\u00A0'.repeat(units)}
+                                                                    </span>
+                                                                </button>
+                                                            );
+                                                        }
                                                         return (
                                                             <button
                                                                 key={wIdx}
                                                                 type="button"
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
-                                                                    if (!tapped) handleTapInteractiveWord(idx, wIdx);
+                                                                    void speakWordOnly(word);
                                                                 }}
-                                                                className={`inline-flex items-center gap-1 mx-0.5 px-2 py-0.5 rounded-md border-2 align-baseline transition ${
-                                                                    tapped
-                                                                        ? 'border-emerald-500 bg-white text-inherit shadow-sm'
-                                                                        : 'border-emerald-500/80 bg-white/95 text-inherit hover:bg-emerald-50 cursor-pointer'
-                                                                }`}
+                                                                className="inline-flex items-center gap-1 mx-0.5 px-2 py-0.5 rounded-md border-2 border-emerald-500 bg-white text-inherit shadow-sm align-baseline transition"
                                                                 style={{ font: 'inherit', color: 'inherit' }}
                                                             >
                                                                 {word}
-                                                                {tapped && (
-                                                                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-500 text-white shrink-0">
-                                                                        <Check className="w-2.5 h-2.5" strokeWidth={3} />
-                                                                    </span>
-                                                                )}
+                                                                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-500 text-white shrink-0">
+                                                                    <Check className="w-2.5 h-2.5" strokeWidth={3} />
+                                                                </span>
                                                             </button>
                                                         );
                                                     })
@@ -1004,9 +1124,17 @@ const BookReader: React.FC = () => {
                         if (!scrollUrl) return null;
                         
                         // Calculate height based on scroll state
-                        const currentScrollHeight = scrollState === 'max'
-                            ? (currentPage.scrollMaxHeight || 60)
-                            : (currentPage.scrollMidHeight || 30);
+                        // bible_map defaults leave upper ~2/3 for full art above parchment
+                        const defaultMid = bookType === 'bible_map' ? 36 : 30;
+                        const defaultMax = bookType === 'bible_map' ? 40 : 60;
+                        const currentScrollHeight =
+                            bookType === 'bible_map' && bibleMapScrollHeight
+                                ? scrollState === 'max'
+                                    ? bibleMapScrollHeight.max
+                                    : bibleMapScrollHeight.mid
+                                : scrollState === 'max'
+                                  ? currentPage.scrollMaxHeight || defaultMax
+                                  : currentPage.scrollMidHeight || defaultMid;
                         
                         return (
                             <div
@@ -1054,7 +1182,7 @@ const BookReader: React.FC = () => {
                             }`}
                             title={
                                 isInteractivePreview && !allInteractiveTapped
-                                    ? 'Tap all circled words to continue'
+                                    ? 'Tap all blanks to continue'
                                     : 'Next page'
                             }
                         >
@@ -1077,7 +1205,7 @@ const BookReader: React.FC = () => {
                                 {allInteractiveTapped
                                     ? 'All words found — next page unlocked'
                                     : showTapHint
-                                        ? 'Tap the circled words first'
+                                        ? 'Tap the blanks first — then Read page unlocks'
                                         : `Tap words ${interactiveTargets.filter((t) => tappedInteractiveKeys.has(`${t.boxIndex}:${t.wordIndex}`)).length}/${interactiveTargets.length}`}
                             </div>
                         </div>
