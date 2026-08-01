@@ -14,6 +14,8 @@ import {
     Unlink,
     Check,
     Clapperboard,
+    Sparkles,
+    Loader2,
 } from 'lucide-react';
 import apiClient, { getMediaUrl } from '../services/apiClient';
 import SlidingPuzzlePreview from '../components/SlidingPuzzlePreview';
@@ -195,8 +197,11 @@ const BibleMapStoryForm: React.FC = () => {
     const [creatingBook, setCreatingBook] = useState(false);
     const [uploadingPuzzleImage, setUploadingPuzzleImage] = useState(false);
     const [uploadingColoring, setUploadingColoring] = useState(false);
+    const [generatingPuzzleAi, setGeneratingPuzzleAi] = useState(false);
+    const [generatingColoringAi, setGeneratingColoringAi] = useState(false);
     const [previewColoringId, setPreviewColoringId] = useState<string | null>(null);
     const [savingPalette, setSavingPalette] = useState(false);
+    const [showOneClick, setShowOneClick] = useState(true);
 
     const update = <K extends keyof StoryFormState>(key: K, value: StoryFormState[K]) => {
         setForm((prev) => ({ ...prev, [key]: value }));
@@ -687,6 +692,99 @@ const BibleMapStoryForm: React.FC = () => {
         });
     };
 
+    const handleGeneratePuzzleAi = async () => {
+        if (isNew || !id) {
+            alert('Save the story pack first, then generate puzzle art.');
+            return;
+        }
+        if (!form.bookId) {
+            alert('Generate Book age scripts (and ideally page images) first so puzzle art can match the story.');
+            setTab('book');
+            return;
+        }
+        setGeneratingPuzzleAi(true);
+        try {
+            const res = await apiClient.post(
+                `/api/bible-map/stories/${id}/generate-puzzle-image`,
+                {},
+                { timeout: 300000 },
+            );
+            const imageUrl = String(res.data?.imageUrl || res.data?.puzzle?.imageUrl || '').trim();
+            if (imageUrl) {
+                setForm((prev) => ({
+                    ...prev,
+                    puzzleEnabled: true,
+                    puzzleType: 'sliding_image',
+                    puzzleImageUrl: imageUrl,
+                }));
+            }
+            alert(
+                res.data?.characterNames?.length
+                    ? `Puzzle image ready (${res.data.characterNames.join(', ')}). Save the pack to keep it.`
+                    : 'Puzzle image ready. Save the pack to keep it.',
+            );
+        } catch (err: unknown) {
+            console.error(err);
+            const msg =
+                (err as { response?: { data?: { message?: string; error?: string } } })?.response
+                    ?.data?.message ||
+                (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+                'Failed to generate puzzle image';
+            alert(msg);
+        } finally {
+            setGeneratingPuzzleAi(false);
+        }
+    };
+
+    const handleGenerateColoringAi = async () => {
+        if (isNew || !id) {
+            alert('Save the story pack first, then generate a coloring page.');
+            return;
+        }
+        if (!form.bookId) {
+            alert('Generate Book age scripts first so coloring can match the story.');
+            setTab('book');
+            return;
+        }
+        setGeneratingColoringAi(true);
+        try {
+            const res = await apiClient.post(
+                `/api/bible-map/stories/${id}/generate-coloring-page`,
+                {},
+                { timeout: 300000 },
+            );
+            const page = res.data?.page as ColoringPage | undefined;
+            if (page?._id) {
+                setColoringPages((prev) => {
+                    if (prev.some((p) => p._id === page._id)) return prev;
+                    return [...prev, page].sort((a, b) => a.pageNumber - b.pageNumber);
+                });
+                setForm((prev) => ({
+                    ...prev,
+                    coloringPageIds: prev.coloringPageIds.includes(page._id)
+                        ? prev.coloringPageIds
+                        : [...prev.coloringPageIds, page._id],
+                }));
+                setPreviewColoringId(page._id);
+            }
+            alert(
+                res.data?.regionCount
+                    ? `Coloring page created with ${res.data.regionCount} tap regions. Save the pack to keep it.`
+                    : 'Coloring page created. Save the pack to keep it.',
+            );
+        } catch (err: unknown) {
+            console.error(err);
+            const msg =
+                (err as { response?: { data?: { message?: string; error?: string } } })?.response
+                    ?.data?.message ||
+                (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+                'Failed to generate coloring page';
+            alert(msg);
+        } finally {
+            setGeneratingColoringAi(false);
+        }
+    };
+
     if (loading) {
         return <div className="text-gray-500 py-12 text-center">Loading story pack…</div>;
     }
@@ -716,17 +814,48 @@ const BibleMapStoryForm: React.FC = () => {
                             Bundle Read + Puzzle + Coloring + Quiz + Game for one map adventure.
                         </p>
                     </div>
-                    <button
-                        type="button"
-                        onClick={() => void handleSave()}
-                        disabled={saving}
-                        className="inline-flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-emerald-700 disabled:opacity-50 shrink-0 shadow-sm"
-                    >
-                        <Save className="w-4 h-4" />
-                        {saveLabel}
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <button
+                            type="button"
+                            onClick={() => setShowOneClick((v) => !v)}
+                            className="inline-flex items-center gap-2 bg-amber-700 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-amber-800 shadow-sm"
+                        >
+                            <Sparkles className="w-4 h-4" />
+                            {showOneClick ? 'Hide one-click' : 'One-click create all'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => void handleSave()}
+                            disabled={saving}
+                            className="inline-flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-emerald-700 disabled:opacity-50 shadow-sm"
+                        >
+                            <Save className="w-4 h-4" />
+                            {saveLabel}
+                        </button>
+                    </div>
                 </div>
             </div>
+
+            {showOneClick ? (
+                <div className="mb-4" id="one-click-pack">
+                    <OneClickPackPanel
+                        mode={isNew ? 'new' : 'existing'}
+                        storyId={isNew ? null : id}
+                        islandId={form.islandId}
+                        title={form.title}
+                        scriptureRef={form.scriptureRef}
+                        verse={form.verse}
+                        verseRef={form.verseRef}
+                        onComplete={(completedStoryId) => {
+                            if (isNew || completedStoryId !== id) {
+                                navigate(`/bible-map/stories/${completedStoryId}`);
+                            } else {
+                                window.location.assign(`/bible-map/stories/${completedStoryId}`);
+                            }
+                        }}
+                    />
+                </div>
+            ) : null}
 
             {/* Readiness strip */}
             <div className="flex flex-wrap gap-2 mb-4">
@@ -775,26 +904,6 @@ const BibleMapStoryForm: React.FC = () => {
             <div className="bg-white rounded-xl border border-gray-200 p-6">
                 {tab === 'overview' && (
                     <div className="space-y-5">
-                        <OneClickPackPanel
-                            mode={isNew ? 'new' : 'existing'}
-                            storyId={isNew ? null : id}
-                            islandId={form.islandId}
-                            title={form.title}
-                            scriptureRef={form.scriptureRef}
-                            verse={form.verse}
-                            verseRef={form.verseRef}
-                            onComplete={(completedStoryId) => {
-                                if (isNew || completedStoryId !== id) {
-                                    navigate(`/bible-map/stories/${completedStoryId}`);
-                                } else {
-                                    // Force remount/reload of pack data
-                                    window.location.assign(
-                                        `/bible-map/stories/${completedStoryId}`,
-                                    );
-                                }
-                            }}
-                        />
-
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1105,6 +1214,30 @@ const BibleMapStoryForm: React.FC = () => {
                             Kids slide image tiles into place. Easy = 3×3, Medium = 4×4, Hard = 5×5.
                             App route: /sail/{'{island}'}/lesson/puzzle
                         </p>
+
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 flex flex-wrap items-center justify-between gap-3">
+                            <div className="text-sm text-amber-950 min-w-0">
+                                <p className="font-semibold">Generate puzzle image with AI</p>
+                                <p className="text-amber-900/80 text-xs mt-0.5">
+                                    Uses the same character refs, style image, and image provider as
+                                    the Book tab. Generate book scripts first.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => void handleGeneratePuzzleAi()}
+                                disabled={generatingPuzzleAi || isNew}
+                                className="inline-flex items-center gap-2 bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-amber-800 disabled:opacity-50 shrink-0"
+                            >
+                                {generatingPuzzleAi ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <Sparkles className="w-4 h-4" />
+                                )}
+                                {generatingPuzzleAi ? 'Generating…' : 'Generate puzzle image'}
+                            </button>
+                        </div>
+
                         {form.puzzleEnabled && (
                             <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
                                 <div className="space-y-5 min-w-0">
@@ -1244,6 +1377,29 @@ const BibleMapStoryForm: React.FC = () => {
                             <p className="text-xs text-sky-700 pt-1">
                                 App route: /sail/{'{island}'}/lesson/coloring
                             </p>
+                        </div>
+
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 flex flex-wrap items-center justify-between gap-3">
+                            <div className="text-sm text-amber-950 min-w-0">
+                                <p className="font-semibold">Generate coloring page with AI</p>
+                                <p className="text-amber-900/80 text-xs mt-0.5">
+                                    Creates line art from the story using Book tab character refs +
+                                    style image, then auto-segments tap regions.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => void handleGenerateColoringAi()}
+                                disabled={generatingColoringAi || isNew}
+                                className="inline-flex items-center gap-2 bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-amber-800 disabled:opacity-50 shrink-0"
+                            >
+                                {generatingColoringAi ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <Sparkles className="w-4 h-4" />
+                                )}
+                                {generatingColoringAi ? 'Generating…' : 'Generate coloring page'}
+                            </button>
                         </div>
 
                         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">

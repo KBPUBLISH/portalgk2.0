@@ -247,11 +247,12 @@ const OneClickPackPanel: React.FC<OneClickPackPanelProps> = ({
                 </div>
                 <div className="min-w-0">
                     <h3 className="text-base font-semibold text-gray-900">
-                        One-click story pack
+                        One-click create all
                     </h3>
                     <p className="text-sm text-gray-600 mt-0.5">
-                        Builds scripts, images, quizzes, puzzle, and coloring in order. Scene
-                        video and game stay manual. Images can take several minutes.
+                        Builds scripts → images → quizzes → puzzle → coloring in order (uses Book
+                        character/style refs). Scene video and game stay manual. Images can take
+                        several minutes.
                     </p>
                 </div>
             </div>
