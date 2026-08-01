@@ -700,6 +700,33 @@ const BibleMapStoryForm: React.FC = () => {
         }
     };
 
+    const handleUnlinkBook = async () => {
+        if (isNew || !id) return;
+        if (
+            !window.confirm(
+                'Unlink this book from the story pack? The book and its pages stay in the library — only the connection is removed. Generate age scripts later will create/link a new book.',
+            )
+        ) {
+            return;
+        }
+        setSaving(true);
+        try {
+            await apiClient.put(`/api/bible-map/stories/${id}`, { bookId: null });
+            update('bookId', null);
+            setLinkedBook(null);
+        } catch (err: unknown) {
+            console.error(err);
+            const msg =
+                (err as { response?: { data?: { error?: string; message?: string } } })?.response
+                    ?.data?.message ||
+                (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+                'Failed to unlink book';
+            alert(msg);
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const toggleColoringPage = (pageId: string) => {
         setForm((prev) => {
             const has = prev.coloringPageIds.includes(pageId);
@@ -1098,14 +1125,14 @@ const BibleMapStoryForm: React.FC = () => {
                             </div>
                         ) : (
                             <>
-                                {form.bookId && linkedBook && (
+                                {form.bookId && (
                                     <div className="flex flex-wrap items-center gap-3 p-3 border border-gray-200 rounded-lg bg-gray-50">
                                         <div className="flex-1 min-w-0">
                                             <div className="text-sm font-semibold text-gray-900 truncate">
-                                                {linkedBook.title}
+                                                {linkedBook?.title || 'Linked Bible Map book'}
                                             </div>
                                             <div className="text-xs text-gray-500 capitalize">
-                                                {linkedBook.status} · bible_map
+                                                {linkedBook?.status || 'draft'} · bible_map
                                             </div>
                                         </div>
                                         <Link
@@ -1117,11 +1144,9 @@ const BibleMapStoryForm: React.FC = () => {
                                         </Link>
                                         <button
                                             type="button"
-                                            onClick={() => {
-                                                update('bookId', null);
-                                                setLinkedBook(null);
-                                            }}
-                                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-red-600 text-xs hover:bg-red-50"
+                                            disabled={saving}
+                                            onClick={() => void handleUnlinkBook()}
+                                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-red-600 text-xs hover:bg-red-50 disabled:opacity-50"
                                         >
                                             <Unlink className="w-3.5 h-3.5" />
                                             Unlink
