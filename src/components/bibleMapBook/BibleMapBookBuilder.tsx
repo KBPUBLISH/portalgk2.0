@@ -75,6 +75,7 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
     const [uploadingMusic, setUploadingMusic] = useState(false);
     const [imageStatus, setImageStatus] = useState<string | null>(null);
     const [generatingPageImage, setGeneratingPageImage] = useState<number | null>(null);
+    const [enhancingSource, setEnhancingSource] = useState(false);
 
     const applyBookMusic = (book: unknown) => {
         const url = backgroundMusicUrlFromBook(book);
@@ -158,6 +159,43 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
         setSelectedCharacterIds((prev) =>
             prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id].slice(0, 4),
         );
+    };
+
+    const handleEnhanceSource = async () => {
+        const trimmed = sourceText.trim();
+        if (trimmed.length < 8) {
+            alert('Type a short Bible story idea first (at least a sentence), then Enhance prompt.');
+            return;
+        }
+        setEnhancingSource(true);
+        try {
+            const res = await apiClient.post(
+                '/api/bible-map/enhance-source-story',
+                {
+                    prompt: trimmed,
+                    title: packTitle || undefined,
+                    scriptureRef: scriptureRef || undefined,
+                    verse: verse || undefined,
+                },
+                { timeout: 120000 },
+            );
+            const enhanced = String(res.data?.sourceText || '').trim();
+            if (!enhanced) {
+                alert('Could not enhance that prompt. Try a clearer story idea.');
+                return;
+            }
+            setSourceText(enhanced);
+        } catch (err: unknown) {
+            console.error(err);
+            const msg =
+                (err as { response?: { data?: { message?: string; error?: string } } })?.response
+                    ?.data?.message ||
+                (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+                'Failed to enhance prompt';
+            alert(msg);
+        } finally {
+            setEnhancingSource(false);
+        }
     };
 
     const persistStyleReference = async (url: string | null) => {
@@ -678,6 +716,19 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                         placeholder="Example: God made the world in six days. On day six He made Adam from dust and breathed life into him. God made a beautiful garden for Adam to live in…"
                     />
+                    <button
+                        type="button"
+                        disabled={enhancingSource || generating}
+                        onClick={() => void handleEnhanceSource()}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-violet-300 bg-white text-violet-800 text-xs font-medium hover:bg-violet-50 disabled:opacity-50"
+                    >
+                        {enhancingSource ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                            <Sparkles className="w-3.5 h-3.5" />
+                        )}
+                        {enhancingSource ? 'Enhancing…' : 'Enhance prompt'}
+                    </button>
                     {characterPicker}
                     <div className="flex flex-wrap items-center gap-3">
                         <label className="text-xs text-gray-600 flex items-center gap-1">
@@ -693,7 +744,7 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                         </label>
                         <button
                             type="button"
-                            disabled={generating}
+                            disabled={generating || enhancingSource}
                             onClick={() => void handleGenerateScripts()}
                             className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-600 text-white text-sm hover:bg-violet-700 disabled:opacity-50"
                         >
@@ -823,6 +874,29 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                     className="w-full border border-violet-200 rounded-lg px-3 py-2 text-sm bg-white"
                     placeholder="Example: God made the world in six days. On day six He made Adam from dust and breathed life into him. God placed Adam in a beautiful garden…"
                 />
+                <div className="flex flex-wrap items-center gap-2">
+                    <button
+                        type="button"
+                        disabled={
+                            enhancingSource ||
+                            generating ||
+                            generatingImages ||
+                            generatingPageImage != null
+                        }
+                        onClick={() => void handleEnhanceSource()}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-violet-300 bg-white text-violet-800 text-xs font-medium hover:bg-violet-50 disabled:opacity-50"
+                    >
+                        {enhancingSource ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                            <Sparkles className="w-3.5 h-3.5" />
+                        )}
+                        {enhancingSource ? 'Enhancing…' : 'Enhance prompt'}
+                    </button>
+                    <span className="text-[11px] text-violet-700/80">
+                        Turns a short idea into a clear who / what / ending summary for scripts.
+                    </span>
+                </div>
                 {characterPicker}
                 <div className="flex flex-wrap items-center gap-2">
                     <label className="text-xs text-violet-800 flex items-center gap-1">
@@ -838,7 +912,12 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                     </label>
                     <button
                         type="button"
-                        disabled={generating || generatingImages || generatingPageImage != null}
+                        disabled={
+                            generating ||
+                            generatingImages ||
+                            generatingPageImage != null ||
+                            enhancingSource
+                        }
                         onClick={() => void handleGenerateScripts()}
                         className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-600 text-white text-sm hover:bg-violet-700 disabled:opacity-50"
                     >
