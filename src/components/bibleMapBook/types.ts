@@ -1,3 +1,5 @@
+import { sanitizeInteractiveWordIndices } from '../../utils/interactiveWords';
+
 export type ReadingLevelKey = 'ages_3_5' | 'ages_6_7' | 'ages_8_plus';
 
 export const READING_LEVELS: Array<{ key: ReadingLevelKey; label: string; short: string }> = [
@@ -66,11 +68,13 @@ export function normalizeReadingLevels(raw: unknown): ReadingLevels {
     const norm = (entry: unknown): ReadingLevelText => {
         if (!entry || typeof entry !== 'object') return emptyLevel();
         const e = entry as Partial<ReadingLevelText>;
+        const text = String(e.text || '');
         return {
-            text: String(e.text || ''),
-            interactiveWordIndices: Array.isArray(e.interactiveWordIndices)
-                ? e.interactiveWordIndices.filter((i) => Number.isInteger(i) && i >= 0)
-                : [],
+            text,
+            interactiveWordIndices: sanitizeInteractiveWordIndices(
+                text,
+                Array.isArray(e.interactiveWordIndices) ? e.interactiveWordIndices : [],
+            ),
         };
     };
     return {

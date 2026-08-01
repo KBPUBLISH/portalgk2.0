@@ -40,6 +40,7 @@ import {
     scaleAuthoredFontToCanvas,
 } from '../utils/appBookTypography';
 import {
+    isImportantInteractiveWord,
     sanitizeInteractiveWordIndices,
     splitInteractiveWords,
     toggleInteractiveWordIndex,
@@ -2992,38 +2993,59 @@ const PageEditor: React.FC = () => {
                                         </label>
                                     </div>
                                     <p className="text-[11px] text-emerald-700/90">
-                                        Click words to circle them. Readers must tap these before turning the page.
+                                        Click important words (names, nouns, action words) — not filler like “the” or “and”.
+                                        Readers must tap these before turning the page.
                                     </p>
                                     <div className="flex flex-wrap gap-1.5">
-                                        {splitInteractiveWords(selectedBox.text).map((word, wIdx) => {
-                                            const selected = (selectedBox.interactiveWordIndices || []).includes(wIdx);
-                                            return (
-                                                <button
-                                                    key={`${selectedBox.id}-word-${wIdx}`}
-                                                    type="button"
-                                                    onClick={() =>
-                                                        updateTextBox(selectedBox.id, {
-                                                            interactiveWordIndices: toggleInteractiveWordIndex(
-                                                                selectedBox.interactiveWordIndices,
-                                                                wIdx,
-                                                            ),
-                                                        })
-                                                    }
-                                                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border transition ${
-                                                        selected
-                                                            ? 'bg-white border-emerald-500 text-emerald-900 shadow-sm'
-                                                            : 'bg-white/60 border-emerald-200 text-gray-700 hover:border-emerald-400'
-                                                    }`}
-                                                >
-                                                    {word}
-                                                    {selected && (
-                                                        <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-emerald-500 text-white">
-                                                            <Check className="w-2.5 h-2.5" strokeWidth={3} />
-                                                        </span>
-                                                    )}
-                                                </button>
+                                        {(() => {
+                                            const markedIndices = sanitizeInteractiveWordIndices(
+                                                selectedBox.text,
+                                                selectedBox.interactiveWordIndices,
                                             );
-                                        })}
+                                            return splitInteractiveWords(selectedBox.text).map((word, wIdx) => {
+                                                const selected = markedIndices.includes(wIdx);
+                                                const canMark = selected || isImportantInteractiveWord(word);
+                                                return (
+                                                    <button
+                                                        key={`${selectedBox.id}-word-${wIdx}`}
+                                                        type="button"
+                                                        disabled={!canMark}
+                                                        title={
+                                                            !canMark
+                                                                ? 'Filler words can’t be blanks'
+                                                                : undefined
+                                                        }
+                                                        onClick={() =>
+                                                            updateTextBox(selectedBox.id, {
+                                                                interactiveWordIndices:
+                                                                    sanitizeInteractiveWordIndices(
+                                                                        selectedBox.text,
+                                                                        toggleInteractiveWordIndex(
+                                                                            markedIndices,
+                                                                            wIdx,
+                                                                            selectedBox.text,
+                                                                        ),
+                                                                    ),
+                                                            })
+                                                        }
+                                                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border transition ${
+                                                            selected
+                                                                ? 'bg-white border-emerald-500 text-emerald-900 shadow-sm'
+                                                                : canMark
+                                                                  ? 'bg-white/60 border-emerald-200 text-gray-700 hover:border-emerald-400'
+                                                                  : 'bg-white/40 border-transparent text-gray-400 cursor-default'
+                                                        }`}
+                                                    >
+                                                        {word}
+                                                        {selected && (
+                                                            <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-emerald-500 text-white">
+                                                                <Check className="w-2.5 h-2.5" strokeWidth={3} />
+                                                            </span>
+                                                        )}
+                                                    </button>
+                                                );
+                                            });
+                                        })()}
                                     </div>
                                     {(selectedBox.interactiveWordIndices?.length ?? 0) > 0 && (
                                         <button

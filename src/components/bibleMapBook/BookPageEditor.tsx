@@ -18,6 +18,7 @@ interface BookPageEditorProps {
     page: ReadingPageDraft;
     bookId: string;
     level: ReadingLevelKey;
+    bookPages?: ReadingPageDraft[];
     onLevelChange: (level: ReadingLevelKey) => void;
     onChange: (next: ReadingPageDraft) => void;
     onGenerateImage?: () => void;
@@ -29,6 +30,7 @@ const BookPageEditor: React.FC<BookPageEditorProps> = ({
     page,
     bookId,
     level,
+    bookPages,
     onLevelChange,
     onChange,
     onGenerateImage,
@@ -357,6 +359,7 @@ const BookPageEditor: React.FC<BookPageEditorProps> = ({
             <BookPhonePreview
                 page={page}
                 level={level}
+                bookPages={bookPages}
                 editTapWords
                 onChangeLevelText={patchLevel}
             />

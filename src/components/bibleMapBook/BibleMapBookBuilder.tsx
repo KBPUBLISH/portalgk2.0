@@ -807,6 +807,7 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                         <BookPageEditor
                             page={current}
                             level={level}
+                            bookPages={pages}
                             onLevelChange={setLevel}
                             onChange={(next) =>
                                 setPages((prev) =>
