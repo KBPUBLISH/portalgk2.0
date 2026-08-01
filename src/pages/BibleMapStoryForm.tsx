@@ -29,6 +29,7 @@ import {
     type SceneTrigger,
 } from '../components/sceneStudio/types';
 import BibleMapBookBuilder from '../components/bibleMapBook/BibleMapBookBuilder';
+import OneClickPackPanel from '../components/bibleMapBook/OneClickPackPanel';
 
 type PackTab = 'overview' | 'scene' | 'book' | 'puzzle' | 'coloring' | 'quiz' | 'game';
 
@@ -774,6 +775,26 @@ const BibleMapStoryForm: React.FC = () => {
             <div className="bg-white rounded-xl border border-gray-200 p-6">
                 {tab === 'overview' && (
                     <div className="space-y-5">
+                        <OneClickPackPanel
+                            mode={isNew ? 'new' : 'existing'}
+                            storyId={isNew ? null : id}
+                            islandId={form.islandId}
+                            title={form.title}
+                            scriptureRef={form.scriptureRef}
+                            verse={form.verse}
+                            verseRef={form.verseRef}
+                            onComplete={(completedStoryId) => {
+                                if (isNew || completedStoryId !== id) {
+                                    navigate(`/bible-map/stories/${completedStoryId}`);
+                                } else {
+                                    // Force remount/reload of pack data
+                                    window.location.assign(
+                                        `/bible-map/stories/${completedStoryId}`,
+                                    );
+                                }
+                            }}
+                        />
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1018,6 +1039,21 @@ const BibleMapStoryForm: React.FC = () => {
                                         </select>
                                     </div>
                                 )}
+
+                                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                                    <span>
+                                        Need everything at once? Run{' '}
+                                        <span className="font-semibold">One-click generate pack</span>{' '}
+                                        on Overview (scripts → images → quiz → puzzle → coloring).
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setTab('overview')}
+                                        className="shrink-0 text-amber-800 font-medium underline hover:no-underline"
+                                    >
+                                        Open Overview
+                                    </button>
+                                </div>
 
                                 <BibleMapBookBuilder
                                     storyId={id!}
