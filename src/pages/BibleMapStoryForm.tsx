@@ -79,9 +79,30 @@ const DEFAULT_COLORING_PALETTE = [
     '#9B59B6',
     '#E91E63',
     '#1ABC9C',
-    '#FFFFFF',
+    '#F1948A',
+    '#F8C471',
+    '#F9E79F',
+    '#A9DFBF',
+    '#AED6F1',
+    '#D7BDE2',
+    '#F5B7B1',
+    '#27AE60',
+    '#1E8449',
+    '#5DADE2',
+    '#1A5276',
+    '#D4AC0D',
+    '#F5CBA7',
+    '#D4A574',
     '#8D6E63',
+    '#5D4037',
+    '#FFFFFF',
+    '#BDC3C7',
+    '#7F8C8D',
+    '#2C3E50',
+    '#000000',
 ];
+
+const MAX_COLORING_PALETTE = 32;
 
 interface StoryFormState {
     islandId: string;
@@ -201,7 +222,6 @@ const BibleMapStoryForm: React.FC = () => {
     const [generatingColoringAi, setGeneratingColoringAi] = useState(false);
     const [previewColoringId, setPreviewColoringId] = useState<string | null>(null);
     const [savingPalette, setSavingPalette] = useState(false);
-    const [showOneClick, setShowOneClick] = useState(true);
 
     const update = <K extends keyof StoryFormState>(key: K, value: StoryFormState[K]) => {
         setForm((prev) => ({ ...prev, [key]: value }));
@@ -814,48 +834,36 @@ const BibleMapStoryForm: React.FC = () => {
                             Bundle Read + Puzzle + Coloring + Quiz + Game for one map adventure.
                         </p>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 shrink-0">
-                        <button
-                            type="button"
-                            onClick={() => setShowOneClick((v) => !v)}
-                            className="inline-flex items-center gap-2 bg-amber-700 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-amber-800 shadow-sm"
-                        >
-                            <Sparkles className="w-4 h-4" />
-                            {showOneClick ? 'Hide one-click' : 'One-click create all'}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => void handleSave()}
-                            disabled={saving}
-                            className="inline-flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-emerald-700 disabled:opacity-50 shadow-sm"
-                        >
-                            <Save className="w-4 h-4" />
-                            {saveLabel}
-                        </button>
-                    </div>
+                    <button
+                        type="button"
+                        onClick={() => void handleSave()}
+                        disabled={saving}
+                        className="inline-flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-emerald-700 disabled:opacity-50 shrink-0 shadow-sm"
+                    >
+                        <Save className="w-4 h-4" />
+                        {saveLabel}
+                    </button>
                 </div>
             </div>
 
-            {showOneClick ? (
-                <div className="mb-4" id="one-click-pack">
-                    <OneClickPackPanel
-                        mode={isNew ? 'new' : 'existing'}
-                        storyId={isNew ? null : id}
-                        islandId={form.islandId}
-                        title={form.title}
-                        scriptureRef={form.scriptureRef}
-                        verse={form.verse}
-                        verseRef={form.verseRef}
-                        onComplete={(completedStoryId) => {
-                            if (isNew || completedStoryId !== id) {
-                                navigate(`/bible-map/stories/${completedStoryId}`);
-                            } else {
-                                window.location.assign(`/bible-map/stories/${completedStoryId}`);
-                            }
-                        }}
-                    />
-                </div>
-            ) : null}
+            <div className="mb-4" id="one-click-pack">
+                <OneClickPackPanel
+                    mode={isNew ? 'new' : 'existing'}
+                    storyId={isNew ? null : id}
+                    islandId={form.islandId}
+                    title={form.title}
+                    scriptureRef={form.scriptureRef}
+                    verse={form.verse}
+                    verseRef={form.verseRef}
+                    onComplete={(completedStoryId) => {
+                        if (isNew || completedStoryId !== id) {
+                            navigate(`/bible-map/stories/${completedStoryId}`);
+                        } else {
+                            window.location.assign(`/bible-map/stories/${completedStoryId}`);
+                        }
+                    }}
+                />
+            </div>
 
             {/* Readiness strip */}
             <div className="flex flex-wrap gap-2 mb-4">
@@ -1579,11 +1587,11 @@ const BibleMapStoryForm: React.FC = () => {
                                                                 page._id,
                                                                 [...palette, '#95A5A6'].slice(
                                                                     0,
-                                                                    16,
+                                                                    MAX_COLORING_PALETTE,
                                                                 ),
                                                             )
                                                         }
-                                                        disabled={palette.length >= 16}
+                                                        disabled={palette.length >= MAX_COLORING_PALETTE}
                                                     >
                                                         + color
                                                     </button>
