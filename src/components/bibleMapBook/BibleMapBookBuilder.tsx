@@ -332,12 +332,17 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
             );
         } catch (err: unknown) {
             console.error(err);
-            const data = (err as { response?: { data?: { message?: string; error?: string } } })
-                ?.response?.data;
+            const data = (
+                err as {
+                    response?: {
+                        data?: { message?: string; error?: string; rawPreview?: string };
+                    };
+                }
+            )?.response?.data;
             const msg =
                 data?.message ||
                 data?.error ||
-                'Script generation failed. Check that the backend is up, then try a clearer story summary.';
+                'Script generation failed. Check that the backend is up, then try again.';
             alert(msg);
         } finally {
             setGenerating(false);
