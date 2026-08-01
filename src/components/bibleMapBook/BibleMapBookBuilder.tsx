@@ -191,6 +191,8 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                     title: packTitle,
                     referenceCharacterIds: selectedCharacterIds,
                     generateImages: false,
+                    // Fresh scripts — do not revive deleted pages / old images
+                    preserveMedia: false,
                     imageProvider,
                     styleReferenceImageUrl: styleReferenceImageUrl || undefined,
                 },
@@ -205,7 +207,7 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
             setPages(list);
             setActivePage(0);
             alert(
-                `Generated ${list.length} age-leveled pages. Use Generate images when you’re ready for art.`,
+                `Generated ${list.length} fresh age-leveled pages (previous pages/images for this book were replaced). Use Generate images when you’re ready for art.`,
             );
         } catch (err: unknown) {
             console.error(err);
@@ -277,9 +279,7 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
         setImageStatus(null);
         try {
             // Persist current page text first so the image prompt uses latest scripts
-            await apiClient.put(`/api/bible-map/stories/${storyId}/reading-pages`, {
-                pages,
-            });
+            await persistPages(pages, { quiet: true });
             const res = await apiClient.post(
                 `/api/bible-map/stories/${storyId}/generate-page-images`,
                 {
@@ -316,6 +316,33 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
         }
     };
 
+    const persistPages = async (nextPages: ReadingPageDraft[], opts?: { quiet?: boolean }) => {
+        if (!bookId && nextPages.length === 0) {
+            throw new Error('Create a book or generate pages first');
+        }
+        const res = await apiClient.put(`/api/bible-map/stories/${storyId}/reading-pages`, {
+            pages: nextPages.map((p, i) => ({
+                ...p,
+                pageNumber: i + 1,
+                // Never re-send stale nested files blobs — backgroundUrl/scrollUrl are source of truth
+                files: undefined,
+            })),
+        });
+        const list = Array.isArray(res.data.pages)
+            ? res.data.pages.map((p: Record<string, unknown>) => pageFromApi(p))
+            : nextPages;
+        setPages(list);
+        if (res.data.bookId) onBookLinked(res.data.bookId);
+        if (!opts?.quiet) {
+            alert(
+                list.length === 0
+                    ? 'All reading pages cleared from this book.'
+                    : 'Reading pages saved',
+            );
+        }
+        return list;
+    };
+
     const handleSave = async () => {
         if (!bookId && pages.length === 0) {
             alert('Create a book or generate pages first');
@@ -323,22 +350,12 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
         }
         setSaving(true);
         try {
-            const res = await apiClient.put(`/api/bible-map/stories/${storyId}/reading-pages`, {
-                pages: pages.map((p, i) => ({
-                    ...p,
-                    pageNumber: i + 1,
-                })),
-            });
-            const list = Array.isArray(res.data.pages)
-                ? res.data.pages.map((p: Record<string, unknown>) => pageFromApi(p))
-                : pages;
-            setPages(list);
-            if (res.data.bookId) onBookLinked(res.data.bookId);
-            alert('Reading pages saved');
+            await persistPages(pages);
         } catch (err: unknown) {
             console.error(err);
             const msg =
                 (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+                (err as Error)?.message ||
                 'Save failed';
             alert(msg);
         } finally {
@@ -351,15 +368,58 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
         setActivePage(pages.length);
     };
 
-    const removePage = (idx: number) => {
-        if (pages.length <= 1) {
+    const removePage = async (idx: number) => {
+        const removingLast = pages.length <= 1;
+        if (
+            !window.confirm(
+                removingLast
+                    ? 'Remove the last page and clear all reading pages from the book?'
+                    : `Remove page ${pages[idx]?.pageNumber || idx + 1}? This will save immediately.`,
+            )
+        ) {
+            return;
+        }
+        const next = removingLast
+            ? []
+            : pages.filter((_, i) => i !== idx).map((p, i) => ({ ...p, pageNumber: i + 1 }));
+        setPages(next);
+        setActivePage(next.length ? Math.min(idx, next.length - 1) : 0);
+        if (!bookId) return;
+        setSaving(true);
+        try {
+            await persistPages(next, { quiet: true });
+        } catch (err: unknown) {
+            console.error(err);
+            alert('Could not save page removal — try Save pages again.');
+            void loadPages();
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const clearAllPages = async () => {
+        if (!bookId) {
             setPages([]);
             setActivePage(0);
             return;
         }
-        const next = pages.filter((_, i) => i !== idx).map((p, i) => ({ ...p, pageNumber: i + 1 }));
-        setPages(next);
-        setActivePage(Math.min(idx, next.length - 1));
+        if (
+            !window.confirm(
+                'Clear ALL reading pages and images for this book? You can generate fresh scripts afterward.',
+            )
+        ) {
+            return;
+        }
+        setSaving(true);
+        try {
+            await persistPages([]);
+            setActivePage(0);
+        } catch (err: unknown) {
+            console.error(err);
+            alert('Failed to clear pages');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const characterPicker = (
@@ -577,7 +637,7 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                 <div className="flex flex-wrap gap-2">
                     <button
                         type="button"
-                        disabled={saving || pages.length === 0}
+                        disabled={saving || (!bookId && pages.length === 0)}
                         onClick={() => void handleSave()}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs hover:bg-indigo-700 disabled:opacity-50"
                     >
@@ -587,6 +647,15 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                             <Save className="w-3.5 h-3.5" />
                         )}
                         Save pages
+                    </button>
+                    <button
+                        type="button"
+                        disabled={saving || !bookId || pages.length === 0}
+                        onClick={() => void clearAllPages()}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-700 text-xs hover:bg-red-50 disabled:opacity-50"
+                    >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Clear all pages
                     </button>
                 </div>
             </div>
@@ -726,8 +795,9 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                         </button>
                         <button
                             type="button"
-                            onClick={() => removePage(activePage)}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-red-600 hover:bg-red-50"
+                            disabled={saving}
+                            onClick={() => void removePage(activePage)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
                         >
                             <Trash2 className="w-3.5 h-3.5" /> Remove
                         </button>
