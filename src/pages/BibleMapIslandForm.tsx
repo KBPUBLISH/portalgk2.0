@@ -9,7 +9,6 @@ import {
     Rocket,
     Check,
     AlertTriangle,
-    Video,
 } from 'lucide-react';
 import apiClient, { getMediaUrl } from '../services/apiClient';
 
@@ -25,8 +24,6 @@ interface IslandFormState {
     order: number;
     status: 'draft' | 'published' | 'archived';
     unlockRule: 'always' | 'previous_complete';
-    introVideoUrl: string;
-    sceneBgVideoUrl: string;
 }
 
 interface LaunchReadiness {
@@ -58,8 +55,6 @@ const empty: IslandFormState = {
     order: 0,
     status: 'draft',
     unlockRule: 'previous_complete',
-    introVideoUrl: '',
-    sceneBgVideoUrl: '',
 };
 
 const BibleMapIslandForm: React.FC = () => {
@@ -75,13 +70,8 @@ const BibleMapIslandForm: React.FC = () => {
     const [launching, setLaunching] = useState(false);
     const [uploadingMap, setUploadingMap] = useState(false);
     const [uploadingSail, setUploadingSail] = useState(false);
-    const [uploadingIntro, setUploadingIntro] = useState(false);
-    const [uploadingSceneBg, setUploadingSceneBg] = useState(false);
-    const [previewMode, setPreviewMode] = useState<'scene' | 'intro'>('scene');
     const mapInputRef = useRef<HTMLInputElement>(null);
     const sailInputRef = useRef<HTMLInputElement>(null);
-    const introVideoInputRef = useRef<HTMLInputElement>(null);
-    const sceneBgVideoInputRef = useRef<HTMLInputElement>(null);
 
     const loadIsland = async () => {
         if (isNew || !id) return;
@@ -101,8 +91,6 @@ const BibleMapIslandForm: React.FC = () => {
             order: island.order ?? 0,
             status: island.status || 'draft',
             unlockRule: island.unlockRule || 'previous_complete',
-            introVideoUrl: island.introVideoUrl || '',
-            sceneBgVideoUrl: island.sceneBgVideoUrl || '',
         });
     };
 
@@ -189,60 +177,6 @@ const BibleMapIslandForm: React.FC = () => {
         }
     };
 
-    const uploadIslandVideo = async (
-        file: File,
-        kind: 'intro' | 'scene-bg',
-    ): Promise<string> => {
-        const islandKey = form.slug || id || 'temp';
-        const formData = new FormData();
-        formData.append('file', file);
-        const res = await apiClient.post(
-            `/api/upload/video?bookId=bible-map&type=${kind}&islandId=${encodeURIComponent(islandKey)}`,
-            formData,
-        );
-        return res.data.url as string;
-    };
-
-    const handleIntroVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        e.target.value = '';
-        if (!file) return;
-        setUploadingIntro(true);
-        try {
-            const url = await uploadIslandVideo(file, 'intro');
-            update('introVideoUrl', url);
-            setPreviewMode('intro');
-        } catch (err) {
-            console.error(err);
-            alert('Failed to upload intro video');
-        } finally {
-            setUploadingIntro(false);
-        }
-    };
-
-    const handleSceneBgVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        e.target.value = '';
-        if (!file) return;
-        setUploadingSceneBg(true);
-        try {
-            const url = await uploadIslandVideo(file, 'scene-bg');
-            update('sceneBgVideoUrl', url);
-            setPreviewMode('scene');
-        } catch (err) {
-            console.error(err);
-            alert('Failed to upload scene background video');
-        } finally {
-            setUploadingSceneBg(false);
-        }
-    };
-
-    const previewVideoUrl =
-        previewMode === 'intro'
-            ? getMediaUrl(form.introVideoUrl)
-            : getMediaUrl(form.sceneBgVideoUrl);
-    const hasPreviewVideo = Boolean(previewVideoUrl);
-
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!form.title.trim() || !form.slug.trim()) {
@@ -262,8 +196,6 @@ const BibleMapIslandForm: React.FC = () => {
                 order: form.order,
                 status: form.status,
                 unlockRule: form.unlockRule,
-                introVideoUrl: form.introVideoUrl.trim() || undefined,
-                sceneBgVideoUrl: form.sceneBgVideoUrl.trim() || undefined,
             };
             if (isNew) {
                 const res = await apiClient.post('/api/bible-map/islands', payload);
@@ -300,8 +232,6 @@ const BibleMapIslandForm: React.FC = () => {
                 mapPosition: { x: form.mapPositionX, y: form.mapPositionY },
                 order: form.order,
                 unlockRule: form.unlockRule,
-                introVideoUrl: form.introVideoUrl.trim() || undefined,
-                sceneBgVideoUrl: form.sceneBgVideoUrl.trim() || undefined,
             };
             await apiClient.put(`/api/bible-map/islands/${id}`, payload);
 
@@ -611,207 +541,10 @@ const BibleMapIslandForm: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2 border-t border-gray-100">
-                    <div className="space-y-5">
-                        <div>
-                            <h2 className="text-sm font-semibold text-gray-900 mb-1">
-                                Island scene videos
-                            </h2>
-                            <p className="text-xs text-gray-500">
-                                Intro plays after sail / on lesson entry. Scene background loops
-                                behind activities. Upload or paste a URL.
-                            </p>
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="block text-sm font-medium text-gray-700">
-                                Intro video
-                            </label>
-                            {form.introVideoUrl ? (
-                                <div className="relative rounded-lg border border-gray-200 bg-gray-50 p-2">
-                                    <video
-                                        key={form.introVideoUrl}
-                                        src={getMediaUrl(form.introVideoUrl)}
-                                        className="w-full max-h-28 rounded object-cover bg-black"
-                                        muted
-                                        playsInline
-                                        preload="metadata"
-                                        controls
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => update('introVideoUrl', '')}
-                                        className="absolute top-3 right-3 p-1 rounded-full bg-white/90 border border-gray-200 text-gray-600 hover:text-red-600"
-                                        aria-label="Remove intro video"
-                                    >
-                                        <X className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            ) : null}
-                            <input
-                                value={form.introVideoUrl}
-                                onChange={(e) => update('introVideoUrl', e.target.value)}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                                placeholder="https://… or upload below"
-                            />
-                            <input
-                                ref={introVideoInputRef}
-                                type="file"
-                                accept="video/*"
-                                className="hidden"
-                                onChange={handleIntroVideoUpload}
-                            />
-                            <button
-                                type="button"
-                                disabled={uploadingIntro}
-                                onClick={() => introVideoInputRef.current?.click()}
-                                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-sm hover:bg-gray-50 disabled:opacity-50"
-                            >
-                                <Upload className="w-4 h-4" />
-                                {uploadingIntro
-                                    ? 'Uploading…'
-                                    : form.introVideoUrl
-                                      ? 'Replace video'
-                                      : 'Upload video'}
-                            </button>
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="block text-sm font-medium text-gray-700">
-                                Scene background video (loop)
-                            </label>
-                            {form.sceneBgVideoUrl ? (
-                                <div className="relative rounded-lg border border-gray-200 bg-gray-50 p-2">
-                                    <video
-                                        key={form.sceneBgVideoUrl}
-                                        src={getMediaUrl(form.sceneBgVideoUrl)}
-                                        className="w-full max-h-28 rounded object-cover bg-black"
-                                        muted
-                                        playsInline
-                                        preload="metadata"
-                                        controls
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => update('sceneBgVideoUrl', '')}
-                                        className="absolute top-3 right-3 p-1 rounded-full bg-white/90 border border-gray-200 text-gray-600 hover:text-red-600"
-                                        aria-label="Remove scene background video"
-                                    >
-                                        <X className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            ) : null}
-                            <input
-                                value={form.sceneBgVideoUrl}
-                                onChange={(e) => update('sceneBgVideoUrl', e.target.value)}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                                placeholder="https://… or upload below"
-                            />
-                            <input
-                                ref={sceneBgVideoInputRef}
-                                type="file"
-                                accept="video/*"
-                                className="hidden"
-                                onChange={handleSceneBgVideoUpload}
-                            />
-                            <button
-                                type="button"
-                                disabled={uploadingSceneBg}
-                                onClick={() => sceneBgVideoInputRef.current?.click()}
-                                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-sm hover:bg-gray-50 disabled:opacity-50"
-                            >
-                                <Upload className="w-4 h-4" />
-                                {uploadingSceneBg
-                                    ? 'Uploading…'
-                                    : form.sceneBgVideoUrl
-                                      ? 'Replace video'
-                                      : 'Upload video'}
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Lightweight phone preview — framing only; hotspot editor later */}
-                    <div className="space-y-3">
-                        <div className="flex items-center justify-between gap-2">
-                            <h2 className="text-sm font-semibold text-gray-900">
-                                Scene preview
-                            </h2>
-                            <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
-                                <button
-                                    type="button"
-                                    onClick={() => setPreviewMode('scene')}
-                                    className={`px-2.5 py-1.5 ${
-                                        previewMode === 'scene'
-                                            ? 'bg-emerald-600 text-white'
-                                            : 'bg-white text-gray-600 hover:bg-gray-50'
-                                    }`}
-                                >
-                                    Loop BG
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setPreviewMode('intro')}
-                                    className={`px-2.5 py-1.5 border-l border-gray-200 ${
-                                        previewMode === 'intro'
-                                            ? 'bg-emerald-600 text-white'
-                                            : 'bg-white text-gray-600 hover:bg-gray-50'
-                                    }`}
-                                >
-                                    Intro
-                                </button>
-                            </div>
-                        </div>
-                        <p className="text-xs text-gray-500">
-                            Phone frame uses <code className="text-[11px]">object-fit: cover</code>{' '}
-                            like the kid app. Full hotspot editor comes later.
-                        </p>
-                        <div className="flex justify-center">
-                            <div
-                                className="relative bg-black shadow-xl"
-                                style={{
-                                    width: 220,
-                                    height: 440,
-                                    borderRadius: 28,
-                                    border: '10px solid #1f2937',
-                                    boxShadow:
-                                        '0 12px 40px rgba(0,0,0,0.25), inset 0 0 0 1px rgba(255,255,255,0.08)',
-                                    overflow: 'hidden',
-                                }}
-                            >
-                                {/* Notch */}
-                                <div
-                                    className="absolute top-0 left-1/2 -translate-x-1/2 z-20 bg-[#1f2937] rounded-b-xl"
-                                    style={{ width: 88, height: 18 }}
-                                    aria-hidden
-                                />
-                                {hasPreviewVideo ? (
-                                    <video
-                                        key={`${previewMode}-${previewVideoUrl}`}
-                                        src={previewVideoUrl}
-                                        className="absolute inset-0 w-full h-full object-cover"
-                                        muted
-                                        loop={previewMode === 'scene'}
-                                        playsInline
-                                        autoPlay
-                                        preload="auto"
-                                    />
-                                ) : (
-                                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#1a4a28] text-white/70 px-4 text-center">
-                                        <Video className="w-8 h-8 opacity-60" />
-                                        <p className="text-xs leading-snug">
-                                            {previewMode === 'intro'
-                                                ? 'Add an intro video to preview framing'
-                                                : 'Add a scene background to preview framing'}
-                                        </p>
-                                    </div>
-                                )}
-                                <div className="absolute bottom-3 left-3 right-3 z-10 rounded-md bg-black/55 px-2 py-1.5 text-[10px] leading-snug text-white/90 text-center">
-                                    Hotspot editor coming later — framing check only
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <p className="text-xs text-gray-500 pt-1 border-t border-gray-100">
+                    Intro and scene background videos are set on each story pack’s{' '}
+                    <span className="font-medium text-gray-700">Scene</span> tab — not on the island.
+                </p>
 
                 <div className="pt-2 flex flex-wrap gap-3">
                     <button

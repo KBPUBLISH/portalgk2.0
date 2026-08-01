@@ -166,8 +166,17 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
     };
 
     const handleGenerateScripts = async () => {
-        if (!sourceText.trim()) {
-            alert('Paste a source story or scripture first');
+        const trimmed = sourceText.trim();
+        if (!trimmed) {
+            alert(
+                'Paste a short Bible story description first — a few sentences of the main events, or a scripture passage.',
+            );
+            return;
+        }
+        if (trimmed.length < 40) {
+            alert(
+                'Add a clearer source description (about 2–4 sentences covering the story) so scripts can be written for each age level.',
+            );
             return;
         }
         setGenerating(true);
@@ -176,7 +185,7 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
             const res = await apiClient.post(
                 `/api/bible-map/stories/${storyId}/generate-reading-levels`,
                 {
-                    sourceText: sourceText.trim(),
+                    sourceText: trimmed,
                     pageCount,
                     scriptureRef,
                     title: packTitle,
@@ -200,11 +209,12 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
             );
         } catch (err: unknown) {
             console.error(err);
+            const data = (err as { response?: { data?: { message?: string; error?: string } } })
+                ?.response?.data;
             const msg =
-                (err as { response?: { data?: { message?: string; error?: string } } })?.response
-                    ?.data?.message ||
-                (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-                'Script generation failed';
+                data?.message ||
+                data?.error ||
+                'Script generation failed. Check that the backend is up, then try a clearer story summary.';
             alert(msg);
         } finally {
             setGenerating(false);
@@ -513,15 +523,15 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                 </button>
                 <div className="border-t border-gray-200 pt-4 space-y-3">
                     <p className="text-xs text-gray-500">
-                        Or paste a source story and generate age scripts — a book is created
-                        automatically. Generate images afterward with a separate button.
+                        Paste a short story summary (main events in 2–6 sentences) or a scripture
+                        passage, then generate age scripts. A book is created automatically.
                     </p>
                     <textarea
                         value={sourceText}
                         onChange={(e) => setSourceText(e.target.value)}
                         rows={5}
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                        placeholder="Paste the Bible story or scripture passage…"
+                        placeholder="Example: God made the world in six days. On day six He made Adam from dust and breathed life into him. God made a beautiful garden for Adam to live in…"
                     />
                     {characterPicker}
                     <div className="flex flex-wrap items-center gap-3">
@@ -585,12 +595,16 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                 <label className="block text-sm font-medium text-violet-900">
                     Source story / scripture
                 </label>
+                <p className="text-[11px] text-violet-800/90">
+                    Write a clear summary of the Bible story (who, what happened, ending) or paste
+                    the scripture. This is what the AI turns into age 3–5 / 6–7 / 8+ page scripts.
+                </p>
                 <textarea
                     value={sourceText}
                     onChange={(e) => setSourceText(e.target.value)}
                     rows={4}
                     className="w-full border border-violet-200 rounded-lg px-3 py-2 text-sm bg-white"
-                    placeholder="Paste once, then generate all three age scripts…"
+                    placeholder="Example: God made the world in six days. On day six He made Adam from dust and breathed life into him. God placed Adam in a beautiful garden…"
                 />
                 {characterPicker}
                 <div className="flex flex-wrap items-center gap-2">
