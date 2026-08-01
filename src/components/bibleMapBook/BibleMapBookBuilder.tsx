@@ -3,6 +3,7 @@ import {
     BookOpen,
     ImagePlus,
     Loader2,
+    Music,
     Palette,
     Plus,
     Save,
@@ -13,11 +14,15 @@ import {
 import apiClient, { getMediaUrl } from '../../services/apiClient';
 import BookPageEditor from './BookPageEditor';
 import {
+    backgroundMusicUrlFromBook,
     emptyReadingPage,
     pageFromApi,
     type ReadingLevelKey,
     type ReadingPageDraft,
 } from './types';
+
+/** Match BookEdit default — permanently attenuates uploaded file for soft under-reading */
+const BG_MUSIC_UPLOAD_VOLUME = 0.4;
 
 interface BibleMapBookBuilderProps {
     storyId: string;
@@ -64,8 +69,22 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
     const [styleReferenceImageUrl, setStyleReferenceImageUrl] = useState('');
     const [uploadingStyleRef, setUploadingStyleRef] = useState(false);
     const styleRefInputRef = useRef<HTMLInputElement>(null);
+    const musicInputRef = useRef<HTMLInputElement>(null);
+    const [backgroundMusicUrl, setBackgroundMusicUrl] = useState('');
+    const [backgroundMusicFilename, setBackgroundMusicFilename] = useState('');
+    const [uploadingMusic, setUploadingMusic] = useState(false);
     const [imageStatus, setImageStatus] = useState<string | null>(null);
     const [generatingPageImage, setGeneratingPageImage] = useState<number | null>(null);
+
+    const applyBookMusic = (book: unknown) => {
+        const url = backgroundMusicUrlFromBook(book);
+        setBackgroundMusicUrl(url);
+        const files = (book as { files?: { audio?: Array<{ filename?: string; url?: string }> } })
+            ?.files;
+        const tracks = Array.isArray(files?.audio) ? files.audio : [];
+        const match = tracks.find((t) => t?.url === url);
+        setBackgroundMusicFilename(String(match?.filename || '').trim());
+    };
 
     const loadPages = useCallback(async () => {
         if (!storyId) return;
@@ -74,6 +93,9 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
             const res = await apiClient.get(`/api/bible-map/stories/${storyId}/reading-pages`);
             if (res.data.bookId && !bookId) {
                 onBookLinked(res.data.bookId, res.data.book);
+            }
+            if (res.data.book) {
+                applyBookMusic(res.data.book);
             }
             const list = Array.isArray(res.data.pages)
                 ? res.data.pages.map((p: Record<string, unknown>) => pageFromApi(p))
@@ -145,6 +167,21 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
         setStyleReferenceImageUrl(url || '');
     };
 
+    const persistBackgroundMusic = async (
+        tracks: Array<{ url: string; filename: string; uploadedAt?: string }>,
+    ) => {
+        if (!bookId) {
+            throw new Error('Book ID is required');
+        }
+        const res = await apiClient.put(`/api/books/${bookId}`, {
+            files: {
+                audio: tracks.slice(0, 1),
+                defaultAudioIndex: 0,
+            },
+        });
+        applyBookMusic(res.data);
+    };
+
     const uploadStyleReference = async (file: File) => {
         setUploadingStyleRef(true);
         try {
@@ -162,6 +199,52 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
             alert('Failed to upload style reference image');
         } finally {
             setUploadingStyleRef(false);
+        }
+    };
+
+    const uploadBackgroundMusic = async (file: File) => {
+        if (!bookId) {
+            alert('Create or link a book first');
+            return;
+        }
+        if (!file.type.startsWith('audio/') && !/\.(mp3|m4a|wav|aac|ogg|flac)$/i.test(file.name)) {
+            alert('Please select an audio file (MP3, WAV, M4A, etc.)');
+            return;
+        }
+        setUploadingMusic(true);
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await apiClient.post(
+                `/api/upload/audio?bookId=${encodeURIComponent(bookId)}&type=audio&volume=${BG_MUSIC_UPLOAD_VOLUME}`,
+                formData,
+            );
+            const url = String(res.data?.url || '').trim();
+            if (!url) throw new Error('No URL returned');
+            const filename = String(res.data?.filename || file.name || 'background-music.mp3');
+            await persistBackgroundMusic([
+                { url, filename, uploadedAt: new Date().toISOString() },
+            ]);
+        } catch (err) {
+            console.error(err);
+            alert('Failed to upload background music');
+        } finally {
+            setUploadingMusic(false);
+            if (musicInputRef.current) musicInputRef.current.value = '';
+        }
+    };
+
+    const clearBackgroundMusic = async () => {
+        if (!bookId) return;
+        if (!window.confirm('Remove background music from this book?')) return;
+        setUploadingMusic(true);
+        try {
+            await persistBackgroundMusic([]);
+        } catch (err) {
+            console.error(err);
+            alert('Failed to clear background music');
+        } finally {
+            setUploadingMusic(false);
         }
     };
 
@@ -270,7 +353,7 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
         }
     };
 
-    const handleGeneratePageImage = async (pageNumber: number) => {
+    const handleGeneratePageImage = async (pageNumber: number, extraPrompt?: string) => {
         if (!bookId) {
             alert('Generate age scripts / link a book first');
             return;
@@ -280,6 +363,7 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
         try {
             // Persist current page text first so the image prompt uses latest scripts
             await persistPages(pages, { quiet: true });
+            const trimmedExtra = String(extraPrompt || '').trim();
             const res = await apiClient.post(
                 `/api/bible-map/stories/${storyId}/generate-page-images`,
                 {
@@ -288,6 +372,7 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                     pageNumber,
                     imageProvider,
                     styleReferenceImageUrl: styleReferenceImageUrl || undefined,
+                    ...(trimmedExtra ? { extraPrompt: trimmedExtra } : {}),
                 },
                 { timeout: 300000 },
             );
@@ -660,6 +745,69 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                 </div>
             </div>
 
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label className="text-sm font-medium text-slate-900 inline-flex items-center gap-1.5">
+                        <Music className="w-4 h-4 text-indigo-600" />
+                        Book background music
+                    </label>
+                    <input
+                        ref={musicInputRef}
+                        type="file"
+                        accept="audio/*,.mp3,.m4a,.wav,.aac,.ogg"
+                        className="hidden"
+                        onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            e.target.value = '';
+                            if (f) void uploadBackgroundMusic(f);
+                        }}
+                    />
+                    <button
+                        type="button"
+                        disabled={uploadingMusic || !bookId}
+                        onClick={() => musicInputRef.current?.click()}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs text-slate-800 hover:bg-slate-100 disabled:opacity-50"
+                    >
+                        {uploadingMusic ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                            <Music className="w-3.5 h-3.5" />
+                        )}
+                        {backgroundMusicUrl ? 'Replace music' : 'Upload music'}
+                    </button>
+                </div>
+                <p className="text-[11px] text-slate-600">
+                    Soft looping track under reading (separate from island scene music). Uploaded
+                    at ~{Math.round(BG_MUSIC_UPLOAD_VOLUME * 100)}% volume so it stays under TTS.
+                </p>
+                {backgroundMusicUrl ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                        <audio
+                            key={backgroundMusicUrl}
+                            src={getMediaUrl(backgroundMusicUrl)}
+                            controls
+                            preload="metadata"
+                            className="h-9 max-w-[260px]"
+                        />
+                        <span className="text-[11px] text-slate-500 truncate max-w-[180px]">
+                            {backgroundMusicFilename || 'Track ready'}
+                        </span>
+                        <button
+                            type="button"
+                            disabled={uploadingMusic}
+                            onClick={() => void clearBackgroundMusic()}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-white disabled:opacity-50"
+                            title="Clear background music"
+                        >
+                            <X className="w-3.5 h-3.5" />
+                            Clear
+                        </button>
+                    </div>
+                ) : (
+                    <p className="text-[11px] text-slate-500">No background music yet.</p>
+                )}
+            </div>
+
             <div className="bg-violet-50 border border-violet-200 rounded-lg p-4 space-y-3">
                 <label className="block text-sm font-medium text-violet-900">
                     Source story / scripture
@@ -808,6 +956,7 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                             page={current}
                             level={level}
                             bookPages={pages}
+                            backgroundMusicUrl={backgroundMusicUrl || undefined}
                             onLevelChange={setLevel}
                             onChange={(next) =>
                                 setPages((prev) =>
@@ -815,8 +964,8 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                                 )
                             }
                             bookId={bookId}
-                            onGenerateImage={() =>
-                                void handleGeneratePageImage(current.pageNumber)
+                            onGenerateImage={(extraPrompt) =>
+                                void handleGeneratePageImage(current.pageNumber, extraPrompt)
                             }
                             generatingImage={generatingPageImage === current.pageNumber}
                             generateImageDisabled={

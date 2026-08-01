@@ -21,6 +21,11 @@ import {
     wordForSpeech,
 } from '../utils/interactiveWords';
 import MissingWordHuntOverlay from '../components/bibleMapBook/MissingWordHuntOverlay';
+import { backgroundMusicUrlFromBook } from '../components/bibleMapBook/types';
+
+/** Soft under-reading bed; ducked further while TTS / page video sound plays */
+const BG_MUSIC_VOLUME = 0.18;
+const BG_MUSIC_DUCKED_VOLUME = 0.05;
 
 interface Voice {
     voice_id: string;
@@ -142,6 +147,7 @@ const BookReader: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [bookType, setBookType] = useState<'standard' | 'kids_monthly' | 'bible_map'>('standard');
     const [bookTitle, setBookTitle] = useState('');
+    const [backgroundMusicUrl, setBackgroundMusicUrl] = useState('');
     /** Keys: `${pageKey}:${boxIndex}:${wordIndex}` — taps persist across the whole book */
     const [tappedInteractiveKeys, setTappedInteractiveKeys] = useState<Set<string>>(new Set());
     const [showTapHint, setShowTapHint] = useState(false);
@@ -168,6 +174,7 @@ const BookReader: React.FC = () => {
     const [ttsLoading, setTtsLoading] = useState(false);
     const [currentTextBoxIndex, setCurrentTextBoxIndex] = useState(0);
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    const bgMusicRef = useRef<HTMLAudioElement | null>(null);
     const allTextBoxesRef = useRef<TextBox[]>([]);
     const highlightIntervalRef = useRef<number | null>(null);
     const alignWordsRef = useRef<WordTiming[]>([]);
@@ -212,6 +219,7 @@ const BookReader: React.FC = () => {
                 setPages(pagesRes.data);
                 setBookType(bookRes.data?.bookType || 'standard');
                 setBookTitle(bookRes.data?.title || '');
+                setBackgroundMusicUrl(backgroundMusicUrlFromBook(bookRes.data));
             } catch (err) {
                 console.error('Failed to fetch pages:', err);
             } finally {
@@ -220,6 +228,46 @@ const BookReader: React.FC = () => {
         };
         fetchPages();
     }, [bookId]);
+
+    // Soft looping book background music; duck while TTS or unmuted page video plays
+    useEffect(() => {
+        const url = String(backgroundMusicUrl || '').trim();
+        if (!url) {
+            if (bgMusicRef.current) {
+                bgMusicRef.current.pause();
+                bgMusicRef.current = null;
+            }
+            return;
+        }
+        const mediaUrl = getMediaUrl(url);
+        if (bgMusicRef.current) {
+            bgMusicRef.current.pause();
+            bgMusicRef.current = null;
+        }
+        const audio = new Audio(mediaUrl);
+        audio.loop = true;
+        audio.volume = BG_MUSIC_VOLUME;
+        bgMusicRef.current = audio;
+        void audio.play().catch(() => {
+            /* autoplay may require a user gesture — duck effect retries after play/unmute */
+        });
+        return () => {
+            audio.pause();
+            if (bgMusicRef.current === audio) bgMusicRef.current = null;
+        };
+    }, [backgroundMusicUrl]);
+
+    useEffect(() => {
+        const audio = bgMusicRef.current;
+        if (!audio) return;
+        const duck = isPlaying || pageVideoSoundOn;
+        audio.volume = duck ? BG_MUSIC_DUCKED_VOLUME : BG_MUSIC_VOLUME;
+        if (audio.paused) {
+            void audio.play().catch(() => {
+                /* ignore */
+            });
+        }
+    }, [isPlaying, pageVideoSoundOn, backgroundMusicUrl]);
     
     // Fetch available TTS voices
     useEffect(() => {
@@ -594,6 +642,10 @@ const BookReader: React.FC = () => {
         if (audioRef.current) {
             audioRef.current.pause();
             audioRef.current = null;
+        }
+        if (bgMusicRef.current) {
+            bgMusicRef.current.pause();
+            bgMusicRef.current = null;
         }
     }, [tearDownPlayback]);
     

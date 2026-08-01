@@ -84,6 +84,20 @@ export function normalizeReadingLevels(raw: unknown): ReadingLevels {
     };
 }
 
+/** Book-level looping reader music — stored as `files.audio[defaultAudioIndex].url`. */
+export function backgroundMusicUrlFromBook(book: unknown): string {
+    if (!book || typeof book !== 'object') return '';
+    const files = (book as { files?: { audio?: Array<{ url?: string }>; defaultAudioIndex?: number } })
+        .files;
+    const tracks = Array.isArray(files?.audio) ? files.audio : [];
+    if (!tracks.length) return '';
+    const idx = Math.max(
+        0,
+        Math.min(Number(files?.defaultAudioIndex) || 0, tracks.length - 1),
+    );
+    return String(tracks[idx]?.url || '').trim();
+}
+
 export function pageFromApi(raw: Record<string, unknown>): ReadingPageDraft {
     const bg =
         (raw.backgroundUrl as string) ||

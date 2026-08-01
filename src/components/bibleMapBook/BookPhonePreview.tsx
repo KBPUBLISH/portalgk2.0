@@ -20,12 +20,18 @@ interface BookPhonePreviewProps {
     level: ReadingLevelKey;
     /** All book pages — used so the tap progress bar fills across the whole book */
     bookPages?: ReadingPageDraft[];
+    /** Book-level looping background music URL (files.audio) */
+    backgroundMusicUrl?: string;
     editTapWords?: boolean;
     onChangeLevelText?: (
         level: ReadingLevelKey,
         patch: { text?: string; interactiveWordIndices?: number[] },
     ) => void;
 }
+
+/** Soft under-reading bed; ducked further while TTS / page video sound plays */
+const BG_MUSIC_VOLUME = 0.18;
+const BG_MUSIC_DUCKED_VOLUME = 0.05;
 
 type PreviewMode = 'mark' | 'play';
 type DevicePreview = 'phone' | 'tablet';
@@ -82,6 +88,7 @@ const BookPhonePreview: React.FC<BookPhonePreviewProps> = ({
     page,
     level,
     bookPages,
+    backgroundMusicUrl,
     editTapWords = false,
     onChangeLevelText,
 }) => {
@@ -104,6 +111,7 @@ const BookPhonePreview: React.FC<BookPhonePreviewProps> = ({
     const [videoSoundOn, setVideoSoundOn] = useState(false);
     const frame = DEVICE_FRAMES[device];
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    const bgMusicRef = useRef<HTMLAudioElement | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const scrollTextRef = useRef<HTMLDivElement | null>(null);
     const tickerRef = useRef<number | null>(null);
@@ -206,6 +214,45 @@ const BookPhonePreview: React.FC<BookPhonePreviewProps> = ({
             });
         }
     }, [videoSoundOn]);
+
+    // Soft looping book background music; duck while TTS or unmuted page video plays
+    useEffect(() => {
+        const url = String(backgroundMusicUrl || '').trim();
+        if (!url) {
+            if (bgMusicRef.current) {
+                bgMusicRef.current.pause();
+                bgMusicRef.current = null;
+            }
+            return;
+        }
+        if (bgMusicRef.current) {
+            bgMusicRef.current.pause();
+            bgMusicRef.current = null;
+        }
+        const audio = new Audio(getMediaUrl(url));
+        audio.loop = true;
+        audio.volume = BG_MUSIC_VOLUME;
+        bgMusicRef.current = audio;
+        void audio.play().catch(() => {
+            /* autoplay may require user gesture — first TTS/video tap will retry via duck effect */
+        });
+        return () => {
+            audio.pause();
+            if (bgMusicRef.current === audio) bgMusicRef.current = null;
+        };
+    }, [backgroundMusicUrl]);
+
+    useEffect(() => {
+        const audio = bgMusicRef.current;
+        if (!audio) return;
+        const duck = playing || videoSoundOn;
+        audio.volume = duck ? BG_MUSIC_DUCKED_VOLUME : BG_MUSIC_VOLUME;
+        if (audio.paused) {
+            void audio.play().catch(() => {
+                /* ignore */
+            });
+        }
+    }, [playing, videoSoundOn, backgroundMusicUrl]);
 
     const resolveVoiceId = async (): Promise<string | null> => {
         if (voiceIdRef.current) return voiceIdRef.current;

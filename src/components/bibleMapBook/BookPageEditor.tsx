@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     Image as ImageIcon,
     Film,
@@ -19,9 +19,12 @@ interface BookPageEditorProps {
     bookId: string;
     level: ReadingLevelKey;
     bookPages?: ReadingPageDraft[];
+    /** Book-level looping background music (files.audio) */
+    backgroundMusicUrl?: string;
     onLevelChange: (level: ReadingLevelKey) => void;
     onChange: (next: ReadingPageDraft) => void;
-    onGenerateImage?: () => void;
+    /** Optional extra art-direction prompt from CMS when regenerating this page */
+    onGenerateImage?: (extraPrompt?: string) => void;
     generatingImage?: boolean;
     generateImageDisabled?: boolean;
 }
@@ -31,6 +34,7 @@ const BookPageEditor: React.FC<BookPageEditorProps> = ({
     bookId,
     level,
     bookPages,
+    backgroundMusicUrl,
     onLevelChange,
     onChange,
     onGenerateImage,
@@ -41,6 +45,13 @@ const BookPageEditor: React.FC<BookPageEditorProps> = ({
     const videoRef = useRef<HTMLInputElement>(null);
     const scrollRef = useRef<HTMLInputElement>(null);
     const [uploading, setUploading] = useState<string | null>(null);
+    const [showExtraPrompt, setShowExtraPrompt] = useState(false);
+    const [extraPrompt, setExtraPrompt] = useState('');
+
+    useEffect(() => {
+        setShowExtraPrompt(false);
+        setExtraPrompt('');
+    }, [page.pageNumber]);
 
     const patch = (partial: Partial<ReadingPageDraft>) => onChange({ ...page, ...partial });
 
@@ -195,7 +206,9 @@ const BookPageEditor: React.FC<BookPageEditorProps> = ({
                                                 generatingImage ||
                                                 generateImageDisabled
                                             }
-                                            onClick={onGenerateImage}
+                                            onClick={() =>
+                                                setShowExtraPrompt((open) => !open)
+                                            }
                                             className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-violet-600 text-white text-xs hover:bg-violet-700 disabled:opacity-50"
                                             title="AI-generate a new image for this page only"
                                         >
@@ -253,6 +266,48 @@ const BookPageEditor: React.FC<BookPageEditorProps> = ({
                                         </button>
                                     ) : null}
                                 </div>
+                                {onGenerateImage && showExtraPrompt && !generatingImage ? (
+                                    <div className="mt-2 rounded-lg border border-violet-200 bg-violet-50/60 p-2.5 space-y-2">
+                                        <label className="block text-xs font-medium text-gray-800">
+                                            Extra prompt (optional)
+                                        </label>
+                                        <textarea
+                                            value={extraPrompt}
+                                            onChange={(e) => setExtraPrompt(e.target.value)}
+                                            rows={2}
+                                            className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs bg-white"
+                                            placeholder='e.g. "Eve should not be in this scene", "show the garden from above"'
+                                        />
+                                        <div className="flex flex-wrap gap-1.5">
+                                            <button
+                                                type="button"
+                                                disabled={!!uploading || generateImageDisabled}
+                                                onClick={() => {
+                                                    const prompt = extraPrompt.trim();
+                                                    setShowExtraPrompt(false);
+                                                    setExtraPrompt('');
+                                                    onGenerateImage(prompt || undefined);
+                                                }}
+                                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-violet-600 text-white text-xs hover:bg-violet-700 disabled:opacity-50"
+                                            >
+                                                <Sparkles className="w-3.5 h-3.5" />
+                                                {page.backgroundUrl
+                                                    ? 'Regenerate image'
+                                                    : 'Generate image'}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setShowExtraPrompt(false);
+                                                    setExtraPrompt('');
+                                                }}
+                                                className="inline-flex items-center px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white text-xs text-gray-700 hover:bg-gray-50"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : null}
                             </div>
                         </div>
                     </div>
@@ -360,6 +415,7 @@ const BookPageEditor: React.FC<BookPageEditorProps> = ({
                 page={page}
                 level={level}
                 bookPages={bookPages}
+                backgroundMusicUrl={backgroundMusicUrl}
                 editTapWords
                 onChangeLevelText={patchLevel}
             />
