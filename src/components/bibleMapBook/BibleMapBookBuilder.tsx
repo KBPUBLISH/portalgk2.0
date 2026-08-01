@@ -58,7 +58,6 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
     const [saving, setSaving] = useState(false);
     const [characters, setCharacters] = useState<PortalCharacter[]>([]);
     const [selectedCharacterIds, setSelectedCharacterIds] = useState<string[]>([]);
-    const [autoImages, setAutoImages] = useState(true);
     /** gemini = Vertex + character refs; openai = ChatGPT GPT Image (gpt-image-2) */
     const [imageProvider, setImageProvider] = useState<'gemini' | 'openai'>('gemini');
     /** Story-wide art style reference — matched exactly on every page image */
@@ -66,6 +65,7 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
     const [uploadingStyleRef, setUploadingStyleRef] = useState(false);
     const styleRefInputRef = useRef<HTMLInputElement>(null);
     const [imageStatus, setImageStatus] = useState<string | null>(null);
+    const [generatingPageImage, setGeneratingPageImage] = useState<number | null>(null);
 
     const loadPages = useCallback(async () => {
         if (!storyId) return;
@@ -165,7 +165,7 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
         }
     };
 
-    const handleGenerate = async () => {
+    const handleGenerateScripts = async () => {
         if (!sourceText.trim()) {
             alert('Paste a source story or scripture first');
             return;
@@ -181,13 +181,11 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                     scriptureRef,
                     title: packTitle,
                     referenceCharacterIds: selectedCharacterIds,
-                    generateImages: autoImages,
-                    onlyMissingImages: true,
+                    generateImages: false,
                     imageProvider,
                     styleReferenceImageUrl: styleReferenceImageUrl || undefined,
                 },
-                // Image gen can take several minutes
-                { timeout: 600000 },
+                { timeout: 180000 },
             );
             if (res.data.bookId) {
                 onBookLinked(res.data.bookId);
@@ -197,25 +195,8 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                 : [];
             setPages(list);
             setActivePage(0);
-
-            const images = Array.isArray(res.data.images) ? res.data.images : null;
-            if (autoImages && images) {
-                const ok = images.filter((r: { backgroundUrl?: string; skipped?: boolean }) =>
-                    r.backgroundUrl && !r.skipped,
-                ).length;
-                const skipped = images.filter((r: { skipped?: boolean }) => r.skipped).length;
-                const failed = images.filter((r: { error?: string }) => r.error).length;
-                setImageStatus(
-                    `Images: ${ok} generated${skipped ? `, ${skipped} kept` : ''}${
-                        failed ? `, ${failed} failed` : ''
-                    }`,
-                );
-            }
-
             alert(
-                autoImages
-                    ? `Generated ${list.length} age-leveled pages + page images`
-                    : `Generated ${list.length} pages for all age levels`,
+                `Generated ${list.length} age-leveled pages. Use Generate images when you’re ready for art.`,
             );
         } catch (err: unknown) {
             console.error(err);
@@ -223,7 +204,7 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                 (err as { response?: { data?: { message?: string; error?: string } } })?.response
                     ?.data?.message ||
                 (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-                'Generation failed';
+                'Script generation failed';
             alert(msg);
         } finally {
             setGenerating(false);
@@ -257,7 +238,12 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                 r.backgroundUrl && !r.error,
             ).length;
             const failed = results.filter((r: { error?: string }) => r.error).length;
-            setImageStatus(`Images: ${ok} ready${failed ? `, ${failed} failed` : ''}`);
+            const skipped = results.filter((r: { skipped?: boolean }) => r.skipped).length;
+            setImageStatus(
+                `Images: ${ok} ready${skipped ? `, ${skipped} skipped` : ''}${
+                    failed ? `, ${failed} failed` : ''
+                }`,
+            );
             alert(`Page images updated (${ok} ok${failed ? `, ${failed} failed` : ''})`);
         } catch (err: unknown) {
             console.error(err);
@@ -269,6 +255,54 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
             alert(msg);
         } finally {
             setGeneratingImages(false);
+        }
+    };
+
+    const handleGeneratePageImage = async (pageNumber: number) => {
+        if (!bookId) {
+            alert('Generate age scripts / link a book first');
+            return;
+        }
+        setGeneratingPageImage(pageNumber);
+        setImageStatus(null);
+        try {
+            // Persist current page text first so the image prompt uses latest scripts
+            await apiClient.put(`/api/bible-map/stories/${storyId}/reading-pages`, {
+                pages,
+            });
+            const res = await apiClient.post(
+                `/api/bible-map/stories/${storyId}/generate-page-images`,
+                {
+                    referenceCharacterIds: selectedCharacterIds,
+                    onlyMissing: false,
+                    pageNumber,
+                    imageProvider,
+                    styleReferenceImageUrl: styleReferenceImageUrl || undefined,
+                },
+                { timeout: 300000 },
+            );
+            const list = Array.isArray(res.data.pages)
+                ? res.data.pages.map((p: Record<string, unknown>) => pageFromApi(p))
+                : pages;
+            setPages(list);
+            const results = Array.isArray(res.data.results) ? res.data.results : [];
+            const result = results[0];
+            if (result?.error) {
+                setImageStatus(`Page ${pageNumber}: ${result.error}`);
+                alert(`Page ${pageNumber} image failed: ${result.error}`);
+            } else {
+                setImageStatus(`Page ${pageNumber} image ready`);
+            }
+        } catch (err: unknown) {
+            console.error(err);
+            const msg =
+                (err as { response?: { data?: { message?: string; error?: string } } })?.response
+                    ?.data?.message ||
+                (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+                'Image generation failed';
+            alert(msg);
+        } finally {
+            setGeneratingPageImage(null);
         }
     };
 
@@ -384,15 +418,6 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                 <label className="text-xs font-medium text-violet-900">
                     Character references (for page images)
                 </label>
-                <label className="text-xs text-violet-800 flex items-center gap-1.5">
-                    <input
-                        type="checkbox"
-                        checked={autoImages}
-                        onChange={(e) => setAutoImages(e.target.checked)}
-                        className="rounded border-violet-300"
-                    />
-                    Auto-generate images after scripts
-                </label>
             </div>
             <div className="flex flex-wrap items-center gap-3">
                 <span className="text-xs font-medium text-violet-900">Image provider</span>
@@ -488,8 +513,8 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                 </button>
                 <div className="border-t border-gray-200 pt-4 space-y-3">
                     <p className="text-xs text-gray-500">
-                        Or paste a source story and generate — a book will be created automatically,
-                        then page images from character references.
+                        Or paste a source story and generate age scripts — a book is created
+                        automatically. Generate images afterward with a separate button.
                     </p>
                     <textarea
                         value={sourceText}
@@ -514,7 +539,7 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                         <button
                             type="button"
                             disabled={generating}
-                            onClick={() => void handleGenerate()}
+                            onClick={() => void handleGenerateScripts()}
                             className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-600 text-white text-sm hover:bg-violet-700 disabled:opacity-50"
                         >
                             {generating ? (
@@ -522,7 +547,7 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                             ) : (
                                 <Sparkles className="w-4 h-4" />
                             )}
-                            {autoImages ? 'Generate scripts + images' : 'Generate age scripts'}
+                            Generate age scripts
                         </button>
                     </div>
                 </div>
@@ -540,19 +565,6 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    <button
-                        type="button"
-                        disabled={generatingImages || pages.length === 0}
-                        onClick={() => void handleGenerateImages(false)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-violet-300 text-violet-800 text-xs hover:bg-violet-50 disabled:opacity-50"
-                    >
-                        {generatingImages ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                            <ImagePlus className="w-3.5 h-3.5" />
-                        )}
-                        Regenerate all images
-                    </button>
                     <button
                         type="button"
                         disabled={saving || pages.length === 0}
@@ -581,7 +593,7 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                     placeholder="Paste once, then generate all three age scripts…"
                 />
                 {characterPicker}
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2">
                     <label className="text-xs text-violet-800 flex items-center gap-1">
                         Pages
                         <input
@@ -595,8 +607,8 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                     </label>
                     <button
                         type="button"
-                        disabled={generating}
-                        onClick={() => void handleGenerate()}
+                        disabled={generating || generatingImages || generatingPageImage != null}
+                        onClick={() => void handleGenerateScripts()}
                         className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-600 text-white text-sm hover:bg-violet-700 disabled:opacity-50"
                     >
                         {generating ? (
@@ -604,30 +616,56 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                         ) : (
                             <Sparkles className="w-4 h-4" />
                         )}
-                        {autoImages ? 'Generate scripts + images' : 'Generate age scripts'}
+                        Generate age scripts
                     </button>
                     <button
                         type="button"
-                        disabled={generatingImages || pages.length === 0}
+                        disabled={
+                            generating ||
+                            generatingImages ||
+                            generatingPageImage != null ||
+                            pages.length === 0
+                        }
                         onClick={() => void handleGenerateImages(true)}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-violet-300 text-violet-800 text-sm hover:bg-white disabled:opacity-50"
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-violet-300 bg-white text-violet-800 text-sm hover:bg-violet-50 disabled:opacity-50"
                     >
                         {generatingImages ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
                         ) : (
                             <ImagePlus className="w-4 h-4" />
                         )}
-                        Fill missing images
+                        Generate images
+                    </button>
+                    <button
+                        type="button"
+                        disabled={
+                            generating ||
+                            generatingImages ||
+                            generatingPageImage != null ||
+                            pages.length === 0
+                        }
+                        onClick={() => void handleGenerateImages(false)}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-violet-200 text-violet-700 text-sm hover:bg-white disabled:opacity-50"
+                        title="Overwrite every page image"
+                    >
+                        Regenerate all images
                     </button>
                 </div>
-                {(generating || generatingImages) && (
+                <p className="text-[11px] text-violet-700/80">
+                    Scripts and images are separate steps. Generate images only fills pages that are
+                    missing art; Regenerate all overwrites every page.
+                </p>
+                {(generating || generatingImages || generatingPageImage != null) && (
                     <p className="text-xs text-violet-800">
                         {generating
-                            ? 'Generating age scripts' +
-                              (autoImages ? ', then page images (this can take a few minutes)…' : '…')
-                            : `Generating page images via ${
-                                  imageProvider === 'openai' ? 'ChatGPT / OpenAI' : 'Gemini'
-                              }…`}
+                            ? 'Generating age scripts…'
+                            : generatingPageImage != null
+                              ? `Generating image for page ${generatingPageImage} via ${
+                                    imageProvider === 'openai' ? 'ChatGPT / OpenAI' : 'Gemini'
+                                }…`
+                              : `Generating page images via ${
+                                    imageProvider === 'openai' ? 'ChatGPT / OpenAI' : 'Gemini'
+                                }…`}
                     </p>
                 )}
             </div>
@@ -692,6 +730,16 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                                 )
                             }
                             bookId={bookId}
+                            onGenerateImage={() =>
+                                void handleGeneratePageImage(current.pageNumber)
+                            }
+                            generatingImage={generatingPageImage === current.pageNumber}
+                            generateImageDisabled={
+                                generating ||
+                                generatingImages ||
+                                (generatingPageImage != null &&
+                                    generatingPageImage !== current.pageNumber)
+                            }
                         />
                     )}
                 </>

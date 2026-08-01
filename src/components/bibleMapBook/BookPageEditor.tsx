@@ -1,5 +1,13 @@
 import React, { useRef, useState } from 'react';
-import { Image as ImageIcon, Film, Replace, ScrollText, Trash2 } from 'lucide-react';
+import {
+    Image as ImageIcon,
+    Film,
+    Loader2,
+    Replace,
+    ScrollText,
+    Sparkles,
+    Trash2,
+} from 'lucide-react';
 import apiClient, { getMediaUrl } from '../../services/apiClient';
 import BookPhonePreview from './BookPhonePreview';
 import type { ReadingLevelKey, ReadingPageDraft } from './types';
@@ -12,6 +20,9 @@ interface BookPageEditorProps {
     level: ReadingLevelKey;
     onLevelChange: (level: ReadingLevelKey) => void;
     onChange: (next: ReadingPageDraft) => void;
+    onGenerateImage?: () => void;
+    generatingImage?: boolean;
+    generateImageDisabled?: boolean;
 }
 
 const BookPageEditor: React.FC<BookPageEditorProps> = ({
@@ -20,6 +31,9 @@ const BookPageEditor: React.FC<BookPageEditorProps> = ({
     level,
     onLevelChange,
     onChange,
+    onGenerateImage,
+    generatingImage = false,
+    generateImageDisabled = false,
 }) => {
     const bgRef = useRef<HTMLInputElement>(null);
     const videoRef = useRef<HTMLInputElement>(null);
@@ -171,9 +185,33 @@ const BookPageEditor: React.FC<BookPageEditorProps> = ({
                                             if (f) void upload(f, 'video');
                                         }}
                                     />
+                                    {onGenerateImage ? (
+                                        <button
+                                            type="button"
+                                            disabled={
+                                                !!uploading ||
+                                                generatingImage ||
+                                                generateImageDisabled
+                                            }
+                                            onClick={onGenerateImage}
+                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-violet-600 text-white text-xs hover:bg-violet-700 disabled:opacity-50"
+                                            title="AI-generate a new image for this page only"
+                                        >
+                                            {generatingImage ? (
+                                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                            ) : (
+                                                <Sparkles className="w-3.5 h-3.5" />
+                                            )}
+                                            {generatingImage
+                                                ? 'Generating…'
+                                                : page.backgroundUrl
+                                                  ? 'Regenerate this page'
+                                                  : 'Generate this page'}
+                                        </button>
+                                    ) : null}
                                     <button
                                         type="button"
-                                        disabled={!!uploading}
+                                        disabled={!!uploading || generatingImage}
                                         onClick={() => bgRef.current?.click()}
                                         className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white text-xs hover:bg-gray-50 disabled:opacity-50"
                                     >
@@ -190,7 +228,7 @@ const BookPageEditor: React.FC<BookPageEditorProps> = ({
                                     </button>
                                     <button
                                         type="button"
-                                        disabled={!!uploading}
+                                        disabled={!!uploading || generatingImage}
                                         onClick={() => videoRef.current?.click()}
                                         className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white text-xs hover:bg-gray-50 disabled:opacity-50"
                                     >
@@ -204,7 +242,7 @@ const BookPageEditor: React.FC<BookPageEditorProps> = ({
                                     {page.backgroundUrl ? (
                                         <button
                                             type="button"
-                                            disabled={!!uploading}
+                                            disabled={!!uploading || generatingImage}
                                             onClick={clearBackground}
                                             className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-200 bg-white text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"
                                         >
