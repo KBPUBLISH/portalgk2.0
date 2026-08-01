@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
-import { Image as ImageIcon, Film, ScrollText } from 'lucide-react';
-import apiClient from '../../services/apiClient';
+import { Image as ImageIcon, Film, Replace, ScrollText, Trash2 } from 'lucide-react';
+import apiClient, { getMediaUrl } from '../../services/apiClient';
 import BookPhonePreview from './BookPhonePreview';
 import type { ReadingLevelKey, ReadingPageDraft } from './types';
 import { READING_LEVELS } from './types';
@@ -85,6 +85,27 @@ const BookPageEditor: React.FC<BookPageEditorProps> = ({
         }
     };
 
+    const clearBackground = () => {
+        if (!page.backgroundUrl) return;
+        if (!window.confirm('Remove this page’s background image/video?')) return;
+        patch({
+            backgroundUrl: '',
+            backgroundType: 'image',
+            backgroundAudioUrl: undefined,
+        });
+    };
+
+    const clearScroll = () => {
+        if (!page.scrollUrl) return;
+        if (!window.confirm('Clear custom scroll? The default parchment will be used on save.')) {
+            return;
+        }
+        patch({ scrollUrl: '' });
+    };
+
+    const bgPreviewUrl = page.backgroundUrl ? getMediaUrl(page.backgroundUrl) : '';
+    const scrollPreviewUrl = page.scrollUrl ? getMediaUrl(page.scrollUrl) : '';
+
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="space-y-4">
@@ -92,80 +113,177 @@ const BookPageEditor: React.FC<BookPageEditorProps> = ({
                     <h3 className="text-sm font-semibold text-gray-900 mb-2">
                         Page {page.pageNumber} · shared media
                     </h3>
-                    <div className="flex flex-wrap gap-2">
-                        <input
-                            ref={bgRef}
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => {
-                                const f = e.target.files?.[0];
-                                e.target.value = '';
-                                if (f) void upload(f, 'background');
-                            }}
-                        />
-                        <input
-                            ref={videoRef}
-                            type="file"
-                            accept="video/*"
-                            className="hidden"
-                            onChange={(e) => {
-                                const f = e.target.files?.[0];
-                                e.target.value = '';
-                                if (f) void upload(f, 'video');
-                            }}
-                        />
-                        <input
-                            ref={scrollRef}
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => {
-                                const f = e.target.files?.[0];
-                                e.target.value = '';
-                                if (f) void upload(f, 'scroll');
-                            }}
-                        />
-                        <button
-                            type="button"
-                            disabled={!!uploading}
-                            onClick={() => bgRef.current?.click()}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 text-xs hover:bg-gray-50 disabled:opacity-50"
-                        >
-                            <ImageIcon className="w-3.5 h-3.5" />
-                            {uploading === 'background' ? 'Uploading…' : 'Upload image'}
-                        </button>
-                        <button
-                            type="button"
-                            disabled={!!uploading}
-                            onClick={() => videoRef.current?.click()}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 text-xs hover:bg-gray-50 disabled:opacity-50"
-                        >
-                            <Film className="w-3.5 h-3.5" />
-                            {uploading === 'video' ? 'Uploading…' : 'Video BG'}
-                        </button>
-                        <button
-                            type="button"
-                            disabled={!!uploading}
-                            onClick={() => scrollRef.current?.click()}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 text-xs hover:bg-gray-50 disabled:opacity-50"
-                        >
-                            <ScrollText className="w-3.5 h-3.5" />
-                            {uploading === 'scroll' ? 'Uploading…' : 'Upload scroll'}
-                        </button>
-                    </div>
-                    {(page.backgroundUrl || page.scrollUrl) && (
-                        <div className="mt-2 flex gap-2 text-[11px] text-gray-500">
-                            {page.backgroundUrl && (
-                                <span className="truncate">
-                                    BG: {page.backgroundType} · {page.backgroundUrl.slice(-32)}
-                                </span>
-                            )}
-                            {page.scrollUrl && (
-                                <span className="truncate">Scroll: …{page.scrollUrl.slice(-24)}</span>
-                            )}
+
+                    {/* Background image / video */}
+                    <div className="rounded-xl border border-gray-200 bg-gray-50/80 p-3 mb-3">
+                        <div className="flex items-start gap-3">
+                            <div className="w-20 h-[6.5rem] rounded-lg overflow-hidden bg-[#2d5a3d] border border-gray-200 shrink-0 flex items-center justify-center">
+                                {bgPreviewUrl ? (
+                                    page.backgroundType === 'video' ? (
+                                        <video
+                                            src={bgPreviewUrl}
+                                            className="w-full h-full object-cover"
+                                            muted
+                                            playsInline
+                                        />
+                                    ) : (
+                                        <img
+                                            src={bgPreviewUrl}
+                                            alt=""
+                                            className="w-full h-full object-cover"
+                                        />
+                                    )
+                                ) : (
+                                    <ImageIcon className="w-6 h-6 text-white/50" />
+                                )}
+                            </div>
+                            <div className="min-w-0 flex-1 space-y-2">
+                                <div>
+                                    <p className="text-xs font-medium text-gray-800">
+                                        Background {page.backgroundType === 'video' ? 'video' : 'image'}
+                                    </p>
+                                    <p className="text-[11px] text-gray-500 truncate mt-0.5">
+                                        {page.backgroundUrl
+                                            ? page.backgroundUrl.slice(-48)
+                                            : 'No image yet — upload or generate one'}
+                                    </p>
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                    <input
+                                        ref={bgRef}
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                            const f = e.target.files?.[0];
+                                            e.target.value = '';
+                                            if (f) void upload(f, 'background');
+                                        }}
+                                    />
+                                    <input
+                                        ref={videoRef}
+                                        type="file"
+                                        accept="video/*"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                            const f = e.target.files?.[0];
+                                            e.target.value = '';
+                                            if (f) void upload(f, 'video');
+                                        }}
+                                    />
+                                    <button
+                                        type="button"
+                                        disabled={!!uploading}
+                                        onClick={() => bgRef.current?.click()}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white text-xs hover:bg-gray-50 disabled:opacity-50"
+                                    >
+                                        {page.backgroundUrl ? (
+                                            <Replace className="w-3.5 h-3.5" />
+                                        ) : (
+                                            <ImageIcon className="w-3.5 h-3.5" />
+                                        )}
+                                        {uploading === 'background'
+                                            ? 'Uploading…'
+                                            : page.backgroundUrl
+                                              ? 'Replace image'
+                                              : 'Upload image'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={!!uploading}
+                                        onClick={() => videoRef.current?.click()}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white text-xs hover:bg-gray-50 disabled:opacity-50"
+                                    >
+                                        <Film className="w-3.5 h-3.5" />
+                                        {uploading === 'video'
+                                            ? 'Uploading…'
+                                            : page.backgroundType === 'video' && page.backgroundUrl
+                                              ? 'Replace video'
+                                              : 'Video BG'}
+                                    </button>
+                                    {page.backgroundUrl ? (
+                                        <button
+                                            type="button"
+                                            disabled={!!uploading}
+                                            onClick={clearBackground}
+                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-200 bg-white text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                            Delete
+                                        </button>
+                                    ) : null}
+                                </div>
+                            </div>
                         </div>
-                    )}
+                    </div>
+
+                    {/* Scroll parchment */}
+                    <div className="rounded-xl border border-gray-200 bg-gray-50/80 p-3">
+                        <div className="flex items-start gap-3">
+                            <div className="w-20 h-14 rounded-lg overflow-hidden bg-[#f0e4cc] border border-gray-200 shrink-0 flex items-center justify-center">
+                                {scrollPreviewUrl ? (
+                                    <img
+                                        src={scrollPreviewUrl}
+                                        alt=""
+                                        className="w-full h-full object-cover"
+                                    />
+                                ) : (
+                                    <ScrollText className="w-5 h-5 text-amber-800/40" />
+                                )}
+                            </div>
+                            <div className="min-w-0 flex-1 space-y-2">
+                                <div>
+                                    <p className="text-xs font-medium text-gray-800">Scroll parchment</p>
+                                    <p className="text-[11px] text-gray-500 truncate mt-0.5">
+                                        {page.scrollUrl
+                                            ? page.scrollUrl.slice(-48)
+                                            : 'Using default parchment'}
+                                    </p>
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                    <input
+                                        ref={scrollRef}
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                            const f = e.target.files?.[0];
+                                            e.target.value = '';
+                                            if (f) void upload(f, 'scroll');
+                                        }}
+                                    />
+                                    <button
+                                        type="button"
+                                        disabled={!!uploading}
+                                        onClick={() => scrollRef.current?.click()}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white text-xs hover:bg-gray-50 disabled:opacity-50"
+                                    >
+                                        {page.scrollUrl ? (
+                                            <Replace className="w-3.5 h-3.5" />
+                                        ) : (
+                                            <ScrollText className="w-3.5 h-3.5" />
+                                        )}
+                                        {uploading === 'scroll'
+                                            ? 'Uploading…'
+                                            : page.scrollUrl
+                                              ? 'Replace scroll'
+                                              : 'Upload scroll'}
+                                    </button>
+                                    {page.scrollUrl ? (
+                                        <button
+                                            type="button"
+                                            disabled={!!uploading}
+                                            onClick={clearScroll}
+                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-200 bg-white text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                            Delete
+                                        </button>
+                                    ) : null}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div>

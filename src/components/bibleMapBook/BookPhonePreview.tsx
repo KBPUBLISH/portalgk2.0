@@ -22,7 +22,46 @@ interface BookPhonePreviewProps {
 }
 
 type PreviewMode = 'mark' | 'play';
+type DevicePreview = 'phone' | 'tablet';
 type WordTiming = { word: string; start: number; end: number };
+
+const DEVICE_FRAMES: Record<
+    DevicePreview,
+    {
+        label: string;
+        width: number;
+        height: number;
+        borderRadius: number;
+        border: number;
+        textSize: string;
+        showNotch: boolean;
+        notchWidth: number;
+        notchHeight: number;
+    }
+> = {
+    phone: {
+        label: 'Phone',
+        width: 240,
+        height: 480,
+        borderRadius: 28,
+        border: 10,
+        textSize: '13px',
+        showNotch: true,
+        notchWidth: 80,
+        notchHeight: 16,
+    },
+    tablet: {
+        label: 'Tablet',
+        width: 360,
+        height: 480,
+        borderRadius: 18,
+        border: 12,
+        textSize: '16px',
+        showNotch: false,
+        notchWidth: 0,
+        notchHeight: 0,
+    },
+};
 
 function findWordIndexAtTime(t: number, words: WordTiming[]): number {
     if (!words.length) return -1;
@@ -49,11 +88,13 @@ const BookPhonePreview: React.FC<BookPhonePreviewProps> = ({
     const tapSet = useMemo(() => new Set(tapIndices), [tapIndices]);
 
     const [mode, setMode] = useState<PreviewMode>(editTapWords ? 'mark' : 'play');
+    const [device, setDevice] = useState<DevicePreview>('phone');
     const [revealed, setRevealed] = useState<Set<number>>(() => new Set());
     const [playing, setPlaying] = useState(false);
     const [loading, setLoading] = useState(false);
     const [highlightIdx, setHighlightIdx] = useState(-1);
     const [videoSoundOn, setVideoSoundOn] = useState(false);
+    const frame = DEVICE_FRAMES[device];
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const tickerRef = useRef<number | null>(null);
@@ -209,7 +250,27 @@ const BookPhonePreview: React.FC<BookPhonePreviewProps> = ({
     return (
         <div className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs font-medium text-gray-600">Phone preview · {levelLabel}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-xs font-medium text-gray-600">
+                        {frame.label} preview · {levelLabel}
+                    </p>
+                    <div className="flex rounded-lg border border-gray-300 overflow-hidden text-xs">
+                        {(['phone', 'tablet'] as DevicePreview[]).map((d) => (
+                            <button
+                                key={d}
+                                type="button"
+                                onClick={() => setDevice(d)}
+                                className={`px-2.5 py-1.5 capitalize ${
+                                    device === d
+                                        ? 'bg-gray-800 text-white'
+                                        : 'bg-white text-gray-700 hover:bg-gray-50'
+                                }`}
+                            >
+                                {DEVICE_FRAMES[d].label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
                 <div className="flex flex-wrap items-center gap-1.5">
                     {editTapWords && (
                         <div className="flex rounded-lg border border-gray-300 overflow-hidden text-xs">
@@ -283,20 +344,28 @@ const BookPhonePreview: React.FC<BookPhonePreviewProps> = ({
                 </div>
             </div>
             <div
-                className="relative bg-black shadow-xl mx-auto"
+                className="relative bg-black shadow-xl mx-auto transition-[width,height,border-radius] duration-300"
                 style={{
-                    width: 240,
-                    height: 480,
-                    borderRadius: 28,
-                    border: '10px solid #1f2937',
+                    width: frame.width,
+                    height: frame.height,
+                    borderRadius: frame.borderRadius,
+                    border: `${frame.border}px solid #1f2937`,
                     overflow: 'hidden',
                 }}
             >
-                <div
-                    className="absolute top-0 left-1/2 -translate-x-1/2 z-20 bg-[#1f2937] rounded-b-xl"
-                    style={{ width: 80, height: 16 }}
-                    aria-hidden
-                />
+                {frame.showNotch ? (
+                    <div
+                        className="absolute top-0 left-1/2 -translate-x-1/2 z-20 bg-[#1f2937] rounded-b-xl"
+                        style={{ width: frame.notchWidth, height: frame.notchHeight }}
+                        aria-hidden
+                    />
+                ) : (
+                    <div
+                        className="absolute top-2 left-1/2 -translate-x-1/2 z-20 bg-[#1f2937]/80 rounded-full"
+                        style={{ width: 72, height: 5 }}
+                        aria-hidden
+                    />
+                )}
                 {/* Upper art — full scene fitted above parchment (no overlap / cut-off) */}
                 <div className="absolute top-0 left-0 right-0 h-[64%] overflow-hidden bg-[#2d5a3d]">
                     {bgUrl ? (
@@ -329,8 +398,15 @@ const BookPhonePreview: React.FC<BookPhonePreviewProps> = ({
                     className="absolute left-1/2 -translate-x-1/2 bottom-0 w-[98%] h-[36%] object-fill pointer-events-none z-[5]"
                     style={{ opacity: (page.scrollOpacity ?? 100) / 100 }}
                 />
-                <div className="absolute left-[8%] right-[8%] bottom-[3%] z-10 h-[30%] overflow-y-auto px-2 py-1.5 flex items-center justify-center">
-                    <p className="text-center text-[13px] leading-snug text-[#4a3b2a] font-medium whitespace-pre-wrap w-full">
+                <div
+                    className={`absolute left-[8%] right-[8%] bottom-[3%] z-10 h-[30%] overflow-y-auto flex items-center justify-center ${
+                        device === 'tablet' ? 'px-3 py-2' : 'px-2 py-1.5'
+                    }`}
+                >
+                    <p
+                        className="text-center leading-snug text-[#4a3b2a] font-medium whitespace-pre-wrap w-full"
+                        style={{ fontSize: frame.textSize }}
+                    >
                         {words.length === 0 ? (
                             <span className="text-gray-400 italic text-xs">No text for this age</span>
                         ) : (
