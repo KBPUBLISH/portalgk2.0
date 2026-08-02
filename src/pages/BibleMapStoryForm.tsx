@@ -16,8 +16,19 @@ import {
     Clapperboard,
     Sparkles,
     Loader2,
+    Upload,
+    X,
+    Map as MapIcon,
 } from 'lucide-react';
 import apiClient, { getMediaUrl } from '../services/apiClient';
+import {
+    formatPoint,
+    hasExplicitPoint,
+    normalizeMainMapPosition,
+    type MainMapPosition,
+    type MainMapSizeLayout,
+    DEFAULT_MAIN_MAP_SIZE,
+} from '../components/bibleMapMainMap/types';
 import SlidingPuzzlePreview from '../components/SlidingPuzzlePreview';
 import TapFillColoringPreview from '../components/TapFillColoringPreview';
 import BibleMapQuizPanel, { emptyQuizLevels } from '../components/BibleMapQuizPanel';
@@ -113,6 +124,9 @@ interface StoryFormState {
     verse: string;
     verseRef: string;
     heroImageUrl: string;
+    mapIconUrl: string;
+    mainMapPosition: MainMapPosition;
+    mainMapSize: MainMapSizeLayout;
     introVideoUrl: string;
     sceneBgVideoUrl: string;
     sceneMusicUrl: string;
@@ -167,6 +181,9 @@ const emptyForm = (islandId = ''): StoryFormState => ({
     verse: '',
     verseRef: '',
     heroImageUrl: '',
+    mapIconUrl: '',
+    mainMapPosition: normalizeMainMapPosition(null, 0, 1),
+    mainMapSize: { ...DEFAULT_MAIN_MAP_SIZE },
     introVideoUrl: '',
     sceneBgVideoUrl: '',
     sceneMusicUrl: '',
@@ -217,6 +234,7 @@ const BibleMapStoryForm: React.FC = () => {
     const [saving, setSaving] = useState(false);
     const [creatingBook, setCreatingBook] = useState(false);
     const [uploadingPuzzleImage, setUploadingPuzzleImage] = useState(false);
+    const [uploadingMapIcon, setUploadingMapIcon] = useState(false);
     const [uploadingColoring, setUploadingColoring] = useState(false);
     const [generatingPuzzleAi, setGeneratingPuzzleAi] = useState(false);
     const [generatingColoringAi, setGeneratingColoringAi] = useState(false);
@@ -267,6 +285,29 @@ const BibleMapStoryForm: React.FC = () => {
             alert('Failed to upload puzzle image');
         } finally {
             setUploadingPuzzleImage(false);
+        }
+    };
+
+    const handleMapIconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+        setUploadingMapIcon(true);
+        try {
+            const island = islands.find((i) => i._id === form.islandId);
+            const islandKey = island?.slug || form.islandId || id || 'temp';
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await apiClient.post(
+                `/api/upload/image?bookId=bible-map&type=map-icon&islandId=${encodeURIComponent(islandKey)}`,
+                formData,
+            );
+            update('mapIconUrl', res.data.url as string);
+        } catch (err) {
+            console.error(err);
+            alert('Failed to upload map icon');
+        } finally {
+            setUploadingMapIcon(false);
         }
     };
 
@@ -402,6 +443,34 @@ const BibleMapStoryForm: React.FC = () => {
                     verse: story.verse || '',
                     verseRef: story.verseRef || '',
                     heroImageUrl: story.heroImageUrl || '',
+                    mapIconUrl: story.mapIconUrl || '',
+                    mainMapPosition: (() => {
+                        const orderIndex = Math.max(0, (story.order ?? 1) - 1);
+                        const normalized = normalizeMainMapPosition(
+                            story.mainMapPosition,
+                            orderIndex,
+                            1,
+                        );
+                        // Keep unset devices as non-explicit so UI can show "— (auto)"
+                        return {
+                            phone: hasExplicitPoint(story.mainMapPosition?.phone)
+                                ? normalized.phone
+                                : ({} as MainMapPosition['phone']),
+                            tablet: hasExplicitPoint(story.mainMapPosition?.tablet)
+                                ? normalized.tablet
+                                : ({} as MainMapPosition['tablet']),
+                        };
+                    })(),
+                    mainMapSize: {
+                        phone: {
+                            w: story.mainMapSize?.phone?.w ?? DEFAULT_MAIN_MAP_SIZE.phone.w,
+                            h: story.mainMapSize?.phone?.h ?? DEFAULT_MAIN_MAP_SIZE.phone.h,
+                        },
+                        tablet: {
+                            w: story.mainMapSize?.tablet?.w ?? DEFAULT_MAIN_MAP_SIZE.tablet.w,
+                            h: story.mainMapSize?.tablet?.h ?? DEFAULT_MAIN_MAP_SIZE.tablet.h,
+                        },
+                    },
                     introVideoUrl: story.introVideoUrl || '',
                     sceneBgVideoUrl: story.sceneBgVideoUrl || '',
                     sceneMusicUrl: story.sceneMusicUrl || '',
@@ -582,6 +651,8 @@ const BibleMapStoryForm: React.FC = () => {
         verse: form.verse.trim(),
         verseRef: form.verseRef.trim(),
         heroImageUrl: form.heroImageUrl.trim() || undefined,
+        // Icon can be set here; phone/tablet placement is edited on the island main map layout
+        mapIconUrl: form.mapIconUrl.trim() || null,
         introVideoUrl: form.introVideoUrl.trim() || undefined,
         sceneBgVideoUrl: form.sceneBgVideoUrl.trim() || undefined,
         sceneMusicUrl: form.sceneMusicUrl.trim() || null,
@@ -1073,6 +1144,90 @@ const BibleMapStoryForm: React.FC = () => {
                                     Open Scene Studio to upload videos, place buttons, and wire
                                     animations
                                 </button>
+                            </div>
+                        </div>
+
+                        <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-4 space-y-3">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-800 flex items-center gap-2">
+                                        <MapIcon className="w-4 h-4 text-indigo-600" />
+                                        Main map story icon
+                                    </label>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Circular icon on the island main map. Primary placement is on
+                                        the island’s Main map layout editor.
+                                    </p>
+                                </div>
+                                {form.islandId && (
+                                    <Link
+                                        to={`/bible-map/islands/${form.islandId}`}
+                                        className="inline-flex items-center gap-1 text-xs text-indigo-700 hover:underline"
+                                    >
+                                        <MapIcon className="w-3.5 h-3.5" />
+                                        Open island main map layout
+                                    </Link>
+                                )}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-4">
+                                {form.mapIconUrl ? (
+                                    <div className="relative">
+                                        <img
+                                            src={getMediaUrl(form.mapIconUrl)}
+                                            alt="Map icon"
+                                            className="w-16 h-16 rounded-full object-cover border border-gray-200 bg-white"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => update('mapIconUrl', '')}
+                                            className="absolute -top-1 -right-1 p-0.5 rounded-full bg-white border border-gray-200 text-gray-600 hover:text-red-600"
+                                            aria-label="Remove map icon"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="w-16 h-16 rounded-full border border-dashed border-gray-300 bg-white flex items-center justify-center text-gray-400 text-[10px] text-center px-1">
+                                        No icon
+                                    </div>
+                                )}
+                                <div className="space-y-2">
+                                    <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm hover:bg-gray-50 cursor-pointer disabled:opacity-50">
+                                        <Upload className="w-4 h-4" />
+                                        {uploadingMapIcon
+                                            ? 'Uploading…'
+                                            : form.mapIconUrl
+                                              ? 'Replace icon'
+                                              : 'Upload icon'}
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            disabled={uploadingMapIcon}
+                                            onChange={handleMapIconUpload}
+                                        />
+                                    </label>
+                                    <input
+                                        value={form.mapIconUrl}
+                                        onChange={(e) => update('mapIconUrl', e.target.value)}
+                                        className="w-full min-w-[220px] border border-gray-300 rounded-lg px-3 py-1.5 text-xs"
+                                        placeholder="Or paste map icon URL"
+                                    />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 text-xs text-gray-600 pt-1 border-t border-indigo-100">
+                                <div>
+                                    <span className="font-medium text-gray-700">Phone position %</span>
+                                    <p className="font-mono mt-0.5">
+                                        {formatPoint(form.mainMapPosition.phone)}
+                                    </p>
+                                </div>
+                                <div>
+                                    <span className="font-medium text-gray-700">Tablet position %</span>
+                                    <p className="font-mono mt-0.5">
+                                        {formatPoint(form.mainMapPosition.tablet)}
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </div>

@@ -9,8 +9,10 @@ import {
     Rocket,
     Check,
     AlertTriangle,
+    Map as MapIcon,
 } from 'lucide-react';
 import apiClient, { getMediaUrl } from '../services/apiClient';
+import MainMapLayoutEditor from '../components/bibleMapMainMap/MainMapLayoutEditor';
 
 interface IslandFormState {
     slug: string;
@@ -19,6 +21,7 @@ interface IslandFormState {
     description: string;
     mapArtUrl: string;
     sailArtUrl: string;
+    mainMapUrl: string;
     mapPositionX: number;
     mapPositionY: number;
     order: number;
@@ -50,6 +53,7 @@ const empty: IslandFormState = {
     description: '',
     mapArtUrl: '',
     sailArtUrl: '',
+    mainMapUrl: '',
     mapPositionX: 50,
     mapPositionY: 50,
     order: 0,
@@ -70,8 +74,11 @@ const BibleMapIslandForm: React.FC = () => {
     const [launching, setLaunching] = useState(false);
     const [uploadingMap, setUploadingMap] = useState(false);
     const [uploadingSail, setUploadingSail] = useState(false);
+    const [uploadingMainMap, setUploadingMainMap] = useState(false);
     const mapInputRef = useRef<HTMLInputElement>(null);
     const sailInputRef = useRef<HTMLInputElement>(null);
+    const mainMapInputRef = useRef<HTMLInputElement>(null);
+    const mainMapSectionRef = useRef<HTMLDivElement>(null);
 
     const loadIsland = async () => {
         if (isNew || !id) return;
@@ -86,6 +93,7 @@ const BibleMapIslandForm: React.FC = () => {
             description: island.description || '',
             mapArtUrl: island.mapArtUrl || '',
             sailArtUrl: island.sailArtUrl || '',
+            mainMapUrl: island.mainMapUrl || '',
             mapPositionX: island.mapPosition?.x ?? 50,
             mapPositionY: island.mapPosition?.y ?? 50,
             order: island.order ?? 0,
@@ -133,7 +141,7 @@ const BibleMapIslandForm: React.FC = () => {
 
     const uploadIslandImage = async (
         file: File,
-        kind: 'map-art' | 'sail-art',
+        kind: 'map-art' | 'sail-art' | 'main-map',
     ): Promise<string> => {
         const islandKey = form.slug || id || 'temp';
         const formData = new FormData();
@@ -177,6 +185,22 @@ const BibleMapIslandForm: React.FC = () => {
         }
     };
 
+    const handleMainMapUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+        setUploadingMainMap(true);
+        try {
+            const url = await uploadIslandImage(file, 'main-map');
+            update('mainMapUrl', url);
+        } catch (err) {
+            console.error(err);
+            alert('Failed to upload main map PNG');
+        } finally {
+            setUploadingMainMap(false);
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!form.title.trim() || !form.slug.trim()) {
@@ -192,6 +216,7 @@ const BibleMapIslandForm: React.FC = () => {
                 description: form.description.trim(),
                 mapArtUrl: form.mapArtUrl.trim() || undefined,
                 sailArtUrl: form.sailArtUrl.trim() || undefined,
+                mainMapUrl: form.mainMapUrl.trim() || null,
                 mapPosition: { x: form.mapPositionX, y: form.mapPositionY },
                 order: form.order,
                 status: form.status,
@@ -229,6 +254,7 @@ const BibleMapIslandForm: React.FC = () => {
                 description: form.description.trim(),
                 mapArtUrl: form.mapArtUrl.trim() || undefined,
                 sailArtUrl: form.sailArtUrl.trim() || undefined,
+                mainMapUrl: form.mainMapUrl.trim() || null,
                 mapPosition: { x: form.mapPositionX, y: form.mapPositionY },
                 order: form.order,
                 unlockRule: form.unlockRule,
@@ -308,6 +334,19 @@ const BibleMapIslandForm: React.FC = () => {
                             >
                                 Add story pack
                             </Link>
+                            {' · '}
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    mainMapSectionRef.current?.scrollIntoView({
+                                        behavior: 'smooth',
+                                        block: 'start',
+                                    })
+                                }
+                                className="text-indigo-700 hover:underline"
+                            >
+                                Main map layout
+                            </button>
                         </p>
                     )}
                 </div>
@@ -473,6 +512,78 @@ const BibleMapIslandForm: React.FC = () => {
                     </div>
                 </div>
 
+                {/* Main story-path map */}
+                <div className="space-y-2 pt-2 border-t border-gray-100">
+                    <label className="block text-sm font-medium text-gray-700 flex items-center gap-2">
+                        <MapIcon className="w-4 h-4 text-indigo-600" />
+                        Main map PNG
+                    </label>
+                    <p className="text-xs text-gray-500 max-w-2xl">
+                        Kid app flow (CMS contract): Ocean → tap island → this main map (background PNG
+                        + story icons) → tap a story icon → intro video → Scene Studio menu for that
+                        pack. Place icons in the Main map layout editor below after saving the island.
+                    </p>
+                    {form.mainMapUrl ? (
+                        <div className="relative rounded-xl border border-gray-200 bg-sky-50 p-3 max-w-md">
+                            <img
+                                src={getMediaUrl(form.mainMapUrl)}
+                                alt="Main story map"
+                                className="max-h-48 mx-auto object-contain"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => update('mainMapUrl', '')}
+                                className="absolute top-2 right-2 p-1 rounded-full bg-white/90 border border-gray-200 text-gray-600 hover:text-red-600"
+                                aria-label="Remove main map image"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 h-36 max-w-md flex flex-col items-center justify-center text-gray-400">
+                            <ImageIcon className="w-8 h-8 mb-1" />
+                            <span className="text-xs">No main map yet</span>
+                        </div>
+                    )}
+                    <input
+                        ref={mainMapInputRef}
+                        type="file"
+                        accept="image/png,image/*"
+                        className="hidden"
+                        onChange={handleMainMapUpload}
+                    />
+                    <div className="flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            disabled={uploadingMainMap}
+                            onClick={() => mainMapInputRef.current?.click()}
+                            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-sm hover:bg-gray-50 disabled:opacity-50"
+                        >
+                            <Upload className="w-4 h-4" />
+                            {uploadingMainMap
+                                ? 'Uploading…'
+                                : form.mainMapUrl
+                                  ? 'Replace main map'
+                                  : 'Upload main map'}
+                        </button>
+                        {!isNew && (
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    mainMapSectionRef.current?.scrollIntoView({
+                                        behavior: 'smooth',
+                                        block: 'start',
+                                    })
+                                }
+                                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-50 text-indigo-800 border border-indigo-200 text-sm hover:bg-indigo-100"
+                            >
+                                <MapIcon className="w-4 h-4" />
+                                Open layout editor
+                            </button>
+                        )}
+                    </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
@@ -563,6 +674,25 @@ const BibleMapIslandForm: React.FC = () => {
                     </Link>
                 </div>
             </form>
+
+            {/* Main map layout editor */}
+            {!isNew && id && (
+                <div ref={mainMapSectionRef} className="mt-6 scroll-mt-4">
+                    <MainMapLayoutEditor
+                        islandId={id}
+                        islandSlug={form.slug}
+                        mainMapUrl={form.mainMapUrl}
+                        onMainMapUrlChange={(url) => update('mainMapUrl', url)}
+                        showMainMapUpload={false}
+                    />
+                    {form.mainMapUrl && (
+                        <p className="text-xs text-gray-500 mt-2">
+                            Tip: Save the island form if you replaced the main map PNG so the URL is
+                            persisted before launch.
+                        </p>
+                    )}
+                </div>
+            )}
 
             {/* Launch panel — CMS publish when content is ready (app wiring separate) */}
             {!isNew && (
@@ -682,6 +812,19 @@ const BibleMapIslandForm: React.FC = () => {
                         >
                             Add / edit story packs
                         </Link>
+                        <button
+                            type="button"
+                            onClick={() =>
+                                mainMapSectionRef.current?.scrollIntoView({
+                                    behavior: 'smooth',
+                                    block: 'start',
+                                })
+                            }
+                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-indigo-200 text-indigo-800 hover:bg-indigo-50 text-sm"
+                        >
+                            <MapIcon className="w-4 h-4" />
+                            Main map layout
+                        </button>
                     </div>
                 </div>
             )}
