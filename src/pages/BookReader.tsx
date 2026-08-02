@@ -11,6 +11,7 @@ import { ChevronLeft, ChevronRight, X, Play, Square, Volume2, VolumeX, ChevronDo
 import TrimmedPlaybackVideo from '../components/TrimmedPlaybackVideo';
 import { removeEmotionalCues } from '../utils/readAlongText';
 import {
+    bibleMapScrollBandPct,
     blankSlotUnits,
     collectPageInteractiveTargets,
     countInteractiveTargetsInTextBoxes,
@@ -298,17 +299,6 @@ const BookReader: React.FC = () => {
 
     const currentPage = pages[currentPageIndex];
 
-    /** Bible Map: keep parchment in the lower third so art above is never covered. */
-    const bibleMapScrollHeight = useMemo(() => {
-        if (!currentPage || bookType !== 'bible_map') return null;
-        const clamp = (n: number, fallback: number, max: number) =>
-            Number.isFinite(n) && n > 0 ? Math.min(n, max) : fallback;
-        const mid = clamp(Number(currentPage.scrollMidHeight), 36, 36);
-        const max = clamp(Number(currentPage.scrollMaxHeight), 40, 40);
-        const offset = Number(currentPage.scrollOffsetY) || 0;
-        return { mid, max, offset };
-    }, [currentPage, bookType]);
-
     const currentPageTextBoxes = useMemo(() => {
         if (!currentPage) return [] as TextBox[];
         const contentBoxes = currentPage.content?.textBoxes;
@@ -316,6 +306,18 @@ const BookReader: React.FC = () => {
             ? contentBoxes
             : (currentPage.textBoxes || []);
     }, [currentPage]);
+
+    /** Bible Map: adaptive parchment band from page text length (short → lower scroll). */
+    const bibleMapScrollHeight = useMemo(() => {
+        if (!currentPage || bookType !== 'bible_map') return null;
+        const wordCount = currentPageTextBoxes.reduce(
+            (sum, box) => sum + splitInteractiveWords(box?.text || '').length,
+            0,
+        );
+        const band = bibleMapScrollBandPct(wordCount);
+        const offset = Number(currentPage.scrollOffsetY) || 0;
+        return { mid: band.mid, max: band.max, offset };
+    }, [currentPage, bookType, currentPageTextBoxes]);
 
     const currentPageKey = String(
         currentPage?._id || currentPage?.pageNumber || currentPageIndex,

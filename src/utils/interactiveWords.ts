@@ -255,26 +255,73 @@ export function hashInteractiveSeed(seed: string): number {
     return h >>> 0;
 }
 
-/** Precomputed slot lattice in unit space [0,1]×[0,1] — scattered, not a rigid grid. */
+/**
+ * Precomputed slot lattice in unit space [0,1]×[0,1].
+ * Corners/edges first so small chip counts can spread wide; mid slots fill denser hunts.
+ */
 const PUZZLE_SLOT_UNITS: Array<{ u: number; v: number }> = [
-    { u: 0.12, v: 0.14 },
-    { u: 0.48, v: 0.1 },
-    { u: 0.82, v: 0.16 },
-    { u: 0.22, v: 0.34 },
-    { u: 0.58, v: 0.3 },
-    { u: 0.78, v: 0.42 },
-    { u: 0.1, v: 0.52 },
-    { u: 0.38, v: 0.48 },
-    { u: 0.68, v: 0.58 },
-    { u: 0.9, v: 0.28 },
-    { u: 0.3, v: 0.68 },
-    { u: 0.52, v: 0.72 },
+    { u: 0.1, v: 0.12 },
+    { u: 0.9, v: 0.12 },
+    { u: 0.5, v: 0.18 },
+    { u: 0.18, v: 0.42 },
+    { u: 0.82, v: 0.4 },
+    { u: 0.5, v: 0.55 },
+    { u: 0.12, v: 0.72 },
+    { u: 0.88, v: 0.72 },
+    { u: 0.35, v: 0.3 },
+    { u: 0.65, v: 0.32 },
+    { u: 0.28, v: 0.62 },
+    { u: 0.72, v: 0.6 },
 ];
+
+function slotDistSq(
+    a: { u: number; v: number },
+    b: { u: number; v: number },
+): number {
+    const du = a.u - b.u;
+    const dv = a.v - b.v;
+    return du * du + dv * dv;
+}
+
+/**
+ * Pick `count` lattice indices that stay far apart (farthest-point sampling).
+ * Seed picks the first slot so layouts vary by page without clustering.
+ */
+function pickSpreadSlotIndices(pageSeed: string | number, count: number): number[] {
+    const n = Math.min(Math.max(count, 1), PUZZLE_SLOT_UNITS.length);
+    const available = PUZZLE_SLOT_UNITS.map((_, i) => i);
+    const first =
+        hashInteractiveSeed(`${pageSeed}:spread:0`) % available.length;
+    const selected: number[] = [available[first]];
+    available.splice(first, 1);
+
+    while (selected.length < n && available.length > 0) {
+        let bestIdx = 0;
+        let bestScore = -1;
+        for (let i = 0; i < available.length; i++) {
+            const candidate = PUZZLE_SLOT_UNITS[available[i]];
+            let minD = Infinity;
+            for (const s of selected) {
+                minD = Math.min(minD, slotDistSq(candidate, PUZZLE_SLOT_UNITS[s]));
+            }
+            // Tiny seed tie-break so equal distances stay deterministic
+            const tie =
+                (hashInteractiveSeed(`${pageSeed}:spread:${available[i]}`) % 1000) * 1e-9;
+            if (minD + tie > bestScore) {
+                bestScore = minD + tie;
+                bestIdx = i;
+            }
+        }
+        selected.push(available[bestIdx]);
+        available.splice(bestIdx, 1);
+    }
+    return selected;
+}
 
 /**
  * Deterministic % position for a hunt chip over the page art.
  * Slots stay above the parchment band and away from extreme edges.
- * Pass `slotCount` (remaining chips) so nearby chips prefer distinct lattice points.
+ * Pass `chipCount` (remaining chips) so nearby chips prefer maximally distant lattice points.
  */
 export function puzzleChipPosition(
     pageSeed: string | number,
@@ -297,26 +344,31 @@ export function puzzleChipPosition(
     const chipCount = Math.max(options?.chipCount ?? 1, 1);
     const slotCount = Math.min(Math.max(chipCount, 1), PUZZLE_SLOT_UNITS.length);
 
-    // Stable permutation of slots for this page
-    const order = PUZZLE_SLOT_UNITS.map((_, i) => i);
-    for (let i = order.length - 1; i > 0; i--) {
-        const j = hashInteractiveSeed(`${pageSeed}:slot:${i}`) % (i + 1);
-        const tmp = order[i];
-        order[i] = order[j];
-        order[j] = tmp;
-    }
-    const slotIdx = order[chipIndex % slotCount];
+    const spread = pickSpreadSlotIndices(pageSeed, slotCount);
+    const slotIdx = spread[chipIndex % spread.length];
     const unit = PUZZLE_SLOT_UNITS[slotIdx];
-    // Tiny per-chip jitter so identical pages with different words still feel varied
+    // Light jitter only — keep small counts from drifting back into clumps
+    const jitterScale = chipCount <= 4 ? 0.15 : 0.35;
     const jitter = hashInteractiveSeed(`${pageSeed}::${chipKey}`);
-    const jx = ((jitter % 17) - 8) * 0.35;
-    const jy = (((jitter >> 8) % 17) - 8) * 0.35;
+    const jx = ((jitter % 17) - 8) * jitterScale;
+    const jy = (((jitter >> 8) % 17) - 8) * jitterScale;
     const leftPct = leftMin + unit.u * (leftMax - leftMin) + jx;
     const topPct = topMin + unit.v * (topMax - topMin) + jy;
     return {
         leftPct: Math.min(Math.max(leftPct, leftMin), leftMax),
         topPct: Math.min(Math.max(topPct, topMin), topMax),
     };
+}
+
+/**
+ * Adaptive Bible Map parchment band (% of viewport height).
+ * Short pages keep the scroll low so more of the illustration shows.
+ */
+export function bibleMapScrollBandPct(wordCount: number): { mid: number; max: number } {
+    const n = Math.max(0, Math.floor(Number(wordCount) || 0));
+    if (n <= 12) return { mid: 24, max: 28 };
+    if (n <= 24) return { mid: 30, max: 34 };
+    return { mid: 36, max: 40 };
 }
 
 /** Next blank in reading order that is not yet revealed. */

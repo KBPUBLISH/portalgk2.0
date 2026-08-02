@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Play, Square, Volume2, VolumeX } from 'lucide-react';
 import apiClient, { getMediaUrl } from '../../services/apiClient';
 import {
+    bibleMapScrollBandPct,
     blankSlotUnits,
     isImportantInteractiveWord,
     nextInteractiveTargetIndex,
@@ -100,6 +101,12 @@ const BookPhonePreview: React.FC<BookPhonePreviewProps> = ({
         [text, levelData?.interactiveWordIndices],
     );
     const tapSet = useMemo(() => new Set(tapIndices), [tapIndices]);
+    /** Short pages: lower parchment so more of the illustration shows. */
+    const scrollHeightPct = useMemo(() => {
+        const band = bibleMapScrollBandPct(words.length);
+        return band.mid;
+    }, [words.length]);
+    const artHeightPct = 100 - scrollHeightPct;
 
     const [mode, setMode] = useState<PreviewMode>(editTapWords ? 'mark' : 'play');
     const [device, setDevice] = useState<DevicePreview>('phone');
@@ -505,7 +512,10 @@ const BookPhonePreview: React.FC<BookPhonePreviewProps> = ({
                     </div>
                 )}
                 {/* Upper art — full scene fitted above parchment (no overlap / cut-off) */}
-                <div className="absolute top-0 left-0 right-0 h-[64%] overflow-hidden bg-[#2d5a3d]">
+                <div
+                    className="absolute top-0 left-0 right-0 overflow-hidden bg-[#2d5a3d]"
+                    style={{ height: `${artHeightPct}%` }}
+                >
                     {bgUrl ? (
                         page.backgroundType === 'video' ? (
                             <video
@@ -541,18 +551,24 @@ const BookPhonePreview: React.FC<BookPhonePreviewProps> = ({
                         />
                     ) : null}
                 </div>
-                {/* Lower parchment / scroll + text — kept short so art stays fully visible */}
-                <div className="absolute left-0 right-0 bottom-0 h-[36%] bg-[#f0e4cc]" />
+                {/* Lower parchment / scroll + text — short pages leave more art visible */}
+                <div
+                    className="absolute left-0 right-0 bottom-0 bg-[#f0e4cc]"
+                    style={{ height: `${scrollHeightPct}%` }}
+                />
                 <img
                     src={scrollUrl || '/assets/bible-map-default-scroll.png'}
                     alt=""
-                    className="absolute left-0 right-0 bottom-0 w-full h-[36%] object-fill pointer-events-none z-[5]"
-                    style={{ opacity: (page.scrollOpacity ?? 100) / 100 }}
+                    className="absolute left-0 right-0 bottom-0 w-full object-fill pointer-events-none z-[5]"
+                    style={{
+                        height: `${scrollHeightPct}%`,
+                        opacity: (page.scrollOpacity ?? 100) / 100,
+                    }}
                 />
                 {showWordHunt && !hasArt ? (
                     <div
                         className="absolute left-0 right-0 z-[15]"
-                        style={{ top: '62%', height: '8%' }}
+                        style={{ top: `${Math.max(artHeightPct - 2, 0)}%`, height: '8%' }}
                     >
                         <MissingWordHuntOverlay
                             pageSeed={page.pageNumber}
@@ -572,7 +588,7 @@ const BookPhonePreview: React.FC<BookPhonePreviewProps> = ({
                     }`}
                     style={{
                         // Sit inside the parchment band; align from top so long age scripts aren't clipped
-                        top: '66%',
+                        top: `${artHeightPct + 2}%`,
                         bottom: '2.5%',
                     }}
                 >
