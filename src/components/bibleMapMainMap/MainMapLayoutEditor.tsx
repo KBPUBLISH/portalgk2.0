@@ -17,6 +17,7 @@ import apiClient, { API_BASE_URL, getMediaUrl } from '../../services/apiClient';
 import MainMapDevicePreview from './MainMapDevicePreview';
 import type { PlacedMarker } from './MainMapIconCanvas';
 import {
+    apiErrorMessage,
     DEFAULT_MAIN_MAP_SIZE,
     explicitPositionKeys,
     explicitSizeKeys,
@@ -28,6 +29,7 @@ import {
     resolveAllMainMapPositions,
     resolveAllMainMapSizes,
     resolveMainMapPoint,
+    responseHasBadgeCenterAnchor,
     type MainMapLayoutKey,
     type MainMapPoint,
     type MainMapPosition,
@@ -70,12 +72,21 @@ const DEVICE_TOGGLE: {
     { id: 'tablet', label: 'Tablet', Icon: Tablet },
 ];
 
-function toLocalStory(s: MainMapStoryMarker, i: number, total: number): LocalStoryState {
+function toLocalStory(
+    s: MainMapStoryMarker,
+    i: number,
+    total: number,
+    /** When true, skip legacy topLeft→badgeCenter (coords already badge-centered). */
+    forceBadgeCenter = false,
+): LocalStoryState {
     const posExplicit = explicitPositionKeys(s);
     const sizeExplicit = explicitSizeKeys(s);
+    const asBadge: MainMapStoryMarker = forceBadgeCenter
+        ? { ...s, mainMapPositionAnchor: 'badgeCenter' }
+        : s;
     // Materialize phone + tablet stagger defaults into editable state; SE/Max stay fallback until edited
-    const position = resolveAllMainMapPositions(s, i, total);
-    const size = resolveAllMainMapSizes(s);
+    const position = resolveAllMainMapPositions(asBadge, i, total);
+    const size = resolveAllMainMapSizes(asBadge);
     return {
         ...s,
         mainMapPosition: position,
@@ -92,7 +103,8 @@ function toLocalStory(s: MainMapStoryMarker, i: number, total: number): LocalSto
             tablet: sizeExplicit.tablet || true,
         },
         mainMapPositionAnchor: 'badgeCenter' as const,
-        dirty: false,
+        // Force-badge reload needs a re-save so the API stores the anchor
+        dirty: forceBadgeCenter,
     };
 }
 
@@ -117,28 +129,42 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
     const [uploadingMap, setUploadingMap] = useState(false);
     const [uploadingMapVideo, setUploadingMapVideo] = useState(false);
     const [dirty, setDirty] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
     const iconInputRef = useRef<HTMLInputElement>(null);
     const mapInputRef = useRef<HTMLInputElement>(null);
     const mapVideoInputRef = useRef<HTMLInputElement>(null);
 
-    const loadStories = useCallback(async () => {
-        setLoading(true);
-        try {
-            const res = await apiClient.get(
-                `/api/bible-map/stories?islandId=${encodeURIComponent(islandId)}&status=all`,
-            );
-            const list: MainMapStoryMarker[] = Array.isArray(res.data) ? res.data : [];
-            const sorted = [...list].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-            const total = sorted.length;
-            setStories(sorted.map((s, i) => toLocalStory(s, i, total)));
-            setDirty(false);
-        } catch (err) {
-            console.error(err);
-            alert('Failed to load stories for main map layout');
-        } finally {
-            setLoading(false);
-        }
-    }, [islandId]);
+    const loadStories = useCallback(
+        async (opts?: { forceBadgeCenter?: boolean }) => {
+            setLoading(true);
+            setSaveError(null);
+            try {
+                const res = await apiClient.get(
+                    `/api/bible-map/stories?islandId=${encodeURIComponent(islandId)}&status=all`,
+                );
+                const list: MainMapStoryMarker[] = Array.isArray(res.data) ? res.data : [];
+                const sorted = [...list].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                const total = sorted.length;
+                const force = Boolean(opts?.forceBadgeCenter);
+                setStories(sorted.map((s, i) => toLocalStory(s, i, total, force)));
+                setDirty(force);
+                if (force) {
+                    setSaveError(
+                        'Loaded raw coords as badge centers (skipped legacy conversion). ' +
+                            'Re-check pad alignment, then Save all positions so the API stores mainMapPositionAnchor.',
+                    );
+                }
+            } catch (err) {
+                console.error(err);
+                const msg = apiErrorMessage(err, 'Failed to load stories for main map layout');
+                setSaveError(msg);
+                alert(msg);
+            } finally {
+                setLoading(false);
+            }
+        },
+        [islandId],
+    );
 
     useEffect(() => {
         void loadStories();
@@ -377,48 +403,97 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
         };
     };
 
-    const handleSave = async () => {
-        const toSave = dirty ? stories.filter((s) => s.dirty) : stories;
+    const persistStories = async (toSave: LocalStoryState[]) => {
         if (toSave.length === 0) {
             alert('Nothing to save.');
             return;
         }
         setSaving(true);
+        setSaveError(null);
+        const failures: string[] = [];
+        let missingAnchor = 0;
+        let savedOk = 0;
+
         try {
-            await Promise.all(
-                toSave.map((s) =>
-                    apiClient.put(`/api/bible-map/stories/${s._id}`, buildSavePayload(s)),
+            const results = await Promise.allSettled(
+                toSave.map(async (s) => {
+                    const res = await apiClient.put(
+                        `/api/bible-map/stories/${s._id}`,
+                        buildSavePayload(s),
+                    );
+                    return { story: s, data: res.data };
+                }),
+            );
+
+            for (const result of results) {
+                if (result.status === 'rejected') {
+                    failures.push(apiErrorMessage(result.reason, 'Save failed'));
+                    continue;
+                }
+                savedOk += 1;
+                if (!responseHasBadgeCenterAnchor(result.value.data)) {
+                    missingAnchor += 1;
+                }
+            }
+
+            if (failures.length > 0) {
+                const msg =
+                    `Failed to save ${failures.length} of ${toSave.length} stor` +
+                    `${toSave.length === 1 ? 'y' : 'ies'}. ${failures[0]}` +
+                    (failures.length > 1 ? ` (+${failures.length - 1} more)` : '');
+                setSaveError(msg);
+                alert(msg);
+                // Keep dirty flags; partial successes still marked dirty so retry is safe
+                return;
+            }
+
+            if (missingAnchor > 0) {
+                const msg =
+                    `Saved ${savedOk} stor${savedOk === 1 ? 'y' : 'ies'}, but the API at ${API_BASE_URL} ` +
+                    `did not keep mainMapPositionAnchor=badgeCenter. Positions will drift on reload ` +
+                    `(legacy top-left conversion). Deploy the updated backend, then Save again.`;
+                setSaveError(msg);
+                alert(msg);
+                // Still clear dirty — write "succeeded", schema is the problem
+            }
+
+            setStories((prev) =>
+                prev.map((s) =>
+                    toSave.some((t) => t._id === s._id)
+                        ? {
+                              ...s,
+                              dirty: false,
+                              mainMapPositionAnchor: 'badgeCenter',
+                          }
+                        : s,
                 ),
             );
-            setStories((prev) => prev.map((s) => ({ ...s, dirty: false })));
             setDirty(false);
-            alert(`Saved layout for ${toSave.length} stor${toSave.length === 1 ? 'y' : 'ies'}.`);
+            if (missingAnchor === 0) {
+                setSaveError(null);
+                alert(
+                    `Saved layout for ${savedOk} stor${savedOk === 1 ? 'y' : 'ies'} ` +
+                        `(badge-center coords).`,
+                );
+            }
         } catch (err) {
             console.error(err);
-            alert('Failed to save main map layout');
+            const msg = apiErrorMessage(err, 'Failed to save main map layout');
+            setSaveError(msg);
+            alert(msg);
         } finally {
             setSaving(false);
         }
     };
 
+    const handleSave = async () => {
+        const toSave = dirty ? stories.filter((s) => s.dirty) : stories;
+        await persistStories(toSave);
+    };
+
     const handleSaveAll = async () => {
         if (stories.length === 0) return;
-        setSaving(true);
-        try {
-            await Promise.all(
-                stories.map((s) =>
-                    apiClient.put(`/api/bible-map/stories/${s._id}`, buildSavePayload(s)),
-                ),
-            );
-            setStories((prev) => prev.map((s) => ({ ...s, dirty: false })));
-            setDirty(false);
-            alert(`Saved layout for ${stories.length} stor${stories.length === 1 ? 'y' : 'ies'}.`);
-        } catch (err) {
-            console.error(err);
-            alert('Failed to save main map layout');
-        } finally {
-            setSaving(false);
-        }
+        await persistStories(stories);
     };
 
     return (
@@ -446,6 +521,26 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                     >
                         <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                         Refresh
+                    </button>
+                    <button
+                        type="button"
+                        disabled={loading || saving || stories.length === 0}
+                        onClick={() => {
+                            if (
+                                !window.confirm(
+                                    'Reload coords as badge centers without the legacy top-left shift?\n\n' +
+                                        'Use this if icons jumped off pads after a save (API was missing mainMapPositionAnchor). ' +
+                                        'Then Save all positions.',
+                                )
+                            ) {
+                                return;
+                            }
+                            void loadStories({ forceBadgeCenter: true });
+                        }}
+                        className="inline-flex items-center gap-2 border border-amber-300 text-amber-900 px-3 py-2.5 rounded-lg font-medium hover:bg-amber-50 disabled:opacity-50 text-sm"
+                        title="Recovery: treat stored x,y as badge centers"
+                    >
+                        Fix drifted coords
                     </button>
                     <button
                         type="button"
@@ -535,18 +630,31 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                     picks the closest layout for each device.
                 </p>
                 <p className="text-xs text-amber-900/85 leading-relaxed">
-                    Unset sizes fall back (e.g. Phone Max → Phone → Phone SE → Tablet). This CMS
-                    writes to{' '}
+                    Drag the crosshair (badge center) onto each green pad. Labels stay under the
+                    icon. Unset sizes fall back (Phone Max → Phone → Phone SE → Tablet). API:{' '}
                     <code className="rounded bg-amber-100/80 px-1 py-0.5 text-[11px] break-all">
                         {API_BASE_URL}
                     </code>
-                    . Match{' '}
-                    <code className="rounded bg-amber-100/80 px-1 py-0.5 text-[11px]">
-                        VITE_API_BASE_URL
-                    </code>{' '}
-                    on the kid app, then Save again.
+                    . Kid app must use the same host.
                 </p>
             </div>
+
+            {saveError && (
+                <div
+                    className="rounded-lg border border-red-300 bg-red-50 px-3.5 py-3 text-sm text-red-950"
+                    role="alert"
+                >
+                    <p className="font-semibold text-red-900">Layout save problem</p>
+                    <p className="mt-1 text-xs leading-relaxed whitespace-pre-wrap">{saveError}</p>
+                    <button
+                        type="button"
+                        className="mt-2 text-xs font-medium text-red-800 underline"
+                        onClick={() => setSaveError(null)}
+                    >
+                        Dismiss
+                    </button>
+                </div>
+            )}
 
             <div className="flex flex-wrap items-center gap-2">
                 <div className="flex flex-wrap rounded-lg border border-gray-300 overflow-hidden text-sm">

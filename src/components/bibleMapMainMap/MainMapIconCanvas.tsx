@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { MapPin } from 'lucide-react';
 import { getMediaUrl } from '../../services/apiClient';
 import {
@@ -47,48 +47,32 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
     const dragRef = useRef<{
         id: string;
         mode: 'move' | 'resize';
+        pointerId: number;
         startX: number;
         startY: number;
         origPos: MainMapPoint;
         origSize: MainMapSize;
     } | null>(null);
+    const onMoveRef = useRef(onMove);
+    const onResizeRef = useRef(onResize);
+    onMoveRef.current = onMove;
+    onResizeRef.current = onResize;
     const [dragging, setDragging] = useState(false);
 
-    const onPointerDown = (
-        e: React.PointerEvent,
-        id: string,
-        mode: 'move' | 'resize',
-    ) => {
-        if (readOnly) return;
-        e.stopPropagation();
-        e.preventDefault();
-        const marker = markers.find((m) => m.story._id === id);
-        if (!marker || !rootRef.current) return;
-        onSelect(id);
-        (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-        dragRef.current = {
-            id,
-            mode,
-            startX: e.clientX,
-            startY: e.clientY,
-            origPos: { ...marker.position },
-            origSize: { ...marker.size },
-        };
-        setDragging(true);
-    };
+    useEffect(() => {
+        if (!dragging) return;
 
-    const onPointerMove = useCallback(
-        (e: React.PointerEvent) => {
+        const applyDrag = (clientX: number, clientY: number) => {
             const drag = dragRef.current;
             const root = rootRef.current;
             if (!drag || !root) return;
             const rect = root.getBoundingClientRect();
             if (rect.width < 1 || rect.height < 1) return;
-            const dxPct = ((e.clientX - drag.startX) / rect.width) * 100;
-            const dyPct = ((e.clientY - drag.startY) / rect.height) * 100;
+            const dxPct = ((clientX - drag.startX) / rect.width) * 100;
+            const dyPct = ((clientY - drag.startY) / rect.height) * 100;
 
             if (drag.mode === 'move') {
-                onMove(
+                onMoveRef.current(
                     drag.id,
                     clampBadgeCenter(
                         {
@@ -101,7 +85,8 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
                 return;
             }
 
-            if (!onResize) return;
+            const resize = onResizeRef.current;
+            if (!resize) return;
             // Resize expands around the badge center (position stays put).
             const maxW = Math.min(
                 MAIN_MAP_SIZE_MAX,
@@ -111,17 +96,62 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
                 MAIN_MAP_SIZE_MAX,
                 2 * Math.min(drag.origPos.y, 100 - drag.origPos.y),
             );
-            onResize(drag.id, {
+            resize(drag.id, {
                 w: clamp(drag.origSize.w + dxPct, MAIN_MAP_SIZE_MIN, maxW),
                 h: clamp(drag.origSize.h + dyPct, MAIN_MAP_SIZE_MIN, maxH),
             });
-        },
-        [onMove, onResize],
-    );
+        };
 
-    const onPointerUp = () => {
-        dragRef.current = null;
-        setDragging(false);
+        const onPointerMove = (e: PointerEvent) => {
+            const drag = dragRef.current;
+            if (!drag || e.pointerId !== drag.pointerId) return;
+            e.preventDefault();
+            applyDrag(e.clientX, e.clientY);
+        };
+
+        const endDrag = (e: PointerEvent) => {
+            const drag = dragRef.current;
+            if (!drag || e.pointerId !== drag.pointerId) return;
+            dragRef.current = null;
+            setDragging(false);
+        };
+
+        window.addEventListener('pointermove', onPointerMove, { passive: false });
+        window.addEventListener('pointerup', endDrag);
+        window.addEventListener('pointercancel', endDrag);
+        return () => {
+            window.removeEventListener('pointermove', onPointerMove);
+            window.removeEventListener('pointerup', endDrag);
+            window.removeEventListener('pointercancel', endDrag);
+        };
+    }, [dragging]);
+
+    const onPointerDown = (
+        e: React.PointerEvent,
+        id: string,
+        mode: 'move' | 'resize',
+    ) => {
+        if (readOnly) return;
+        e.stopPropagation();
+        e.preventDefault();
+        const marker = markers.find((m) => m.story._id === id);
+        if (!marker || !rootRef.current) return;
+        onSelect(id);
+        try {
+            (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+        } catch {
+            /* ignore capture failures */
+        }
+        dragRef.current = {
+            id,
+            mode,
+            pointerId: e.pointerId,
+            startX: e.clientX,
+            startY: e.clientY,
+            origPos: { ...marker.position },
+            origSize: { ...marker.size },
+        };
+        setDragging(true);
     };
 
     return (
@@ -130,9 +160,6 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
             className={`absolute inset-0 ${
                 readOnly ? 'pointer-events-none' : dragging ? 'cursor-grabbing' : ''
             }`}
-            onPointerMove={readOnly ? undefined : onPointerMove}
-            onPointerUp={readOnly ? undefined : onPointerUp}
-            onPointerLeave={readOnly ? undefined : onPointerUp}
             onClick={readOnly ? undefined : () => onSelect(null)}
         >
             {markers.map((marker) => {
@@ -141,9 +168,11 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
                 const label = story.displayTitle || story.title || `#${story.order}`;
                 const src = iconUrl ? getMediaUrl(iconUrl) : '';
 
+                // Badge box is the positioned hit target; label is absolutely under it
+                // so it cannot drift to a separate % coordinate.
                 const body = (
-                    <>
-                        <span className="relative flex items-center justify-center w-full h-full">
+                    <span className="relative block w-full h-full">
+                        <span className="absolute inset-0 flex items-center justify-center">
                             {src ? (
                                 <img
                                     src={src}
@@ -169,7 +198,7 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
                                 </span>
                             )}
                             {!readOnly && (
-                                <span className="absolute -top-1 -left-1 min-w-[16px] h-4 px-1 rounded-full bg-indigo-600 text-white text-[9px] font-bold leading-4 text-center">
+                                <span className="absolute -top-1 -left-1 min-w-[16px] h-4 px-1 rounded-full bg-indigo-600 text-white text-[9px] font-bold leading-4 text-center pointer-events-none">
                                     {story.order}
                                 </span>
                             )}
@@ -185,7 +214,7 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
                             )}
                         </span>
                         <span
-                            className="absolute left-1/2 top-full -translate-x-1/2 mt-0.5 text-[7px] leading-tight font-bold text-white tracking-wide truncate max-w-[140%] text-center px-0.5 pointer-events-none"
+                            className="absolute left-1/2 top-full -translate-x-1/2 mt-0.5 text-[7px] leading-tight font-bold text-white tracking-wide truncate max-w-[140%] text-center px-0.5 pointer-events-none z-10"
                             style={{ textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}
                         >
                             {label}
@@ -197,7 +226,7 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
                                 aria-label="Resize"
                             />
                         )}
-                    </>
+                    </span>
                 );
 
                 // Position = center of circular badge (label is absolutely below).
@@ -213,7 +242,7 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
                     return (
                         <div
                             key={story._id}
-                            className="absolute flex items-center justify-center select-none z-10"
+                            className="absolute select-none z-10"
                             style={style}
                             aria-label={label}
                         >
@@ -226,7 +255,7 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
                     <button
                         key={story._id}
                         type="button"
-                        className={`absolute flex items-center justify-center touch-none select-none ${
+                        className={`absolute touch-none select-none ${
                             selected
                                 ? 'ring-2 ring-indigo-400 ring-offset-1 ring-offset-transparent z-20'
                                 : 'z-10'

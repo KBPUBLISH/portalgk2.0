@@ -130,6 +130,40 @@ export function legacyTopLeftToBadgeCenter(
     };
 }
 
+/** Inverse of legacyTopLeftToBadgeCenter — for saving against APIs that only store topLeft. */
+export function badgeCenterToLegacyTopLeft(
+    pos: MainMapPoint,
+    size: MainMapSize,
+): MainMapPoint {
+    const labelReserve = Math.min(LEGACY_LABEL_RESERVE_PCT, Math.max(1.2, size.h * 0.22));
+    return {
+        x: clamp(pos.x - size.w / 2, 0, 100),
+        y: clamp(pos.y - (size.h - labelReserve) / 2, 0, 100),
+    };
+}
+
+/** True when API response kept badgeCenter semantics after save. */
+export function responseHasBadgeCenterAnchor(raw: unknown): boolean {
+    if (!raw || typeof raw !== 'object') return false;
+    return (raw as { mainMapPositionAnchor?: string }).mainMapPositionAnchor === 'badgeCenter';
+}
+
+/** Extract a useful API/error message from axios-style failures. */
+export function apiErrorMessage(err: unknown, fallback: string): string {
+    const e = err as {
+        message?: string;
+        response?: { status?: number; data?: { message?: string; error?: string } };
+    };
+    const fromBody = e?.response?.data?.message || e?.response?.data?.error;
+    if (fromBody) return String(fromBody);
+    if (e?.response?.status === 404) {
+        return 'API endpoint not found — is VITE_API_BASE_URL pointing at the Bible Map backend?';
+    }
+    if (e?.response?.status) return `${fallback} (HTTP ${e.response.status})`;
+    if (e?.message) return `${fallback}: ${e.message}`;
+    return fallback;
+}
+
 /**
  * Staggered S-curve defaults so unset icons are not stacked at 50,50.
  * Values are badge-center coordinates. index is 0-based among stories sorted by order.
