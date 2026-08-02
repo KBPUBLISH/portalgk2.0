@@ -105,7 +105,7 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
 
     const markers: PlacedMarker[] = useMemo(
         () =>
-            stories.map((s, i) => ({
+            stories.map((s) => ({
                 story: s,
                 position: s.mainMapPosition[device],
                 size: resolveMainMapSize(s, device),
