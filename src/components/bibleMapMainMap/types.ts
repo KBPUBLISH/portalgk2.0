@@ -42,6 +42,10 @@ export const DEFAULT_MAIN_MAP_SIZE: MainMapSizeLayout = {
     tablet: { w: 14, h: 11 },
 };
 
+/** Sensible clamp for main-map icon size (% of device frame). */
+export const MAIN_MAP_SIZE_MIN = 7;
+export const MAIN_MAP_SIZE_MAX = 32;
+
 function clamp(n: number, min: number, max: number) {
     return Math.min(max, Math.max(min, n));
 }
@@ -96,9 +100,14 @@ export function resolveMainMapSize(
     const w = Number(raw.w);
     const h = Number(raw.h);
     return {
-        w: Number.isFinite(w) ? clamp(w, 6, 40) : fallback.w,
-        h: Number.isFinite(h) ? clamp(h, 6, 40) : fallback.h,
+        w: Number.isFinite(w) ? clamp(w, MAIN_MAP_SIZE_MIN, MAIN_MAP_SIZE_MAX) : fallback.w,
+        h: Number.isFinite(h) ? clamp(h, MAIN_MAP_SIZE_MIN, MAIN_MAP_SIZE_MAX) : fallback.h,
     };
+}
+
+export function formatSize(s?: MainMapSize | null): string {
+    if (!s || typeof s.w !== 'number' || typeof s.h !== 'number') return '—';
+    return `${Number(s.w).toFixed(1)}×${Number(s.h).toFixed(1)}`;
 }
 
 export function emptyMainMapPosition(): MainMapPosition {

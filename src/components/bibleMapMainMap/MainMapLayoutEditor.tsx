@@ -19,10 +19,12 @@ import MainMapDevicePreview from './MainMapDevicePreview';
 import type { PlacedMarker } from './MainMapIconCanvas';
 import {
     DEFAULT_MAIN_MAP_SIZE,
+    formatSize,
     resolveMainMapPoint,
     resolveMainMapSize,
     type MainMapPoint,
     type MainMapPosition,
+    type MainMapSize,
     type MainMapSizeLayout,
     type MainMapStoryMarker,
 } from './types';
@@ -128,6 +130,46 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                                   x: Math.round(next.x * 10) / 10,
                                   y: Math.round(next.y * 10) / 10,
                               },
+                          },
+                          dirty: true,
+                      }
+                    : s,
+            ),
+        );
+        setDirty(true);
+    };
+
+    const handleResize = (id: string, next: MainMapSize) => {
+        setStories((prev) =>
+            prev.map((s) =>
+                s._id === id
+                    ? {
+                          ...s,
+                          mainMapSize: {
+                              ...s.mainMapSize,
+                              [device]: {
+                                  w: Math.round(next.w * 10) / 10,
+                                  h: Math.round(next.h * 10) / 10,
+                              },
+                          },
+                          dirty: true,
+                      }
+                    : s,
+            ),
+        );
+        setDirty(true);
+    };
+
+    const handleResetSize = (id: string) => {
+        const def = DEFAULT_MAIN_MAP_SIZE[device];
+        setStories((prev) =>
+            prev.map((s) =>
+                s._id === id
+                    ? {
+                          ...s,
+                          mainMapSize: {
+                              ...s.mainMapSize,
+                              [device]: { ...def },
                           },
                           dirty: true,
                       }
@@ -307,9 +349,9 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                         Layout editor
                     </h3>
                     <p className="text-sm text-gray-500 mt-1 max-w-xl">
-                        Toggle Phone/Tablet for device-specific positions. Preview shows the kid
-                        screen; Edit layout lets you drag icons (% of frame). Unset icons start on a
-                        staggered path by story order.
+                        Toggle Phone/Tablet for device-specific position and size. Preview shows the
+                        kid screen; Edit layout lets you drag icons to move and use the corner handle
+                        to resize (% of frame). Unset icons start on a staggered path by story order.
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -431,6 +473,7 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                     selectedId={selectedId}
                     onSelect={setSelectedId}
                     onMove={handleMove}
+                    onResize={handleResize}
                     interactive={canvasMode === 'edit'}
                     loading={loading}
                     hideDeviceToggle
@@ -455,6 +498,7 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                             {stories.map((s) => {
                                 const active = s._id === selectedId;
                                 const pos = s.mainMapPosition[device];
+                                const size = s.mainMapSize[device];
                                 return (
                                     <li
                                         key={s._id}
@@ -485,7 +529,7 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                                                 )}
                                             </div>
                                             <p className="text-xs text-gray-500 mt-1 font-mono">
-                                                {device}: {fmt(pos)} %
+                                                {device}: {fmt(pos)} · {formatSize(size)}%
                                             </p>
                                             {!s.mapIconUrl && (
                                                 <p className="text-[11px] text-amber-700 mt-1">
@@ -517,15 +561,30 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                                 <div>
                                     Phone:{' '}
                                     <span className="font-mono">
-                                        {fmt(selected.mainMapPosition.phone)}
+                                        {fmt(selected.mainMapPosition.phone)} ·{' '}
+                                        {formatSize(selected.mainMapSize.phone)}%
                                     </span>
                                 </div>
                                 <div>
                                     Tablet:{' '}
                                     <span className="font-mono">
-                                        {fmt(selected.mainMapPosition.tablet)}
+                                        {fmt(selected.mainMapPosition.tablet)} ·{' '}
+                                        {formatSize(selected.mainMapSize.tablet)}%
                                     </span>
                                 </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-xs text-gray-600 font-mono">
+                                    {device} size: {formatSize(selected.mainMapSize[device])}%
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => handleResetSize(selected._id)}
+                                    className="text-xs text-indigo-700 hover:underline"
+                                    title={`Reset ${device} size to default`}
+                                >
+                                    Reset size
+                                </button>
                             </div>
                             {selected.mapIconUrl ? (
                                 <img

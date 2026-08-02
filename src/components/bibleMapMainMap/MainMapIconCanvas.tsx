@@ -1,7 +1,13 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { MapPin } from 'lucide-react';
 import { getMediaUrl } from '../../services/apiClient';
-import type { MainMapPoint, MainMapSize, MainMapStoryMarker } from './types';
+import {
+    MAIN_MAP_SIZE_MAX,
+    MAIN_MAP_SIZE_MIN,
+    type MainMapPoint,
+    type MainMapSize,
+    type MainMapStoryMarker,
+} from './types';
 
 export interface PlacedMarker {
     story: MainMapStoryMarker;
@@ -15,6 +21,7 @@ interface MainMapIconCanvasProps {
     selectedId: string | null;
     onSelect: (id: string | null) => void;
     onMove: (id: string, next: MainMapPoint) => void;
+    onResize?: (id: string, next: MainMapSize) => void;
     /** Display-only kid-app view — no drag/select chrome. */
     readOnly?: boolean;
 }
@@ -25,25 +32,32 @@ function clamp(n: number, min: number, max: number) {
 
 /**
  * Drag story icons as % of the device frame (same math as Scene Studio OverlayCanvas).
+ * Selected icons get a bottom-right resize handle in edit mode.
  */
 const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
     markers,
     selectedId,
     onSelect,
     onMove,
+    onResize,
     readOnly = false,
 }) => {
     const rootRef = useRef<HTMLDivElement>(null);
     const dragRef = useRef<{
         id: string;
+        mode: 'move' | 'resize';
         startX: number;
         startY: number;
-        orig: MainMapPoint;
-        size: MainMapSize;
+        origPos: MainMapPoint;
+        origSize: MainMapSize;
     } | null>(null);
     const [dragging, setDragging] = useState(false);
 
-    const onPointerDown = (e: React.PointerEvent, id: string) => {
+    const onPointerDown = (
+        e: React.PointerEvent,
+        id: string,
+        mode: 'move' | 'resize',
+    ) => {
         if (readOnly) return;
         e.stopPropagation();
         e.preventDefault();
@@ -53,10 +67,11 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
         (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
         dragRef.current = {
             id,
+            mode,
             startX: e.clientX,
             startY: e.clientY,
-            orig: { ...marker.position },
-            size: { ...marker.size },
+            origPos: { ...marker.position },
+            origSize: { ...marker.size },
         };
         setDragging(true);
     };
@@ -70,12 +85,30 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
             if (rect.width < 1 || rect.height < 1) return;
             const dxPct = ((e.clientX - drag.startX) / rect.width) * 100;
             const dyPct = ((e.clientY - drag.startY) / rect.height) * 100;
-            onMove(drag.id, {
-                x: clamp(drag.orig.x + dxPct, 0, 100 - drag.size.w),
-                y: clamp(drag.orig.y + dyPct, 0, 100 - drag.size.h),
+
+            if (drag.mode === 'move') {
+                onMove(drag.id, {
+                    x: clamp(drag.origPos.x + dxPct, 0, 100 - drag.origSize.w),
+                    y: clamp(drag.origPos.y + dyPct, 0, 100 - drag.origSize.h),
+                });
+                return;
+            }
+
+            if (!onResize) return;
+            onResize(drag.id, {
+                w: clamp(
+                    drag.origSize.w + dxPct,
+                    MAIN_MAP_SIZE_MIN,
+                    Math.min(MAIN_MAP_SIZE_MAX, 100 - drag.origPos.x),
+                ),
+                h: clamp(
+                    drag.origSize.h + dyPct,
+                    MAIN_MAP_SIZE_MIN,
+                    Math.min(MAIN_MAP_SIZE_MAX, 100 - drag.origPos.y),
+                ),
             });
         },
-        [onMove],
+        [onMove, onResize],
     );
 
     const onPointerUp = () => {
@@ -139,6 +172,13 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
                         >
                             {label}
                         </span>
+                        {selected && onResize && (
+                            <span
+                                className="absolute right-0 bottom-0 w-3 h-3 bg-indigo-500 border border-white rounded-sm cursor-nwse-resize z-30"
+                                onPointerDown={(e) => onPointerDown(e, story._id, 'resize')}
+                                aria-label="Resize"
+                            />
+                        )}
                     </>
                 );
 
@@ -175,7 +215,7 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
                             ...style,
                             cursor: dragging && selected ? 'grabbing' : 'grab',
                         }}
-                        onPointerDown={(e) => onPointerDown(e, story._id)}
+                        onPointerDown={(e) => onPointerDown(e, story._id, 'move')}
                         onClick={(e) => {
                             e.stopPropagation();
                             onSelect(story._id);

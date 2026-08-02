@@ -3,7 +3,7 @@ import { Image as ImageIcon, Map as MapIcon, Smartphone, Tablet } from 'lucide-r
 import { getMediaUrl } from '../../services/apiClient';
 import { DEVICE_FRAME, type SceneDevice } from '../sceneStudio/types';
 import MainMapIconCanvas, { type PlacedMarker } from './MainMapIconCanvas';
-import type { MainMapPoint } from './types';
+import type { MainMapPoint, MainMapSize } from './types';
 
 export interface MainMapDevicePreviewProps {
     device: SceneDevice;
@@ -13,6 +13,7 @@ export interface MainMapDevicePreviewProps {
     selectedId?: string | null;
     onSelect?: (id: string | null) => void;
     onMove?: (id: string, next: MainMapPoint) => void;
+    onResize?: (id: string, next: MainMapSize) => void;
     /** When false, icons are display-only (kid-app view). Default false. */
     interactive?: boolean;
     loading?: boolean;
@@ -35,6 +36,7 @@ const MainMapDevicePreview: React.FC<MainMapDevicePreviewProps> = ({
     selectedId = null,
     onSelect,
     onMove,
+    onResize,
     interactive = false,
     loading = false,
     caption,
@@ -152,6 +154,7 @@ const MainMapDevicePreview: React.FC<MainMapDevicePreviewProps> = ({
                             selectedId={interactive ? selectedId : null}
                             onSelect={interactive ? onSelect || (() => undefined) : () => undefined}
                             onMove={interactive && onMove ? onMove : () => undefined}
+                            onResize={interactive && onResize ? onResize : undefined}
                             readOnly={!interactive}
                         />
                     )}
@@ -170,7 +173,7 @@ const MainMapDevicePreview: React.FC<MainMapDevicePreviewProps> = ({
                             ? ` · ${storyCount} stor${storyCount === 1 ? 'y' : 'ies'}`
                             : ' · empty map'
                         : ' · waiting for map PNG'}
-                    {interactive ? ' · drag icons to position' : ''}
+                    {interactive ? ' · drag to move · corner to resize' : ''}
                 </p>
             </div>
 
