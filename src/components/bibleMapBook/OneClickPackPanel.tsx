@@ -6,6 +6,7 @@ const STEPS = [
     { id: 'source', label: 'Source' },
     { id: 'scripts', label: 'Scripts' },
     { id: 'images', label: 'Images' },
+    { id: 'map-icon', label: 'Map icon' },
     { id: 'quiz', label: 'Quiz' },
     { id: 'puzzle', label: 'Puzzle' },
     { id: 'coloring', label: 'Coloring' },
@@ -281,7 +282,7 @@ const OneClickPackPanel: React.FC<OneClickPackPanelProps> = ({
         const modelLabel =
             imageProvider === 'openai' ? 'ChatGPT (gpt-image-2)' : 'Gemini';
         const confirmed = window.confirm(
-            `This will regenerate ${pageCount} script pages, images, quiz, puzzle, and coloring with ${modelLabel} using your style reference${
+            `This will regenerate ${pageCount} script pages, images, map icon, quiz, puzzle, and coloring with ${modelLabel} using your style reference${
                 selectedCharacterIds.length
                     ? ` and ${selectedCharacterIds.length} character(s)`
                     : ''
@@ -418,7 +419,7 @@ const OneClickPackPanel: React.FC<OneClickPackPanelProps> = ({
                         </label>
                     </div>
                     <p className="text-[11px] text-gray-500 mt-1">
-                        Selected model is used for book pages, puzzle, and coloring.
+                        Selected model is used for book pages, map icon, puzzle, and coloring.
                     </p>
                 </div>
             </div>
@@ -463,7 +464,7 @@ const OneClickPackPanel: React.FC<OneClickPackPanelProps> = ({
                         />
                         <div className="min-w-0 flex-1">
                             <p className="text-[11px] text-amber-900/90">
-                                Book pages, puzzle, and coloring will match this style.
+                                Book pages, map icon, puzzle, and coloring will match this style.
                             </p>
                             <button
                                 type="button"
@@ -537,8 +538,8 @@ const OneClickPackPanel: React.FC<OneClickPackPanelProps> = ({
                         One-click create all
                     </h3>
                     <p className="text-sm text-gray-600 mt-0.5">
-                        Set page count + style reference first, then builds scripts → images → quiz
-                        → puzzle → coloring. Scene video and game stay manual.
+                        Set page count + style reference first, then builds scripts → images → map
+                        icon → quiz → puzzle → coloring. Scene video and game stay manual.
                     </p>
                 </div>
             </div>

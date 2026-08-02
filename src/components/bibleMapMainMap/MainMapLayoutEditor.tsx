@@ -5,13 +5,18 @@ import {
     Smartphone,
     Tablet,
     Upload,
-    Image as ImageIcon,
     ExternalLink,
     Map as MapIcon,
+    Eye,
+    Move,
+    RefreshCw,
+    Sparkles,
+    Loader2,
 } from 'lucide-react';
 import apiClient, { getMediaUrl } from '../../services/apiClient';
-import { DEVICE_FRAME, type SceneDevice } from '../sceneStudio/types';
-import MainMapIconCanvas, { type PlacedMarker } from './MainMapIconCanvas';
+import type { SceneDevice } from '../sceneStudio/types';
+import MainMapDevicePreview from './MainMapDevicePreview';
+import type { PlacedMarker } from './MainMapIconCanvas';
 import {
     DEFAULT_MAIN_MAP_SIZE,
     resolveMainMapPoint,
@@ -49,17 +54,18 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
     showMainMapUpload = false,
 }) => {
     const [device, setDevice] = useState<SceneDevice>('phone');
+    /** preview = kid-app view; edit = drag icons to position */
+    const [canvasMode, setCanvasMode] = useState<'preview' | 'edit'>('preview');
     const [stories, setStories] = useState<LocalStoryState[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [uploadingIcon, setUploadingIcon] = useState(false);
+    const [generatingIcon, setGeneratingIcon] = useState(false);
     const [uploadingMap, setUploadingMap] = useState(false);
     const [dirty, setDirty] = useState(false);
     const iconInputRef = useRef<HTMLInputElement>(null);
     const mapInputRef = useRef<HTMLInputElement>(null);
-
-    const frame = DEVICE_FRAME[device];
 
     const loadStories = useCallback(async () => {
         setLoading(true);
@@ -179,6 +185,66 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
         }
     };
 
+    const handleGenerateIcon = async () => {
+        if (!selectedId) return;
+        setGeneratingIcon(true);
+        try {
+            const res = await apiClient.post(
+                `/api/bible-map/stories/${selectedId}/generate-map-icon`,
+                {},
+                { timeout: 300000 },
+            );
+            const url = String(res.data?.mapIconUrl || '').trim();
+            if (!url) {
+                alert('Map icon generation returned no URL');
+                return;
+            }
+            setStories((prev) =>
+                prev.map((s) =>
+                    s._id === selectedId
+                        ? {
+                              ...s,
+                              mapIconUrl: url,
+                              mainMapPosition: res.data?.mainMapPosition
+                                  ? {
+                                        phone: resolveMainMapPoint(
+                                            {
+                                                ...s,
+                                                mainMapPosition: res.data.mainMapPosition,
+                                            },
+                                            'phone',
+                                            0,
+                                            1,
+                                        ),
+                                        tablet: resolveMainMapPoint(
+                                            {
+                                                ...s,
+                                                mainMapPosition: res.data.mainMapPosition,
+                                            },
+                                            'tablet',
+                                            0,
+                                            1,
+                                        ),
+                                    }
+                                  : s.mainMapPosition,
+                              dirty: false,
+                          }
+                        : s,
+                ),
+            );
+        } catch (err: unknown) {
+            console.error(err);
+            const msg =
+                (err as { response?: { data?: { message?: string; error?: string } } })?.response
+                    ?.data?.message ||
+                (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+                'Failed to generate map icon';
+            alert(msg);
+        } finally {
+            setGeneratingIcon(false);
+        }
+    };
+
     const handleSave = async () => {
         // Persist all current positions so auto-staggered defaults get written on first save
         const toSave = dirty ? stories.filter((s) => s.dirty) : stories;
@@ -232,23 +298,31 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
         }
     };
 
-    const mapSrc = mainMapUrl ? getMediaUrl(mainMapUrl) : '';
-
     return (
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                    <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                    <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
                         <MapIcon className="w-5 h-5 text-indigo-600" />
-                        Main map layout
-                    </h2>
+                        Layout editor
+                    </h3>
                     <p className="text-sm text-gray-500 mt-1 max-w-xl">
-                        App flow: Ocean → tap island → this main map (PNG + story icons) → tap icon
-                        → intro video → Scene Studio for that pack. Drag icons to set phone/tablet
-                        positions (% of frame). Unset icons start on a staggered path by story order.
+                        Toggle Phone/Tablet for device-specific positions. Preview shows the kid
+                        screen; Edit layout lets you drag icons (% of frame). Unset icons start on a
+                        staggered path by story order.
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        disabled={loading || saving}
+                        onClick={() => void loadStories()}
+                        className="inline-flex items-center gap-2 border border-gray-300 text-gray-700 px-3 py-2.5 rounded-lg font-medium hover:bg-gray-50 disabled:opacity-50"
+                        title="Reload story packs (use after creating a pack to see its icon)"
+                    >
+                        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                        Refresh
+                    </button>
                     <button
                         type="button"
                         disabled={saving || stories.length === 0}
@@ -298,77 +372,69 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                 </div>
             )}
 
-            <div className="flex flex-wrap gap-2">
-                {(
-                    [
-                        { id: 'phone' as const, label: 'Phone', Icon: Smartphone },
-                        { id: 'tablet' as const, label: 'Tablet', Icon: Tablet },
-                    ] as const
-                ).map(({ id: deviceId, label, Icon }) => (
+            <div className="flex flex-wrap items-center gap-2">
+                <div className="flex rounded-lg border border-gray-300 overflow-hidden text-sm">
+                    {(
+                        [
+                            { id: 'phone' as const, label: 'Phone', Icon: Smartphone },
+                            { id: 'tablet' as const, label: 'Tablet', Icon: Tablet },
+                        ] as const
+                    ).map(({ id: deviceId, label, Icon }) => (
+                        <button
+                            key={deviceId}
+                            type="button"
+                            onClick={() => setDevice(deviceId)}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 ${
+                                device === deviceId
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'bg-white text-gray-700 hover:bg-gray-50'
+                            }`}
+                        >
+                            <Icon className="w-4 h-4" />
+                            {label}
+                        </button>
+                    ))}
+                </div>
+                <div className="flex rounded-lg border border-gray-300 overflow-hidden text-sm">
                     <button
-                        key={deviceId}
                         type="button"
-                        onClick={() => setDevice(deviceId)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border ${
-                            device === deviceId
-                                ? 'bg-indigo-600 text-white border-indigo-600'
-                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                        onClick={() => setCanvasMode('preview')}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 ${
+                            canvasMode === 'preview'
+                                ? 'bg-slate-800 text-white'
+                                : 'bg-white text-gray-700 hover:bg-gray-50'
                         }`}
                     >
-                        <Icon className="w-4 h-4" />
-                        {label}
+                        <Eye className="w-4 h-4" />
+                        Preview
                     </button>
-                ))}
+                    <button
+                        type="button"
+                        onClick={() => setCanvasMode('edit')}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 ${
+                            canvasMode === 'edit'
+                                ? 'bg-amber-500 text-white'
+                                : 'bg-white text-gray-700 hover:bg-gray-50'
+                        }`}
+                    >
+                        <Move className="w-4 h-4" />
+                        Edit layout
+                    </button>
+                </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-6 items-start">
-                <div
-                    className="relative bg-slate-800 shadow-xl mx-auto"
-                    style={{
-                        width: frame.width,
-                        height: frame.height,
-                        borderRadius: frame.borderRadius,
-                        border: '10px solid #1f2937',
-                        boxShadow:
-                            '0 12px 40px rgba(0,0,0,0.25), inset 0 0 0 1px rgba(255,255,255,0.08)',
-                        overflow: 'hidden',
-                    }}
-                >
-                    {device === 'phone' && (
-                        <div
-                            className="absolute top-0 left-1/2 -translate-x-1/2 z-20 bg-[#1f2937] rounded-b-xl"
-                            style={{ width: 88, height: 18 }}
-                            aria-hidden
-                        />
-                    )}
-                    {mapSrc ? (
-                        <img
-                            src={mapSrc}
-                            alt="Main map"
-                            className="absolute inset-0 w-full h-full object-cover"
-                            draggable={false}
-                        />
-                    ) : (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-sky-900/80 text-white/70 px-4 text-center text-xs">
-                            <ImageIcon className="w-8 h-8 opacity-50" />
-                            <p>No main map PNG yet</p>
-                            <p className="text-white/40">Upload on this island form</p>
-                        </div>
-                    )}
-                    {!loading && (
-                        <MainMapIconCanvas
-                            markers={markers}
-                            selectedId={selectedId}
-                            onSelect={setSelectedId}
-                            onMove={handleMove}
-                        />
-                    )}
-                    {loading && (
-                        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/30 text-white text-sm">
-                            Loading stories…
-                        </div>
-                    )}
-                </div>
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,auto)_1fr] gap-6 items-start">
+                <MainMapDevicePreview
+                    device={device}
+                    mainMapUrl={mainMapUrl}
+                    markers={markers}
+                    selectedId={selectedId}
+                    onSelect={setSelectedId}
+                    onMove={handleMove}
+                    interactive={canvasMode === 'edit'}
+                    loading={loading}
+                    hideDeviceToggle
+                />
 
                 <div className="space-y-3 min-w-0">
                     <h3 className="text-sm font-semibold text-gray-800">
@@ -385,7 +451,7 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                             </Link>
                         </p>
                     ) : (
-                        <ul className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
+                        <ul className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
                             {stories.map((s) => {
                                 const active = s._id === selectedId;
                                 const pos = s.mainMapPosition[device];
@@ -401,7 +467,12 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                                         <button
                                             type="button"
                                             className="w-full text-left"
-                                            onClick={() => setSelectedId(s._id)}
+                                            onClick={() => {
+                                                setSelectedId(s._id);
+                                                if (canvasMode === 'preview') {
+                                                    setCanvasMode('edit');
+                                                }
+                                            }}
                                         >
                                             <div className="flex items-center justify-between gap-2">
                                                 <span className="font-medium text-gray-900 truncate">
@@ -416,6 +487,11 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                                             <p className="text-xs text-gray-500 mt-1 font-mono">
                                                 {device}: {fmt(pos)} %
                                             </p>
+                                            {!s.mapIconUrl && (
+                                                <p className="text-[11px] text-amber-700 mt-1">
+                                                    Missing map icon — select & generate or upload
+                                                </p>
+                                            )}
                                         </button>
                                         <div className="mt-2">
                                             <Link
@@ -458,9 +534,13 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                                     className="w-14 h-14 rounded-full object-cover border border-gray-200"
                                 />
                             ) : (
-                                <p className="text-xs text-gray-500">
-                                    No map icon — using hero image or placeholder.
-                                </p>
+                                <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                                    <p className="font-medium">No map icon yet</p>
+                                    <p className="mt-0.5 text-amber-800/80">
+                                        Generate with AI (style-aware) or upload a circular badge so
+                                        this pack shows on the main map.
+                                    </p>
+                                </div>
                             )}
                             <input
                                 ref={iconInputRef}
@@ -469,19 +549,38 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                                 className="hidden"
                                 onChange={handleIconUpload}
                             />
-                            <button
-                                type="button"
-                                disabled={uploadingIcon}
-                                onClick={() => iconInputRef.current?.click()}
-                                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm hover:bg-gray-50 disabled:opacity-50"
-                            >
-                                <Upload className="w-4 h-4" />
-                                {uploadingIcon
-                                    ? 'Uploading…'
-                                    : selected.mapIconUrl
-                                      ? 'Replace map icon'
-                                      : 'Upload map icon'}
-                            </button>
+                            <div className="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    disabled={generatingIcon || uploadingIcon}
+                                    onClick={() => void handleGenerateIcon()}
+                                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-700 disabled:opacity-50"
+                                >
+                                    {generatingIcon ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <Sparkles className="w-4 h-4" />
+                                    )}
+                                    {generatingIcon
+                                        ? 'Generating…'
+                                        : selected.mapIconUrl
+                                          ? 'Regenerate icon'
+                                          : 'Generate map icon'}
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={uploadingIcon || generatingIcon}
+                                    onClick={() => iconInputRef.current?.click()}
+                                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                    <Upload className="w-4 h-4" />
+                                    {uploadingIcon
+                                        ? 'Uploading…'
+                                        : selected.mapIconUrl
+                                          ? 'Replace map icon'
+                                          : 'Upload map icon'}
+                                </button>
+                            </div>
                         </div>
                     )}
                 </div>

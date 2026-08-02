@@ -12,7 +12,9 @@ import {
     Map as MapIcon,
 } from 'lucide-react';
 import apiClient, { getMediaUrl } from '../services/apiClient';
+import MainMapDevicePreview from '../components/bibleMapMainMap/MainMapDevicePreview';
 import MainMapLayoutEditor from '../components/bibleMapMainMap/MainMapLayoutEditor';
+import type { SceneDevice } from '../components/sceneStudio/types';
 
 interface IslandFormState {
     slug: string;
@@ -39,6 +41,7 @@ interface LaunchReadiness {
         storyId: string;
         title: string;
         book: boolean;
+        mapIcon?: boolean;
         puzzle: boolean;
         coloring: boolean;
         quiz: boolean;
@@ -75,6 +78,7 @@ const BibleMapIslandForm: React.FC = () => {
     const [uploadingMap, setUploadingMap] = useState(false);
     const [uploadingSail, setUploadingSail] = useState(false);
     const [uploadingMainMap, setUploadingMainMap] = useState(false);
+    const [previewDevice, setPreviewDevice] = useState<SceneDevice>('phone');
     const mapInputRef = useRef<HTMLInputElement>(null);
     const sailInputRef = useRef<HTMLInputElement>(null);
     const mainMapInputRef = useRef<HTMLInputElement>(null);
@@ -345,7 +349,7 @@ const BibleMapIslandForm: React.FC = () => {
                                 }
                                 className="text-indigo-700 hover:underline"
                             >
-                                Main map layout
+                                Phone · Tablet preview
                             </button>
                         </p>
                     )}
@@ -521,7 +525,8 @@ const BibleMapIslandForm: React.FC = () => {
                     <p className="text-xs text-gray-500 max-w-2xl">
                         Kid app flow (CMS contract): Ocean → tap island → this main map (background PNG
                         + story icons) → tap a story icon → intro video → Scene Studio menu for that
-                        pack. Place icons in the Main map layout editor below after saving the island.
+                        pack. Preview phone/tablet below after saving the island, then place story
+                        icons in the layout editor.
                     </p>
                     {form.mainMapUrl ? (
                         <div className="relative rounded-xl border border-gray-200 bg-sky-50 p-3 max-w-md">
@@ -578,10 +583,23 @@ const BibleMapIslandForm: React.FC = () => {
                                 className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-50 text-indigo-800 border border-indigo-200 text-sm hover:bg-indigo-100"
                             >
                                 <MapIcon className="w-4 h-4" />
-                                Open layout editor
+                                Open phone · tablet preview
                             </button>
                         )}
                     </div>
+
+                    {/* Create-flow preview (edit flow uses MainMapLayoutEditor below) */}
+                    {isNew && (
+                        <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
+                            <MainMapDevicePreview
+                                device={previewDevice}
+                                onDeviceChange={setPreviewDevice}
+                                mainMapUrl={form.mainMapUrl}
+                                markers={[]}
+                                caption="Save the island first to place story icons on this map."
+                            />
+                        </div>
+                    )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -675,9 +693,24 @@ const BibleMapIslandForm: React.FC = () => {
                 </div>
             </form>
 
-            {/* Main map layout editor */}
+            {/* Main map phone/tablet preview + layout editor */}
             {!isNew && id && (
                 <div ref={mainMapSectionRef} className="mt-6 scroll-mt-4">
+                    <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+                        <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">
+                                Kid app screen
+                            </p>
+                            <h2 className="text-xl font-bold text-gray-900 mt-0.5">
+                                Phone &amp; tablet main map preview
+                            </h2>
+                            <p className="text-sm text-gray-500 mt-1 max-w-2xl">
+                                See the main map PNG with story icons as kids will on phone or
+                                tablet. Use Preview for the clean view, or Edit layout to drag
+                                icons.
+                            </p>
+                        </div>
+                    </div>
                     <MainMapLayoutEditor
                         islandId={id}
                         islandSlug={form.slug}
@@ -743,6 +776,13 @@ const BibleMapIslandForm: React.FC = () => {
                                             <span className="font-medium text-gray-800">{s.title}:</span>
                                             <span className={s.book ? 'text-emerald-700' : 'text-red-600'}>
                                                 Read {s.book ? '✓' : '✗'}
+                                            </span>
+                                            <span
+                                                className={
+                                                    s.mapIcon ? 'text-emerald-700' : 'text-amber-600'
+                                                }
+                                            >
+                                                Map icon {s.mapIcon ? '✓' : '✗'}
                                             </span>
                                             <span className={s.puzzle ? 'text-emerald-700' : 'text-amber-600'}>
                                                 Puzzle
@@ -823,7 +863,7 @@ const BibleMapIslandForm: React.FC = () => {
                             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-indigo-200 text-indigo-800 hover:bg-indigo-50 text-sm"
                         >
                             <MapIcon className="w-4 h-4" />
-                            Main map layout
+                            Phone · tablet preview
                         </button>
                     </div>
                 </div>

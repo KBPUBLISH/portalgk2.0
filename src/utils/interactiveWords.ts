@@ -165,6 +165,15 @@ export function isImportantInteractiveWord(token: string): boolean {
     return true;
 }
 
+/** Max tap-to-reveal blanks per age band (older = more missing words). */
+export const READING_LEVEL_MAX_BLANKS = {
+    ages_3_5: 2,
+    ages_6_7: 4,
+    ages_8_plus: 6,
+} as const;
+
+export type ReadingLevelBlankKey = keyof typeof READING_LEVEL_MAX_BLANKS;
+
 /** Keep only indices that still exist after text edits (and drop stop-word blanks). */
 export function sanitizeInteractiveWordIndices(
     text: string,
@@ -179,6 +188,61 @@ export function sanitizeInteractiveWordIndices(
         unique.add(i);
     }
     return Array.from(unique).sort((a, b) => a - b);
+}
+
+/**
+ * Keep / fill tap blanks with meaningful story words.
+ * Explicit empty preferred [] means "no blanks".
+ * Otherwise keep good preferred picks and top up (spread) until maxCount.
+ * Matches backend bible-map generation.
+ */
+export function pickImportantInteractiveWordIndices(
+    text: string,
+    preferred: number[] | undefined | null,
+    maxCount = 4,
+): number[] {
+    const words = splitInteractiveWords(text);
+    if (!words.length || maxCount <= 0) return [];
+    if (Array.isArray(preferred) && preferred.length === 0) return [];
+
+    const candidates: number[] = [];
+    for (let i = 0; i < words.length; i++) {
+        if (!isImportantInteractiveWord(words[i])) continue;
+        candidates.push(i);
+    }
+    if (!candidates.length) return [];
+
+    const target = Math.min(maxCount, candidates.length);
+    const preferredGood = sanitizeInteractiveWordIndices(text, preferred);
+    const out: number[] = [];
+    const seen = new Set<number>();
+    for (const i of preferredGood) {
+        if (out.length >= target) break;
+        out.push(i);
+        seen.add(i);
+    }
+
+    if (out.length < target) {
+        const need = target - out.length;
+        const pool = candidates.filter((i) => !seen.has(i));
+        for (let s = 0; s < need && pool.length; s++) {
+            const pick = Math.round((s * (pool.length - 1)) / Math.max(need - 1, 1));
+            const i = pool[Math.min(pick, pool.length - 1)];
+            if (seen.has(i)) continue;
+            seen.add(i);
+            out.push(i);
+        }
+        for (const i of pool) {
+            if (out.length >= target) break;
+            if (seen.has(i)) continue;
+            out.push(i);
+        }
+    }
+    return out.sort((a, b) => a - b);
+}
+
+export function maxInteractiveBlanksForLevel(level: ReadingLevelBlankKey): number {
+    return READING_LEVEL_MAX_BLANKS[level];
 }
 
 /**

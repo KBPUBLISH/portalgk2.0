@@ -15,6 +15,8 @@ interface MainMapIconCanvasProps {
     selectedId: string | null;
     onSelect: (id: string | null) => void;
     onMove: (id: string, next: MainMapPoint) => void;
+    /** Display-only kid-app view — no drag/select chrome. */
+    readOnly?: boolean;
 }
 
 function clamp(n: number, min: number, max: number) {
@@ -29,6 +31,7 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
     selectedId,
     onSelect,
     onMove,
+    readOnly = false,
 }) => {
     const rootRef = useRef<HTMLDivElement>(null);
     const dragRef = useRef<{
@@ -41,6 +44,7 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
     const [dragging, setDragging] = useState(false);
 
     const onPointerDown = (e: React.PointerEvent, id: string) => {
+        if (readOnly) return;
         e.stopPropagation();
         e.preventDefault();
         const marker = markers.find((m) => m.story._id === id);
@@ -82,17 +86,81 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
     return (
         <div
             ref={rootRef}
-            className={`absolute inset-0 ${dragging ? 'cursor-grabbing' : ''}`}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerLeave={onPointerUp}
-            onClick={() => onSelect(null)}
+            className={`absolute inset-0 ${
+                readOnly ? 'pointer-events-none' : dragging ? 'cursor-grabbing' : ''
+            }`}
+            onPointerMove={readOnly ? undefined : onPointerMove}
+            onPointerUp={readOnly ? undefined : onPointerUp}
+            onPointerLeave={readOnly ? undefined : onPointerUp}
+            onClick={readOnly ? undefined : () => onSelect(null)}
         >
             {markers.map((marker) => {
                 const { story, position, size, iconUrl } = marker;
-                const selected = selectedId === story._id;
+                const selected = !readOnly && selectedId === story._id;
                 const label = story.displayTitle || story.title || `#${story.order}`;
                 const src = iconUrl ? getMediaUrl(iconUrl) : '';
+
+                const body = (
+                    <>
+                        <span className="relative flex items-center justify-center w-full flex-1 min-h-0">
+                            {src ? (
+                                <img
+                                    src={src}
+                                    alt=""
+                                    className="max-w-full max-h-full object-contain drop-shadow-md pointer-events-none rounded-full"
+                                    draggable={false}
+                                />
+                            ) : (
+                                <span
+                                    className={`flex flex-col items-center justify-center w-[85%] aspect-square rounded-full shadow-md ${
+                                        readOnly
+                                            ? 'bg-emerald-700/90 border-2 border-emerald-300 text-white'
+                                            : 'bg-amber-50 border-2 border-dashed border-amber-400 text-amber-800'
+                                    }`}
+                                    title={readOnly ? undefined : 'Add a map icon for this pack'}
+                                >
+                                    <MapPin className="w-[42%] h-[42%]" strokeWidth={2.2} />
+                                    {!readOnly && (
+                                        <span className="text-[6px] font-bold leading-none mt-0.5 px-0.5 text-center">
+                                            Add icon
+                                        </span>
+                                    )}
+                                </span>
+                            )}
+                            {!readOnly && (
+                                <span className="absolute -top-1 -left-1 min-w-[16px] h-4 px-1 rounded-full bg-indigo-600 text-white text-[9px] font-bold leading-4 text-center">
+                                    {story.order}
+                                </span>
+                            )}
+                        </span>
+                        <span
+                            className="text-[7px] leading-tight font-bold text-white tracking-wide truncate w-full text-center px-0.5"
+                            style={{ textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}
+                        >
+                            {label}
+                        </span>
+                    </>
+                );
+
+                const style: React.CSSProperties = {
+                    left: `${position.x}%`,
+                    top: `${position.y}%`,
+                    width: `${size.w}%`,
+                    height: `${size.h}%`,
+                };
+
+                if (readOnly) {
+                    return (
+                        <div
+                            key={story._id}
+                            className="absolute flex flex-col items-center justify-end select-none z-10"
+                            style={style}
+                            aria-label={label}
+                        >
+                            {body}
+                        </div>
+                    );
+                }
 
                 return (
                     <button
@@ -104,10 +172,7 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
                                 : 'z-10'
                         } ${dragging && selected ? 'opacity-90' : ''}`}
                         style={{
-                            left: `${position.x}%`,
-                            top: `${position.y}%`,
-                            width: `${size.w}%`,
-                            height: `${size.h}%`,
+                            ...style,
                             cursor: dragging && selected ? 'grabbing' : 'grab',
                         }}
                         onPointerDown={(e) => onPointerDown(e, story._id)}
@@ -118,29 +183,7 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
                         aria-label={label}
                         title={label}
                     >
-                        <span className="relative flex items-center justify-center w-full flex-1 min-h-0">
-                            {src ? (
-                                <img
-                                    src={src}
-                                    alt=""
-                                    className="max-w-full max-h-full object-contain drop-shadow-md pointer-events-none rounded-full"
-                                    draggable={false}
-                                />
-                            ) : (
-                                <span className="flex items-center justify-center w-[85%] aspect-square rounded-full bg-emerald-700/90 border-2 border-emerald-300 text-white shadow-md">
-                                    <MapPin className="w-[50%] h-[50%]" strokeWidth={2.2} />
-                                </span>
-                            )}
-                            <span className="absolute -top-1 -left-1 min-w-[16px] h-4 px-1 rounded-full bg-indigo-600 text-white text-[9px] font-bold leading-4 text-center">
-                                {story.order}
-                            </span>
-                        </span>
-                        <span
-                            className="text-[7px] leading-tight font-bold text-white tracking-wide truncate w-full text-center px-0.5"
-                            style={{ textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}
-                        >
-                            {label}
-                        </span>
+                        {body}
                     </button>
                 );
             })}

@@ -236,6 +236,7 @@ const BibleMapStoryForm: React.FC = () => {
     const [uploadingPuzzleImage, setUploadingPuzzleImage] = useState(false);
     const [uploadingMapIcon, setUploadingMapIcon] = useState(false);
     const [uploadingColoring, setUploadingColoring] = useState(false);
+    const [generatingMapIconAi, setGeneratingMapIconAi] = useState(false);
     const [generatingPuzzleAi, setGeneratingPuzzleAi] = useState(false);
     const [generatingColoringAi, setGeneratingColoringAi] = useState(false);
     const [previewColoringId, setPreviewColoringId] = useState<string | null>(null);
@@ -308,6 +309,46 @@ const BibleMapStoryForm: React.FC = () => {
             alert('Failed to upload map icon');
         } finally {
             setUploadingMapIcon(false);
+        }
+    };
+
+    const handleGenerateMapIconAi = async () => {
+        if (isNew || !id) {
+            alert('Save the story pack first, then generate a map icon.');
+            return;
+        }
+        setGeneratingMapIconAi(true);
+        try {
+            const res = await apiClient.post(
+                `/api/bible-map/stories/${id}/generate-map-icon`,
+                {},
+                { timeout: 300000 },
+            );
+            const imageUrl = String(res.data?.mapIconUrl || '').trim();
+            if (imageUrl) {
+                setForm((prev) => ({
+                    ...prev,
+                    mapIconUrl: imageUrl,
+                    mainMapPosition: res.data?.mainMapPosition
+                        ? normalizeMainMapPosition(res.data.mainMapPosition, 0, 1)
+                        : prev.mainMapPosition,
+                }));
+            }
+            alert(
+                res.data?.characterNames?.length
+                    ? `Map icon ready (${res.data.characterNames.join(', ')}). Save the pack if you made other edits.`
+                    : 'Map icon ready. Save the pack if you made other edits.',
+            );
+        } catch (err: unknown) {
+            console.error(err);
+            const msg =
+                (err as { response?: { data?: { message?: string; error?: string } } })?.response
+                    ?.data?.message ||
+                (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+                'Failed to generate map icon';
+            alert(msg);
+        } finally {
+            setGeneratingMapIconAi(false);
         }
     };
 
@@ -579,6 +620,39 @@ const BibleMapStoryForm: React.FC = () => {
         };
         void load();
     }, [id, isNew, navigate]);
+
+    // New packs get an AI map icon asynchronously — poll briefly so the overview preview updates
+    useEffect(() => {
+        if (isNew || !id || form.mapIconUrl || loading) return;
+        let cancelled = false;
+        let attempts = 0;
+        const poll = async () => {
+            if (cancelled || attempts >= 10) return;
+            attempts += 1;
+            try {
+                const res = await apiClient.get(`/api/bible-map/stories/${id}`);
+                const url = String(res.data?.story?.mapIconUrl || '').trim();
+                if (url && !cancelled) {
+                    setForm((prev) => (prev.mapIconUrl ? prev : { ...prev, mapIconUrl: url }));
+                    return;
+                }
+            } catch {
+                /* ignore transient poll errors */
+            }
+            if (!cancelled) {
+                window.setTimeout(() => {
+                    void poll();
+                }, 4000);
+            }
+        };
+        const t = window.setTimeout(() => {
+            void poll();
+        }, 3000);
+        return () => {
+            cancelled = true;
+            window.clearTimeout(t);
+        };
+    }, [id, isNew, form.mapIconUrl, loading]);
 
     // When book link changes, merge that book's coloring pages with pack-attached ones
     useEffect(() => {
@@ -1155,8 +1229,9 @@ const BibleMapStoryForm: React.FC = () => {
                                         Main map story icon
                                     </label>
                                     <p className="text-xs text-gray-500 mt-1">
-                                        Circular icon on the island main map. Primary placement is on
-                                        the island’s Main map layout editor.
+                                        Circular icon on the island main map. New packs get an AI
+                                        icon after create; you can regenerate or upload anytime.
+                                        Placement is on the island’s Main map layout editor.
                                     </p>
                                 </div>
                                 {form.islandId && (
@@ -1187,26 +1262,45 @@ const BibleMapStoryForm: React.FC = () => {
                                         </button>
                                     </div>
                                 ) : (
-                                    <div className="w-16 h-16 rounded-full border border-dashed border-gray-300 bg-white flex items-center justify-center text-gray-400 text-[10px] text-center px-1">
-                                        No icon
+                                    <div className="w-16 h-16 rounded-full border border-dashed border-amber-300 bg-amber-50 flex items-center justify-center text-amber-700 text-[10px] text-center px-1 leading-tight">
+                                        {generatingMapIconAi ? 'Generating…' : 'Add icon'}
                                     </div>
                                 )}
                                 <div className="space-y-2">
-                                    <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm hover:bg-gray-50 cursor-pointer disabled:opacity-50">
-                                        <Upload className="w-4 h-4" />
-                                        {uploadingMapIcon
-                                            ? 'Uploading…'
-                                            : form.mapIconUrl
-                                              ? 'Replace icon'
-                                              : 'Upload icon'}
-                                        <input
-                                            type="file"
-                                            accept="image/*"
-                                            className="hidden"
-                                            disabled={uploadingMapIcon}
-                                            onChange={handleMapIconUpload}
-                                        />
-                                    </label>
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => void handleGenerateMapIconAi()}
+                                            disabled={generatingMapIconAi || isNew || uploadingMapIcon}
+                                            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+                                        >
+                                            {generatingMapIconAi ? (
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                            ) : (
+                                                <Sparkles className="w-4 h-4" />
+                                            )}
+                                            {generatingMapIconAi
+                                                ? 'Generating…'
+                                                : form.mapIconUrl
+                                                  ? 'Regenerate map icon'
+                                                  : 'Generate map icon'}
+                                        </button>
+                                        <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm hover:bg-gray-50 cursor-pointer disabled:opacity-50">
+                                            <Upload className="w-4 h-4" />
+                                            {uploadingMapIcon
+                                                ? 'Uploading…'
+                                                : form.mapIconUrl
+                                                  ? 'Replace icon'
+                                                  : 'Upload icon'}
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                className="hidden"
+                                                disabled={uploadingMapIcon || generatingMapIconAi}
+                                                onChange={handleMapIconUpload}
+                                            />
+                                        </label>
+                                    </div>
                                     <input
                                         value={form.mapIconUrl}
                                         onChange={(e) => update('mapIconUrl', e.target.value)}
