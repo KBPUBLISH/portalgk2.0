@@ -50,7 +50,10 @@ export const SCENE_ACTIVITY_DEFS: Array<{
     { id: 'game', label: 'GAME' },
 ];
 
-/** Default % positions roughly matching the in-app ACTIVITIES tray (phone). */
+/**
+ * Default % positions roughly matching the in-app ACTIVITIES tray (phone).
+ * No iconUrl — kid app uses its built-in tray until editors upload button icons.
+ */
 export function defaultPhoneButtons(): SceneButton[] {
     const ids = SCENE_ACTIVITY_DEFS;
     const startX = 10;
@@ -157,6 +160,18 @@ export const DEVICE_FRAME: Record<
     { width: number; height: number; label: string; borderRadius: number }
 > = {
     phone: { width: 260, height: 520, label: 'Phone', borderRadius: 28 },
+    tablet: { width: 360, height: 480, label: 'Tablet', borderRadius: 22 },
+};
+
+/**
+ * @deprecated Import MAIN_MAP_DEVICE_FRAME from bibleMapMainMap/types
+ * (supports phone_se / phone / phone_max / tablet). Legacy phone|tablet only.
+ */
+export const MAIN_MAP_DEVICE_FRAME: Record<
+    SceneDevice,
+    { width: number; height: number; label: string; borderRadius: number }
+> = {
+    phone: { width: 260, height: 562, label: 'Phone', borderRadius: 28 },
     tablet: { width: 360, height: 480, label: 'Tablet', borderRadius: 22 },
 };
 

@@ -957,14 +957,19 @@ const BookReader: React.FC = () => {
                         style={
                             bookType === 'bible_map' && bibleMapScrollHeight
                                 ? {
-                                      height: `${Math.max(
-                                          58,
-                                          100 -
-                                              (scrollState === 'max'
-                                                  ? bibleMapScrollHeight.max
-                                                  : bibleMapScrollHeight.mid) -
-                                              bibleMapScrollHeight.offset,
-                                      )}%`,
+                                      // Hidden scroll → art expands toward fullscreen; mid/max → upper band
+                                      height:
+                                          scrollState === 'hidden'
+                                              ? '100%'
+                                              : `${Math.max(
+                                                    58,
+                                                    100 -
+                                                        (scrollState === 'max'
+                                                            ? bibleMapScrollHeight.max
+                                                            : bibleMapScrollHeight.mid) -
+                                                        bibleMapScrollHeight.offset,
+                                                )}%`,
+                                      transition: 'height 0.5s ease-in-out',
                                   }
                                 : undefined
                         }
@@ -1100,23 +1105,25 @@ const BookReader: React.FC = () => {
                         (() => {
                             const defaultMid = bookType === 'bible_map' ? 36 : 30;
                             const artHeightPct =
-                                bookType === 'bible_map' && bibleMapScrollHeight
-                                    ? Math.max(
-                                          58,
-                                          100 -
-                                              (scrollState === 'max'
-                                                  ? bibleMapScrollHeight.max
-                                                  : bibleMapScrollHeight.mid) -
-                                              bibleMapScrollHeight.offset,
-                                      )
-                                    : Math.max(
-                                          55,
-                                          100 -
-                                              (scrollState === 'max'
-                                                  ? currentPage.scrollMaxHeight || 60
-                                                  : currentPage.scrollMidHeight || defaultMid) -
-                                              (currentPage.scrollOffsetY || 0),
-                                      );
+                                scrollState === 'hidden'
+                                    ? 100
+                                    : bookType === 'bible_map' && bibleMapScrollHeight
+                                      ? Math.max(
+                                            58,
+                                            100 -
+                                                (scrollState === 'max'
+                                                    ? bibleMapScrollHeight.max
+                                                    : bibleMapScrollHeight.mid) -
+                                                bibleMapScrollHeight.offset,
+                                        )
+                                      : Math.max(
+                                            55,
+                                            100 -
+                                                (scrollState === 'max'
+                                                    ? currentPage.scrollMaxHeight || 60
+                                                    : currentPage.scrollMidHeight || defaultMid) -
+                                                (currentPage.scrollOffsetY || 0),
+                                        );
                             const chipIdToTarget = (id: string) => {
                                 const t = interactiveTargets.find(
                                     (x) =>

@@ -24,7 +24,10 @@ import apiClient, { getMediaUrl } from '../services/apiClient';
 import {
     formatPoint,
     hasExplicitPoint,
+    MAIN_MAP_LAYOUT_KEYS,
+    MAIN_MAP_LAYOUT_LABELS,
     normalizeMainMapPosition,
+    type MainMapLayoutKey,
     type MainMapPosition,
     type MainMapSizeLayout,
     DEFAULT_MAIN_MAP_SIZE,
@@ -379,6 +382,18 @@ const BibleMapStoryForm: React.FC = () => {
         return res.data.url as string;
     };
 
+    const uploadSceneButtonIcon = async (file: File): Promise<string> => {
+        const island = islands.find((i) => i._id === form.islandId);
+        const islandKey = island?.slug || form.islandId || id || 'temp';
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await apiClient.post(
+            `/api/upload/image?bookId=bible-map&type=scene-button-icon&islandId=${encodeURIComponent(islandKey)}`,
+            formData,
+        );
+        return res.data.url as string;
+    };
+
     const handleColoringLineArtUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         e.target.value = '';
@@ -493,19 +508,34 @@ const BibleMapStoryForm: React.FC = () => {
                             1,
                         );
                         // Keep unset devices as non-explicit so UI can show "— (auto)"
-                        return {
-                            phone: hasExplicitPoint(story.mainMapPosition?.phone)
-                                ? normalized.phone
-                                : ({} as MainMapPosition['phone']),
-                            tablet: hasExplicitPoint(story.mainMapPosition?.tablet)
-                                ? normalized.tablet
-                                : ({} as MainMapPosition['tablet']),
-                        };
+                        const out = {} as MainMapPosition;
+                        for (const key of MAIN_MAP_LAYOUT_KEYS) {
+                            out[key] = hasExplicitPoint(story.mainMapPosition?.[key])
+                                ? normalized[key]
+                                : ({} as MainMapPosition[MainMapLayoutKey]);
+                        }
+                        return out;
                     })(),
                     mainMapSize: {
+                        phone_se: {
+                            w:
+                                story.mainMapSize?.phone_se?.w ??
+                                DEFAULT_MAIN_MAP_SIZE.phone_se.w,
+                            h:
+                                story.mainMapSize?.phone_se?.h ??
+                                DEFAULT_MAIN_MAP_SIZE.phone_se.h,
+                        },
                         phone: {
                             w: story.mainMapSize?.phone?.w ?? DEFAULT_MAIN_MAP_SIZE.phone.w,
                             h: story.mainMapSize?.phone?.h ?? DEFAULT_MAIN_MAP_SIZE.phone.h,
+                        },
+                        phone_max: {
+                            w:
+                                story.mainMapSize?.phone_max?.w ??
+                                DEFAULT_MAIN_MAP_SIZE.phone_max.w,
+                            h:
+                                story.mainMapSize?.phone_max?.h ??
+                                DEFAULT_MAIN_MAP_SIZE.phone_max.h,
                         },
                         tablet: {
                             w: story.mainMapSize?.tablet?.w ?? DEFAULT_MAIN_MAP_SIZE.tablet.w,
@@ -1310,19 +1340,21 @@ const BibleMapStoryForm: React.FC = () => {
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 gap-3 text-xs text-gray-600 pt-1 border-t border-indigo-100">
-                                <div>
-                                    <span className="font-medium text-gray-700">Phone position %</span>
-                                    <p className="font-mono mt-0.5">
-                                        {formatPoint(form.mainMapPosition.phone)}
-                                    </p>
-                                </div>
-                                <div>
-                                    <span className="font-medium text-gray-700">Tablet position %</span>
-                                    <p className="font-mono mt-0.5">
-                                        {formatPoint(form.mainMapPosition.tablet)}
-                                    </p>
-                                </div>
+                                {MAIN_MAP_LAYOUT_KEYS.map((key) => (
+                                    <div key={key}>
+                                        <span className="font-medium text-gray-700">
+                                            {MAIN_MAP_LAYOUT_LABELS[key]} position %
+                                        </span>
+                                        <p className="font-mono mt-0.5">
+                                            {formatPoint(form.mainMapPosition[key])}
+                                        </p>
+                                    </div>
+                                ))}
                             </div>
+                            <p className="text-[11px] text-gray-500 pt-1">
+                                Place icons per device on the island layout editor. The app picks the
+                                closest saved layout for the user’s screen; unset sizes fall back.
+                            </p>
                         </div>
                     </div>
                 )}
@@ -1345,6 +1377,7 @@ const BibleMapStoryForm: React.FC = () => {
                         onSceneTriggers={(triggers) => update('sceneTriggers', triggers)}
                         onUploadVideo={uploadSceneVideo}
                         onUploadMusic={uploadSceneMusic}
+                        onUploadButtonIcon={uploadSceneButtonIcon}
                     />
                 )}
 

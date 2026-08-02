@@ -26,8 +26,10 @@ interface MapIsland {
     order: number;
     unlockRule?: string;
     mapArtUrl?: string;
-    /** Island main story-path map PNG */
+    /** Island main story-path map PNG / poster */
     mainMapUrl?: string;
+    /** Island main story-path map looping video */
+    mainMapVideoUrl?: string;
     sailArtUrl?: string;
     storyCounts?: StoryCounts;
 }
@@ -47,7 +49,9 @@ interface MapStory {
     coloringPageIds?: string[];
     mapIconUrl?: string;
     mainMapPosition?: {
+        phone_se?: { x: number; y: number };
         phone?: { x: number; y: number };
+        phone_max?: { x: number; y: number };
         tablet?: { x: number; y: number };
     };
 }
@@ -314,10 +318,12 @@ const BibleMapHub: React.FC = () => {
                                     <Link
                                         to={`/bible-map/islands/${island._id}`}
                                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-sky-50 text-sky-900 text-sm border border-sky-200 hover:bg-sky-100"
-                                        title="Edit main story map PNG and icon positions"
+                                        title="Edit main story map video/PNG and icon positions"
                                     >
                                         <MapIcon className="w-3.5 h-3.5" />
-                                        {island.mainMapUrl ? 'Main map' : 'Main map (setup)'}
+                                        {island.mainMapUrl || island.mainMapVideoUrl
+                                            ? 'Main map'
+                                            : 'Main map (setup)'}
                                     </Link>
                                     {island.status !== 'published' && (
                                         <Link

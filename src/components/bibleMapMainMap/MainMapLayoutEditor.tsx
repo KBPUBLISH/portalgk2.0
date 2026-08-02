@@ -13,15 +13,22 @@ import {
     Sparkles,
     Loader2,
 } from 'lucide-react';
-import apiClient, { getMediaUrl } from '../../services/apiClient';
-import type { SceneDevice } from '../sceneStudio/types';
+import apiClient, { API_BASE_URL, getMediaUrl } from '../../services/apiClient';
 import MainMapDevicePreview from './MainMapDevicePreview';
 import type { PlacedMarker } from './MainMapIconCanvas';
 import {
     DEFAULT_MAIN_MAP_SIZE,
+    explicitPositionKeys,
+    explicitSizeKeys,
     formatSize,
+    MAIN_MAP_LAYOUT_KEYS,
+    MAIN_MAP_LAYOUT_LABELS,
+    pickExplicitMainMapPosition,
+    pickExplicitMainMapSize,
+    resolveAllMainMapPositions,
+    resolveAllMainMapSizes,
     resolveMainMapPoint,
-    resolveMainMapSize,
+    type MainMapLayoutKey,
     type MainMapPoint,
     type MainMapPosition,
     type MainMapSize,
@@ -33,7 +40,9 @@ export interface MainMapLayoutEditorProps {
     islandId: string;
     islandSlug?: string;
     mainMapUrl: string;
+    mainMapVideoUrl?: string;
     onMainMapUrlChange?: (url: string) => void;
+    onMainMapVideoUrlChange?: (url: string) => void;
     /** When true, show upload control for main map (island form already has one — can hide). */
     showMainMapUpload?: boolean;
 }
@@ -41,6 +50,8 @@ export interface MainMapLayoutEditorProps {
 interface LocalStoryState extends MainMapStoryMarker {
     mainMapPosition: MainMapPosition;
     mainMapSize: MainMapSizeLayout;
+    positionExplicit: Record<MainMapLayoutKey, boolean>;
+    sizeExplicit: Record<MainMapLayoutKey, boolean>;
     dirty: boolean;
 }
 
@@ -48,16 +59,55 @@ function fmt(p: MainMapPoint): string {
     return `${p.x.toFixed(1)}, ${p.y.toFixed(1)}`;
 }
 
+const DEVICE_TOGGLE: {
+    id: MainMapLayoutKey;
+    label: string;
+    Icon: typeof Smartphone;
+}[] = [
+    { id: 'phone_se', label: 'Phone SE', Icon: Smartphone },
+    { id: 'phone', label: 'Phone', Icon: Smartphone },
+    { id: 'phone_max', label: 'Phone Max', Icon: Smartphone },
+    { id: 'tablet', label: 'Tablet', Icon: Tablet },
+];
+
+function toLocalStory(s: MainMapStoryMarker, i: number, total: number): LocalStoryState {
+    const posExplicit = explicitPositionKeys(s);
+    const sizeExplicit = explicitSizeKeys(s);
+    // Materialize phone + tablet stagger defaults into editable state; SE/Max stay fallback until edited
+    const position = resolveAllMainMapPositions(s, i, total);
+    const size = resolveAllMainMapSizes(s);
+    return {
+        ...s,
+        mainMapPosition: position,
+        mainMapSize: size,
+        positionExplicit: {
+            ...posExplicit,
+            // Treat resolved phone/tablet defaults as saveable (legacy behavior)
+            phone: posExplicit.phone || true,
+            tablet: posExplicit.tablet || true,
+        },
+        sizeExplicit: {
+            ...sizeExplicit,
+            phone: sizeExplicit.phone || true,
+            tablet: sizeExplicit.tablet || true,
+        },
+        mainMapPositionAnchor: 'badgeCenter' as const,
+        dirty: false,
+    };
+}
+
 const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
     islandId,
     islandSlug,
     mainMapUrl,
+    mainMapVideoUrl = '',
     onMainMapUrlChange,
+    onMainMapVideoUrlChange,
     showMainMapUpload = false,
 }) => {
-    const [device, setDevice] = useState<SceneDevice>('phone');
-    /** preview = kid-app view; edit = drag icons to position */
-    const [canvasMode, setCanvasMode] = useState<'preview' | 'edit'>('preview');
+    const [device, setDevice] = useState<MainMapLayoutKey>('phone');
+    /** preview = kid-app view; edit = drag icons to position (default — this is how you fix pads) */
+    const [canvasMode, setCanvasMode] = useState<'preview' | 'edit'>('edit');
     const [stories, setStories] = useState<LocalStoryState[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -65,9 +115,11 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
     const [uploadingIcon, setUploadingIcon] = useState(false);
     const [generatingIcon, setGeneratingIcon] = useState(false);
     const [uploadingMap, setUploadingMap] = useState(false);
+    const [uploadingMapVideo, setUploadingMapVideo] = useState(false);
     const [dirty, setDirty] = useState(false);
     const iconInputRef = useRef<HTMLInputElement>(null);
     const mapInputRef = useRef<HTMLInputElement>(null);
+    const mapVideoInputRef = useRef<HTMLInputElement>(null);
 
     const loadStories = useCallback(async () => {
         setLoading(true);
@@ -78,20 +130,7 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
             const list: MainMapStoryMarker[] = Array.isArray(res.data) ? res.data : [];
             const sorted = [...list].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
             const total = sorted.length;
-            setStories(
-                sorted.map((s, i) => ({
-                    ...s,
-                    mainMapPosition: {
-                        phone: resolveMainMapPoint(s, 'phone', i, total),
-                        tablet: resolveMainMapPoint(s, 'tablet', i, total),
-                    },
-                    mainMapSize: {
-                        phone: resolveMainMapSize(s, 'phone'),
-                        tablet: resolveMainMapSize(s, 'tablet'),
-                    },
-                    dirty: false,
-                })),
-            );
+            setStories(sorted.map((s, i) => toLocalStory(s, i, total)));
             setDirty(false);
         } catch (err) {
             console.error(err);
@@ -110,7 +149,7 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
             stories.map((s) => ({
                 story: s,
                 position: s.mainMapPosition[device],
-                size: resolveMainMapSize(s, device),
+                size: s.mainMapSize[device],
                 iconUrl: s.mapIconUrl || s.heroImageUrl || '',
             })),
         [stories, device],
@@ -130,6 +169,10 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                                   x: Math.round(next.x * 10) / 10,
                                   y: Math.round(next.y * 10) / 10,
                               },
+                          },
+                          positionExplicit: {
+                              ...s.positionExplicit,
+                              [device]: true,
                           },
                           dirty: true,
                       }
@@ -152,6 +195,10 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                                   h: Math.round(next.h * 10) / 10,
                               },
                           },
+                          sizeExplicit: {
+                              ...s.sizeExplicit,
+                              [device]: true,
+                          },
                           dirty: true,
                       }
                     : s,
@@ -170,6 +217,10 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                           mainMapSize: {
                               ...s.mainMapSize,
                               [device]: { ...def },
+                          },
+                          sizeExplicit: {
+                              ...s.sizeExplicit,
+                              [device]: true,
                           },
                           dirty: true,
                       }
@@ -190,6 +241,17 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
         return res.data.url as string;
     };
 
+    const uploadVideo = async (file: File): Promise<string> => {
+        const islandKey = islandSlug || islandId || 'temp';
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await apiClient.post(
+            `/api/upload/video?bookId=bible-map&type=main-map-video&islandId=${encodeURIComponent(islandKey)}`,
+            formData,
+        );
+        return res.data.url as string;
+    };
+
     const handleMainMapUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         e.target.value = '';
@@ -203,6 +265,22 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
             alert('Failed to upload main map PNG');
         } finally {
             setUploadingMap(false);
+        }
+    };
+
+    const handleMainMapVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file || !onMainMapVideoUrlChange) return;
+        setUploadingMapVideo(true);
+        try {
+            const url = await uploadVideo(file);
+            onMainMapVideoUrlChange(url);
+        } catch (err) {
+            console.error(err);
+            alert('Failed to upload main map video');
+        } finally {
+            setUploadingMapVideo(false);
         }
     };
 
@@ -242,37 +320,28 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                 return;
             }
             setStories((prev) =>
-                prev.map((s) =>
-                    s._id === selectedId
-                        ? {
-                              ...s,
-                              mapIconUrl: url,
-                              mainMapPosition: res.data?.mainMapPosition
-                                  ? {
-                                        phone: resolveMainMapPoint(
-                                            {
-                                                ...s,
-                                                mainMapPosition: res.data.mainMapPosition,
-                                            },
-                                            'phone',
-                                            0,
-                                            1,
-                                        ),
-                                        tablet: resolveMainMapPoint(
-                                            {
-                                                ...s,
-                                                mainMapPosition: res.data.mainMapPosition,
-                                            },
-                                            'tablet',
-                                            0,
-                                            1,
-                                        ),
-                                    }
-                                  : s.mainMapPosition,
-                              dirty: false,
-                          }
-                        : s,
-                ),
+                prev.map((s) => {
+                    if (s._id !== selectedId) return s;
+                    if (!res.data?.mainMapPosition) {
+                        return { ...s, mapIconUrl: url, dirty: false };
+                    }
+                    const merged: MainMapStoryMarker = {
+                        ...s,
+                        mainMapPosition: res.data.mainMapPosition,
+                    };
+                    return {
+                        ...s,
+                        mapIconUrl: url,
+                        mainMapPosition: {
+                            phone_se: resolveMainMapPoint(merged, 'phone_se', 0, 1),
+                            phone: resolveMainMapPoint(merged, 'phone', 0, 1),
+                            phone_max: resolveMainMapPoint(merged, 'phone_max', 0, 1),
+                            tablet: resolveMainMapPoint(merged, 'tablet', 0, 1),
+                        },
+                        positionExplicit: explicitPositionKeys(merged),
+                        dirty: false,
+                    };
+                }),
             );
         } catch (err: unknown) {
             console.error(err);
@@ -287,8 +356,28 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
         }
     };
 
+    const buildSavePayload = (s: LocalStoryState) => {
+        const mainMapPosition = pickExplicitMainMapPosition(
+            s.mainMapPosition,
+            s.positionExplicit,
+        );
+        const mainMapSize = pickExplicitMainMapSize(s.mainMapSize, s.sizeExplicit);
+        // Ensure at least phone exists so legacy clients still get a layout
+        if (!mainMapPosition.phone) {
+            mainMapPosition.phone = { ...s.mainMapPosition.phone };
+        }
+        if (!mainMapSize.phone) {
+            mainMapSize.phone = { ...s.mainMapSize.phone };
+        }
+        return {
+            mapIconUrl: s.mapIconUrl || null,
+            mainMapPosition,
+            mainMapSize,
+            mainMapPositionAnchor: 'badgeCenter' as const,
+        };
+    };
+
     const handleSave = async () => {
-        // Persist all current positions so auto-staggered defaults get written on first save
         const toSave = dirty ? stories.filter((s) => s.dirty) : stories;
         if (toSave.length === 0) {
             alert('Nothing to save.');
@@ -298,11 +387,7 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
         try {
             await Promise.all(
                 toSave.map((s) =>
-                    apiClient.put(`/api/bible-map/stories/${s._id}`, {
-                        mapIconUrl: s.mapIconUrl || null,
-                        mainMapPosition: s.mainMapPosition,
-                        mainMapSize: s.mainMapSize || DEFAULT_MAIN_MAP_SIZE,
-                    }),
+                    apiClient.put(`/api/bible-map/stories/${s._id}`, buildSavePayload(s)),
                 ),
             );
             setStories((prev) => prev.map((s) => ({ ...s, dirty: false })));
@@ -322,11 +407,7 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
         try {
             await Promise.all(
                 stories.map((s) =>
-                    apiClient.put(`/api/bible-map/stories/${s._id}`, {
-                        mapIconUrl: s.mapIconUrl || null,
-                        mainMapPosition: s.mainMapPosition,
-                        mainMapSize: s.mainMapSize || DEFAULT_MAIN_MAP_SIZE,
-                    }),
+                    apiClient.put(`/api/bible-map/stories/${s._id}`, buildSavePayload(s)),
                 ),
             );
             setStories((prev) => prev.map((s) => ({ ...s, dirty: false })));
@@ -349,9 +430,10 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                         Layout editor
                     </h3>
                     <p className="text-sm text-gray-500 mt-1 max-w-xl">
-                        Toggle Phone/Tablet for device-specific position and size. Preview shows the
-                        kid screen; Edit layout lets you drag icons to move and use the corner handle
-                        to resize (% of frame). Unset icons start on a staggered path by story order.
+                        Use <span className="font-medium text-gray-700">Edit layout</span> to drag
+                        each circular icon onto a green pad. Place icons for each phone size you care
+                        about — the kid app picks the closest saved layout for the user’s screen.
+                        (x,y) is the center of the circular badge; labels hang below.
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -389,8 +471,19 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
             {showMainMapUpload && (
                 <div className="space-y-2">
                     <label className="block text-sm font-medium text-gray-700">
-                        Main map PNG
+                        Main map background
                     </label>
+                    <p className="text-xs text-gray-500">
+                        Video plays as the map background; PNG is poster/fallback. Story icons overlay
+                        on top.
+                    </p>
+                    <input
+                        ref={mapVideoInputRef}
+                        type="file"
+                        accept="video/*"
+                        className="hidden"
+                        onChange={handleMainMapVideoUpload}
+                    />
                     <input
                         ref={mapInputRef}
                         type="file"
@@ -398,41 +491,77 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                         className="hidden"
                         onChange={handleMainMapUpload}
                     />
-                    <button
-                        type="button"
-                        disabled={uploadingMap}
-                        onClick={() => mapInputRef.current?.click()}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-sm hover:bg-gray-50 disabled:opacity-50"
-                    >
-                        <Upload className="w-4 h-4" />
-                        {uploadingMap
-                            ? 'Uploading…'
-                            : mainMapUrl
-                              ? 'Replace main map'
-                              : 'Upload main map'}
-                    </button>
+                    <div className="flex flex-wrap gap-2">
+                        {onMainMapVideoUrlChange && (
+                            <button
+                                type="button"
+                                disabled={uploadingMapVideo}
+                                onClick={() => mapVideoInputRef.current?.click()}
+                                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-sm hover:bg-gray-50 disabled:opacity-50"
+                            >
+                                <Upload className="w-4 h-4" />
+                                {uploadingMapVideo
+                                    ? 'Uploading…'
+                                    : mainMapVideoUrl
+                                      ? 'Replace map video'
+                                      : 'Upload map video'}
+                            </button>
+                        )}
+                        {onMainMapUrlChange && (
+                            <button
+                                type="button"
+                                disabled={uploadingMap}
+                                onClick={() => mapInputRef.current?.click()}
+                                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-sm hover:bg-gray-50 disabled:opacity-50"
+                            >
+                                <Upload className="w-4 h-4" />
+                                {uploadingMap
+                                    ? 'Uploading…'
+                                    : mainMapUrl
+                                      ? 'Replace map PNG'
+                                      : 'Upload map PNG'}
+                            </button>
+                        )}
+                    </div>
                 </div>
             )}
 
+            <div
+                className="rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm text-amber-950 space-y-1.5"
+                role="note"
+            >
+                <p className="font-semibold text-amber-900">
+                    Place icons for Phone SE, Phone, Phone Max, and Tablet as needed. Save. The app
+                    picks the closest layout for each device.
+                </p>
+                <p className="text-xs text-amber-900/85 leading-relaxed">
+                    Unset sizes fall back (e.g. Phone Max → Phone → Phone SE → Tablet). This CMS
+                    writes to{' '}
+                    <code className="rounded bg-amber-100/80 px-1 py-0.5 text-[11px] break-all">
+                        {API_BASE_URL}
+                    </code>
+                    . Match{' '}
+                    <code className="rounded bg-amber-100/80 px-1 py-0.5 text-[11px]">
+                        VITE_API_BASE_URL
+                    </code>{' '}
+                    on the kid app, then Save again.
+                </p>
+            </div>
+
             <div className="flex flex-wrap items-center gap-2">
-                <div className="flex rounded-lg border border-gray-300 overflow-hidden text-sm">
-                    {(
-                        [
-                            { id: 'phone' as const, label: 'Phone', Icon: Smartphone },
-                            { id: 'tablet' as const, label: 'Tablet', Icon: Tablet },
-                        ] as const
-                    ).map(({ id: deviceId, label, Icon }) => (
+                <div className="flex flex-wrap rounded-lg border border-gray-300 overflow-hidden text-sm">
+                    {DEVICE_TOGGLE.map(({ id: deviceId, label, Icon }) => (
                         <button
                             key={deviceId}
                             type="button"
                             onClick={() => setDevice(deviceId)}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 ${
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 ${
                                 device === deviceId
                                     ? 'bg-indigo-600 text-white'
                                     : 'bg-white text-gray-700 hover:bg-gray-50'
                             }`}
                         >
-                            <Icon className="w-4 h-4" />
+                            <Icon className="w-3.5 h-3.5" />
                             {label}
                         </button>
                     ))}
@@ -463,12 +592,20 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                         Edit layout
                     </button>
                 </div>
+                <span className="text-xs text-gray-500">
+                    Editing{' '}
+                    <span className="font-medium text-gray-700">
+                        {MAIN_MAP_LAYOUT_LABELS[device]}
+                    </span>{' '}
+                    only
+                </span>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,auto)_1fr] gap-6 items-start">
                 <MainMapDevicePreview
                     device={device}
                     mainMapUrl={mainMapUrl}
+                    mainMapVideoUrl={mainMapVideoUrl}
                     markers={markers}
                     selectedId={selectedId}
                     onSelect={setSelectedId}
@@ -477,6 +614,11 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                     interactive={canvasMode === 'edit'}
                     loading={loading}
                     hideDeviceToggle
+                    caption={
+                        canvasMode === 'edit'
+                            ? 'Crosshair marks the badge center — place that on each green pad.'
+                            : undefined
+                    }
                 />
 
                 <div className="space-y-3 min-w-0">
@@ -499,6 +641,7 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                                 const active = s._id === selectedId;
                                 const pos = s.mainMapPosition[device];
                                 const size = s.mainMapSize[device];
+                                const customized = s.positionExplicit[device];
                                 return (
                                     <li
                                         key={s._id}
@@ -522,14 +665,26 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                                                 <span className="font-medium text-gray-900 truncate">
                                                     {s.order}. {s.title}
                                                 </span>
-                                                {s.dirty && (
-                                                    <span className="text-[10px] uppercase tracking-wide text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
-                                                        unsaved
-                                                    </span>
-                                                )}
+                                                <span className="flex items-center gap-1 shrink-0">
+                                                    {customized ? (
+                                                        <span className="text-[10px] uppercase tracking-wide text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded">
+                                                            set
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[10px] uppercase tracking-wide text-slate-600 bg-slate-200/80 px-1.5 py-0.5 rounded">
+                                                            fallback
+                                                        </span>
+                                                    )}
+                                                    {s.dirty && (
+                                                        <span className="text-[10px] uppercase tracking-wide text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                                                            unsaved
+                                                        </span>
+                                                    )}
+                                                </span>
                                             </div>
                                             <p className="text-xs text-gray-500 mt-1 font-mono">
-                                                {device}: {fmt(pos)} · {formatSize(size)}%
+                                                {MAIN_MAP_LAYOUT_LABELS[device]}: {fmt(pos)} ·{' '}
+                                                {formatSize(size)}%
                                             </p>
                                             {!s.mapIconUrl && (
                                                 <p className="text-[11px] text-amber-700 mt-1">
@@ -557,31 +712,42 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                             <p className="text-sm font-medium text-gray-900">
                                 Selected: {selected.displayTitle || selected.title}
                             </p>
+                            <p className="text-[11px] text-gray-500">
+                                Coordinates are badge center % of the frame. Unset sizes fall back
+                                at runtime — customize only the ones you need.
+                            </p>
                             <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
-                                <div>
-                                    Phone:{' '}
-                                    <span className="font-mono">
-                                        {fmt(selected.mainMapPosition.phone)} ·{' '}
-                                        {formatSize(selected.mainMapSize.phone)}%
-                                    </span>
-                                </div>
-                                <div>
-                                    Tablet:{' '}
-                                    <span className="font-mono">
-                                        {fmt(selected.mainMapPosition.tablet)} ·{' '}
-                                        {formatSize(selected.mainMapSize.tablet)}%
-                                    </span>
-                                </div>
+                                {MAIN_MAP_LAYOUT_KEYS.map((key) => (
+                                    <div key={key}>
+                                        <span className="font-medium text-gray-700">
+                                            {MAIN_MAP_LAYOUT_LABELS[key]}
+                                        </span>
+                                        {selected.positionExplicit[key] ? (
+                                            <span className="ml-1 text-[10px] text-emerald-700">
+                                                set
+                                            </span>
+                                        ) : (
+                                            <span className="ml-1 text-[10px] text-slate-500">
+                                                fallback
+                                            </span>
+                                        )}
+                                        <p className="font-mono mt-0.5">
+                                            {fmt(selected.mainMapPosition[key])} ·{' '}
+                                            {formatSize(selected.mainMapSize[key])}%
+                                        </p>
+                                    </div>
+                                ))}
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
                                 <p className="text-xs text-gray-600 font-mono">
-                                    {device} size: {formatSize(selected.mainMapSize[device])}%
+                                    {MAIN_MAP_LAYOUT_LABELS[device]} size:{' '}
+                                    {formatSize(selected.mainMapSize[device])}%
                                 </p>
                                 <button
                                     type="button"
                                     onClick={() => handleResetSize(selected._id)}
                                     className="text-xs text-indigo-700 hover:underline"
-                                    title={`Reset ${device} size to default`}
+                                    title={`Reset ${MAIN_MAP_LAYOUT_LABELS[device]} size to default`}
                                 >
                                     Reset size
                                 </button>

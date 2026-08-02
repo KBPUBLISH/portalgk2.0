@@ -10,11 +10,12 @@ import {
     Check,
     AlertTriangle,
     Map as MapIcon,
+    Clapperboard,
 } from 'lucide-react';
 import apiClient, { getMediaUrl } from '../services/apiClient';
 import MainMapDevicePreview from '../components/bibleMapMainMap/MainMapDevicePreview';
 import MainMapLayoutEditor from '../components/bibleMapMainMap/MainMapLayoutEditor';
-import type { SceneDevice } from '../components/sceneStudio/types';
+import type { MainMapLayoutKey } from '../components/bibleMapMainMap/types';
 
 interface IslandFormState {
     slug: string;
@@ -24,6 +25,7 @@ interface IslandFormState {
     mapArtUrl: string;
     sailArtUrl: string;
     mainMapUrl: string;
+    mainMapVideoUrl: string;
     mapPositionX: number;
     mapPositionY: number;
     order: number;
@@ -57,6 +59,7 @@ const empty: IslandFormState = {
     mapArtUrl: '',
     sailArtUrl: '',
     mainMapUrl: '',
+    mainMapVideoUrl: '',
     mapPositionX: 50,
     mapPositionY: 50,
     order: 0,
@@ -78,10 +81,12 @@ const BibleMapIslandForm: React.FC = () => {
     const [uploadingMap, setUploadingMap] = useState(false);
     const [uploadingSail, setUploadingSail] = useState(false);
     const [uploadingMainMap, setUploadingMainMap] = useState(false);
-    const [previewDevice, setPreviewDevice] = useState<SceneDevice>('phone');
+    const [uploadingMainMapVideo, setUploadingMainMapVideo] = useState(false);
+    const [previewDevice, setPreviewDevice] = useState<MainMapLayoutKey>('phone');
     const mapInputRef = useRef<HTMLInputElement>(null);
     const sailInputRef = useRef<HTMLInputElement>(null);
     const mainMapInputRef = useRef<HTMLInputElement>(null);
+    const mainMapVideoInputRef = useRef<HTMLInputElement>(null);
     const mainMapSectionRef = useRef<HTMLDivElement>(null);
 
     const loadIsland = async () => {
@@ -98,6 +103,7 @@ const BibleMapIslandForm: React.FC = () => {
             mapArtUrl: island.mapArtUrl || '',
             sailArtUrl: island.sailArtUrl || '',
             mainMapUrl: island.mainMapUrl || '',
+            mainMapVideoUrl: island.mainMapVideoUrl || '',
             mapPositionX: island.mapPosition?.x ?? 50,
             mapPositionY: island.mapPosition?.y ?? 50,
             order: island.order ?? 0,
@@ -157,6 +163,17 @@ const BibleMapIslandForm: React.FC = () => {
         return res.data.url as string;
     };
 
+    const uploadIslandVideo = async (file: File): Promise<string> => {
+        const islandKey = form.slug || id || 'temp';
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await apiClient.post(
+            `/api/upload/video?bookId=bible-map&type=main-map-video&islandId=${encodeURIComponent(islandKey)}`,
+            formData,
+        );
+        return res.data.url as string;
+    };
+
     const handleMapArtUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         e.target.value = '';
@@ -205,6 +222,22 @@ const BibleMapIslandForm: React.FC = () => {
         }
     };
 
+    const handleMainMapVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+        setUploadingMainMapVideo(true);
+        try {
+            const url = await uploadIslandVideo(file);
+            update('mainMapVideoUrl', url);
+        } catch (err) {
+            console.error(err);
+            alert('Failed to upload main map video');
+        } finally {
+            setUploadingMainMapVideo(false);
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!form.title.trim() || !form.slug.trim()) {
@@ -221,6 +254,7 @@ const BibleMapIslandForm: React.FC = () => {
                 mapArtUrl: form.mapArtUrl.trim() || undefined,
                 sailArtUrl: form.sailArtUrl.trim() || undefined,
                 mainMapUrl: form.mainMapUrl.trim() || null,
+                mainMapVideoUrl: form.mainMapVideoUrl.trim() || null,
                 mapPosition: { x: form.mapPositionX, y: form.mapPositionY },
                 order: form.order,
                 status: form.status,
@@ -259,6 +293,7 @@ const BibleMapIslandForm: React.FC = () => {
                 mapArtUrl: form.mapArtUrl.trim() || undefined,
                 sailArtUrl: form.sailArtUrl.trim() || undefined,
                 mainMapUrl: form.mainMapUrl.trim() || null,
+                mainMapVideoUrl: form.mainMapVideoUrl.trim() || null,
                 mapPosition: { x: form.mapPositionX, y: form.mapPositionY },
                 order: form.order,
                 unlockRule: form.unlockRule,
@@ -517,76 +552,143 @@ const BibleMapIslandForm: React.FC = () => {
                 </div>
 
                 {/* Main story-path map */}
-                <div className="space-y-2 pt-2 border-t border-gray-100">
+                <div className="space-y-3 pt-2 border-t border-gray-100">
                     <label className="block text-sm font-medium text-gray-700 flex items-center gap-2">
                         <MapIcon className="w-4 h-4 text-indigo-600" />
-                        Main map PNG
+                        Main map background
                     </label>
                     <p className="text-xs text-gray-500 max-w-2xl">
-                        Kid app flow (CMS contract): Ocean → tap island → this main map (background PNG
-                        + story icons) → tap a story icon → intro video → Scene Studio menu for that
-                        pack. Preview phone/tablet below after saving the island, then place story
-                        icons in the layout editor.
+                        Kid app flow (CMS contract): Ocean → tap island → this main map (looping video
+                        or PNG background + story icons on top) → tap a story icon → intro video →
+                        Scene Studio menu for that pack. Video plays as the map background; optional
+                        PNG is used as poster/static fallback. Preview device layouts below after
+                        saving the island, then place story icons in the layout editor.
                     </p>
-                    {form.mainMapUrl ? (
-                        <div className="relative rounded-xl border border-gray-200 bg-sky-50 p-3 max-w-md">
-                            <img
-                                src={getMediaUrl(form.mainMapUrl)}
-                                alt="Main story map"
-                                className="max-h-48 mx-auto object-contain"
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
+                        <div className="space-y-2">
+                            <p className="text-xs font-medium text-gray-700 flex items-center gap-1.5">
+                                <Clapperboard className="w-3.5 h-3.5 text-indigo-600" />
+                                Map video (recommended)
+                            </p>
+                            {form.mainMapVideoUrl ? (
+                                <div className="relative rounded-xl border border-gray-200 bg-slate-900 p-2">
+                                    <video
+                                        key={form.mainMapVideoUrl}
+                                        src={getMediaUrl(form.mainMapVideoUrl)}
+                                        className="max-h-40 w-full mx-auto object-contain rounded-lg"
+                                        muted
+                                        loop
+                                        playsInline
+                                        autoPlay
+                                        poster={
+                                            form.mainMapUrl
+                                                ? getMediaUrl(form.mainMapUrl)
+                                                : undefined
+                                        }
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => update('mainMapVideoUrl', '')}
+                                        className="absolute top-2 right-2 p-1 rounded-full bg-white/90 border border-gray-200 text-gray-600 hover:text-red-600"
+                                        aria-label="Remove main map video"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 h-36 flex flex-col items-center justify-center text-gray-400">
+                                    <Clapperboard className="w-8 h-8 mb-1" />
+                                    <span className="text-xs">No map video yet</span>
+                                </div>
+                            )}
+                            <input
+                                ref={mainMapVideoInputRef}
+                                type="file"
+                                accept="video/*"
+                                className="hidden"
+                                onChange={handleMainMapVideoUpload}
                             />
                             <button
                                 type="button"
-                                onClick={() => update('mainMapUrl', '')}
-                                className="absolute top-2 right-2 p-1 rounded-full bg-white/90 border border-gray-200 text-gray-600 hover:text-red-600"
-                                aria-label="Remove main map image"
+                                disabled={uploadingMainMapVideo}
+                                onClick={() => mainMapVideoInputRef.current?.click()}
+                                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-sm hover:bg-gray-50 disabled:opacity-50"
                             >
-                                <X className="w-4 h-4" />
+                                <Upload className="w-4 h-4" />
+                                {uploadingMainMapVideo
+                                    ? 'Uploading…'
+                                    : form.mainMapVideoUrl
+                                      ? 'Replace map video'
+                                      : 'Upload map video'}
                             </button>
                         </div>
-                    ) : (
-                        <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 h-36 max-w-md flex flex-col items-center justify-center text-gray-400">
-                            <ImageIcon className="w-8 h-8 mb-1" />
-                            <span className="text-xs">No main map yet</span>
-                        </div>
-                    )}
-                    <input
-                        ref={mainMapInputRef}
-                        type="file"
-                        accept="image/png,image/*"
-                        className="hidden"
-                        onChange={handleMainMapUpload}
-                    />
-                    <div className="flex flex-wrap gap-2">
-                        <button
-                            type="button"
-                            disabled={uploadingMainMap}
-                            onClick={() => mainMapInputRef.current?.click()}
-                            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-sm hover:bg-gray-50 disabled:opacity-50"
-                        >
-                            <Upload className="w-4 h-4" />
-                            {uploadingMainMap
-                                ? 'Uploading…'
-                                : form.mainMapUrl
-                                  ? 'Replace main map'
-                                  : 'Upload main map'}
-                        </button>
-                        {!isNew && (
+
+                        <div className="space-y-2">
+                            <p className="text-xs font-medium text-gray-700 flex items-center gap-1.5">
+                                <ImageIcon className="w-3.5 h-3.5 text-indigo-600" />
+                                Map PNG (poster / fallback)
+                            </p>
+                            {form.mainMapUrl ? (
+                                <div className="relative rounded-xl border border-gray-200 bg-sky-50 p-3">
+                                    <img
+                                        src={getMediaUrl(form.mainMapUrl)}
+                                        alt="Main story map"
+                                        className="max-h-40 mx-auto object-contain"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => update('mainMapUrl', '')}
+                                        className="absolute top-2 right-2 p-1 rounded-full bg-white/90 border border-gray-200 text-gray-600 hover:text-red-600"
+                                        aria-label="Remove main map image"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 h-36 flex flex-col items-center justify-center text-gray-400">
+                                    <ImageIcon className="w-8 h-8 mb-1" />
+                                    <span className="text-xs">No map PNG yet</span>
+                                </div>
+                            )}
+                            <input
+                                ref={mainMapInputRef}
+                                type="file"
+                                accept="image/png,image/*"
+                                className="hidden"
+                                onChange={handleMainMapUpload}
+                            />
                             <button
                                 type="button"
-                                onClick={() =>
-                                    mainMapSectionRef.current?.scrollIntoView({
-                                        behavior: 'smooth',
-                                        block: 'start',
-                                    })
-                                }
-                                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-50 text-indigo-800 border border-indigo-200 text-sm hover:bg-indigo-100"
+                                disabled={uploadingMainMap}
+                                onClick={() => mainMapInputRef.current?.click()}
+                                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-sm hover:bg-gray-50 disabled:opacity-50"
                             >
-                                <MapIcon className="w-4 h-4" />
-                                Open phone · tablet preview
+                                <Upload className="w-4 h-4" />
+                                {uploadingMainMap
+                                    ? 'Uploading…'
+                                    : form.mainMapUrl
+                                      ? 'Replace map PNG'
+                                      : 'Upload map PNG'}
                             </button>
-                        )}
+                        </div>
                     </div>
+
+                    {!isNew && (
+                        <button
+                            type="button"
+                            onClick={() =>
+                                mainMapSectionRef.current?.scrollIntoView({
+                                    behavior: 'smooth',
+                                    block: 'start',
+                                })
+                            }
+                            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-50 text-indigo-800 border border-indigo-200 text-sm hover:bg-indigo-100"
+                        >
+                            <MapIcon className="w-4 h-4" />
+                            Open device layout preview
+                        </button>
+                    )}
 
                     {/* Create-flow preview (edit flow uses MainMapLayoutEditor below) */}
                     {isNew && (
@@ -595,6 +697,7 @@ const BibleMapIslandForm: React.FC = () => {
                                 device={previewDevice}
                                 onDeviceChange={setPreviewDevice}
                                 mainMapUrl={form.mainMapUrl}
+                                mainMapVideoUrl={form.mainMapVideoUrl}
                                 markers={[]}
                                 caption="Save the island first to place story icons on this map."
                             />
@@ -693,7 +796,7 @@ const BibleMapIslandForm: React.FC = () => {
                 </div>
             </form>
 
-            {/* Main map phone/tablet preview + layout editor */}
+            {/* Main map multi-device preview + layout editor */}
             {!isNew && id && (
                 <div ref={mainMapSectionRef} className="mt-6 scroll-mt-4">
                     <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
@@ -702,12 +805,12 @@ const BibleMapIslandForm: React.FC = () => {
                                 Kid app screen
                             </p>
                             <h2 className="text-xl font-bold text-gray-900 mt-0.5">
-                                Phone &amp; tablet main map preview
+                                Main map layout (Phone SE · Phone · Phone Max · Tablet)
                             </h2>
                             <p className="text-sm text-gray-500 mt-1 max-w-2xl">
-                                See the main map PNG with story icons as kids will on phone or
-                                tablet. Use Preview for the clean view, or Edit layout to drag
-                                icons.
+                                Place icons for each form-factor you care about. The kid app picks the
+                                closest saved layout for the user’s screen; unset sizes fall back.
+                                Use Preview for the clean view, or Edit layout to drag icons.
                             </p>
                         </div>
                     </div>
@@ -715,13 +818,15 @@ const BibleMapIslandForm: React.FC = () => {
                         islandId={id}
                         islandSlug={form.slug}
                         mainMapUrl={form.mainMapUrl}
+                        mainMapVideoUrl={form.mainMapVideoUrl}
                         onMainMapUrlChange={(url) => update('mainMapUrl', url)}
+                        onMainMapVideoUrlChange={(url) => update('mainMapVideoUrl', url)}
                         showMainMapUpload={false}
                     />
-                    {form.mainMapUrl && (
+                    {(form.mainMapUrl || form.mainMapVideoUrl) && (
                         <p className="text-xs text-gray-500 mt-2">
-                            Tip: Save the island form if you replaced the main map PNG so the URL is
-                            persisted before launch.
+                            Tip: Save the island form if you replaced the main map video or PNG so
+                            the URL is persisted before launch.
                         </p>
                     )}
                 </div>

@@ -4,6 +4,7 @@ import { getMediaUrl } from '../../services/apiClient';
 import {
     MAIN_MAP_SIZE_MAX,
     MAIN_MAP_SIZE_MIN,
+    clampBadgeCenter,
     type MainMapPoint,
     type MainMapSize,
     type MainMapStoryMarker,
@@ -31,8 +32,8 @@ function clamp(n: number, min: number, max: number) {
 }
 
 /**
- * Drag story icons as % of the device frame (same math as Scene Studio OverlayCanvas).
- * Selected icons get a bottom-right resize handle in edit mode.
+ * Drag story icons as % of the device frame.
+ * (x,y) is the center of the circular badge; the label hangs below and does not shift the center.
  */
 const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
     markers,
@@ -87,25 +88,32 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
             const dyPct = ((e.clientY - drag.startY) / rect.height) * 100;
 
             if (drag.mode === 'move') {
-                onMove(drag.id, {
-                    x: clamp(drag.origPos.x + dxPct, 0, 100 - drag.origSize.w),
-                    y: clamp(drag.origPos.y + dyPct, 0, 100 - drag.origSize.h),
-                });
+                onMove(
+                    drag.id,
+                    clampBadgeCenter(
+                        {
+                            x: drag.origPos.x + dxPct,
+                            y: drag.origPos.y + dyPct,
+                        },
+                        drag.origSize,
+                    ),
+                );
                 return;
             }
 
             if (!onResize) return;
+            // Resize expands around the badge center (position stays put).
+            const maxW = Math.min(
+                MAIN_MAP_SIZE_MAX,
+                2 * Math.min(drag.origPos.x, 100 - drag.origPos.x),
+            );
+            const maxH = Math.min(
+                MAIN_MAP_SIZE_MAX,
+                2 * Math.min(drag.origPos.y, 100 - drag.origPos.y),
+            );
             onResize(drag.id, {
-                w: clamp(
-                    drag.origSize.w + dxPct,
-                    MAIN_MAP_SIZE_MIN,
-                    Math.min(MAIN_MAP_SIZE_MAX, 100 - drag.origPos.x),
-                ),
-                h: clamp(
-                    drag.origSize.h + dyPct,
-                    MAIN_MAP_SIZE_MIN,
-                    Math.min(MAIN_MAP_SIZE_MAX, 100 - drag.origPos.y),
-                ),
+                w: clamp(drag.origSize.w + dxPct, MAIN_MAP_SIZE_MIN, maxW),
+                h: clamp(drag.origSize.h + dyPct, MAIN_MAP_SIZE_MIN, maxH),
             });
         },
         [onMove, onResize],
@@ -135,7 +143,7 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
 
                 const body = (
                     <>
-                        <span className="relative flex items-center justify-center w-full flex-1 min-h-0">
+                        <span className="relative flex items-center justify-center w-full h-full">
                             {src ? (
                                 <img
                                     src={src}
@@ -145,7 +153,7 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
                                 />
                             ) : (
                                 <span
-                                    className={`flex flex-col items-center justify-center w-[85%] aspect-square rounded-full shadow-md ${
+                                    className={`flex flex-col items-center justify-center w-[90%] aspect-square rounded-full shadow-md ${
                                         readOnly
                                             ? 'bg-emerald-700/90 border-2 border-emerald-300 text-white'
                                             : 'bg-amber-50 border-2 border-dashed border-amber-400 text-amber-800'
@@ -165,9 +173,19 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
                                     {story.order}
                                 </span>
                             )}
+                            {selected && (
+                                <span
+                                    className="pointer-events-none absolute inset-0 flex items-center justify-center"
+                                    aria-hidden
+                                >
+                                    <span className="absolute w-[70%] h-px bg-rose-400/90" />
+                                    <span className="absolute h-[70%] w-px bg-rose-400/90" />
+                                    <span className="absolute w-2 h-2 rounded-full border-2 border-rose-500 bg-white/80" />
+                                </span>
+                            )}
                         </span>
                         <span
-                            className="text-[7px] leading-tight font-bold text-white tracking-wide truncate w-full text-center px-0.5"
+                            className="absolute left-1/2 top-full -translate-x-1/2 mt-0.5 text-[7px] leading-tight font-bold text-white tracking-wide truncate max-w-[140%] text-center px-0.5 pointer-events-none"
                             style={{ textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}
                         >
                             {label}
@@ -182,18 +200,20 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
                     </>
                 );
 
+                // Position = center of circular badge (label is absolutely below).
                 const style: React.CSSProperties = {
                     left: `${position.x}%`,
                     top: `${position.y}%`,
                     width: `${size.w}%`,
                     height: `${size.h}%`,
+                    transform: 'translate(-50%, -50%)',
                 };
 
                 if (readOnly) {
                     return (
                         <div
                             key={story._id}
-                            className="absolute flex flex-col items-center justify-end select-none z-10"
+                            className="absolute flex items-center justify-center select-none z-10"
                             style={style}
                             aria-label={label}
                         >
@@ -206,7 +226,7 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
                     <button
                         key={story._id}
                         type="button"
-                        className={`absolute flex flex-col items-center justify-end touch-none select-none ${
+                        className={`absolute flex items-center justify-center touch-none select-none ${
                             selected
                                 ? 'ring-2 ring-indigo-400 ring-offset-1 ring-offset-transparent z-20'
                                 : 'z-10'
@@ -221,7 +241,7 @@ const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({
                             onSelect(story._id);
                         }}
                         aria-label={label}
-                        title={label}
+                        title={`${label} — center ${position.x.toFixed(1)}, ${position.y.toFixed(1)}`}
                     >
                         {body}
                     </button>

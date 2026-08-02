@@ -31,6 +31,7 @@ export interface SceneStudioProps {
     onSceneTriggers: (triggers: SceneTrigger[]) => void;
     onUploadVideo: (file: File, kind: 'intro' | 'scene-bg' | 'scene-anim') => Promise<string>;
     onUploadMusic: (file: File) => Promise<string>;
+    onUploadButtonIcon: (file: File) => Promise<string>;
 }
 
 const SceneStudio: React.FC<SceneStudioProps> = ({
@@ -50,6 +51,7 @@ const SceneStudio: React.FC<SceneStudioProps> = ({
     onSceneTriggers,
     onUploadVideo,
     onUploadMusic,
+    onUploadButtonIcon,
 }) => {
     const [device, setDevice] = useState<SceneDevice>('phone');
     const [previewMode, setPreviewMode] = useState<ScenePreviewMode>('scene');
@@ -57,9 +59,11 @@ const SceneStudio: React.FC<SceneStudioProps> = ({
     const [uploadingIntro, setUploadingIntro] = useState(false);
     const [uploadingBg, setUploadingBg] = useState(false);
     const [uploadingMusic, setUploadingMusic] = useState(false);
+    const [uploadingBtnIcon, setUploadingBtnIcon] = useState(false);
     const introRef = useRef<HTMLInputElement>(null);
     const bgRef = useRef<HTMLInputElement>(null);
     const musicRef = useRef<HTMLInputElement>(null);
+    const btnIconRef = useRef<HTMLInputElement>(null);
 
     const layoutWithDefaults = useMemo(
         () => ensureDefaultButtons(sceneLayout),
@@ -72,6 +76,7 @@ const SceneStudio: React.FC<SceneStudioProps> = ({
     );
 
     const setDeviceButtons = (buttons: typeof deviceLayout.buttons) => {
+        // Persist preview defaults once the editor actually places/edits buttons.
         onSceneLayout({
             ...layoutWithDefaults,
             [device]: { ...deviceLayout, buttons },
@@ -79,9 +84,11 @@ const SceneStudio: React.FC<SceneStudioProps> = ({
     };
 
     const setShowBoard = (show: boolean) => {
+        // Do not seed icon-less default buttons just by toggling board chrome —
+        // kid app falls back to its built-in ACTIVITIES tray when iconUrl is missing.
         onSceneLayout({
-            ...layoutWithDefaults,
-            [device]: { ...deviceLayout, showActivitiesBoard: show },
+            ...sceneLayout,
+            [device]: { ...sceneLayout[device], showActivitiesBoard: show },
         });
     };
 
@@ -91,6 +98,30 @@ const SceneStudio: React.FC<SceneStudioProps> = ({
             sceneLayout.tablet.buttons.length === 0
         ) {
             onSceneLayout(layoutWithDefaults);
+        }
+    };
+
+    const selectedButton = selectedId
+        ? deviceLayout.buttons.find((b) => b.id === selectedId)
+        : undefined;
+
+    const handleButtonIconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file || !selectedId) return;
+        setUploadingBtnIcon(true);
+        try {
+            const url = await onUploadButtonIcon(file);
+            setDeviceButtons(
+                deviceLayout.buttons.map((b) =>
+                    b.id === selectedId ? { ...b, iconUrl: url } : b,
+                ),
+            );
+        } catch (err) {
+            console.error(err);
+            alert('Failed to upload button icon');
+        } finally {
+            setUploadingBtnIcon(false);
         }
     };
 
@@ -309,6 +340,69 @@ const SceneStudio: React.FC<SceneStudioProps> = ({
                         />
                         Show ACTIVITIES board chrome in preview
                     </label>
+
+                    <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                        Kid app keeps the built-in ACTIVITIES tray unless at least one button has an
+                        uploaded icon. Select a button in the preview, then upload its icon below.
+                    </p>
+
+                    <div className="rounded-lg border border-gray-200 p-3 space-y-2 bg-white">
+                        <p className="text-sm font-medium text-gray-800">Selected button icon</p>
+                        {selectedButton ? (
+                            <>
+                                <p className="text-xs text-gray-500">
+                                    {selectedButton.label || selectedButton.id}
+                                </p>
+                                {selectedButton.iconUrl ? (
+                                    <div className="flex items-center gap-2">
+                                        <img
+                                            src={getMediaUrl(selectedButton.iconUrl)}
+                                            alt=""
+                                            className="w-12 h-12 object-contain rounded border border-gray-100 bg-gray-50"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setDeviceButtons(
+                                                    deviceLayout.buttons.map((b) =>
+                                                        b.id === selectedButton.id
+                                                            ? { ...b, iconUrl: undefined }
+                                                            : b,
+                                                    ),
+                                                )
+                                            }
+                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                            Clear icon
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-gray-400">No custom icon yet</p>
+                                )}
+                                <input
+                                    ref={btnIconRef}
+                                    type="file"
+                                    accept="image/png,image/jpeg,image/webp,image/gif"
+                                    className="hidden"
+                                    onChange={handleButtonIconUpload}
+                                />
+                                <button
+                                    type="button"
+                                    disabled={uploadingBtnIcon}
+                                    onClick={() => btnIconRef.current?.click()}
+                                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 disabled:opacity-50"
+                                >
+                                    <Upload className="w-3.5 h-3.5" />
+                                    {uploadingBtnIcon ? 'Uploading…' : 'Upload button icon'}
+                                </button>
+                            </>
+                        ) : (
+                            <p className="text-xs text-gray-400">
+                                Click an activity button in the device preview to select it.
+                            </p>
+                        )}
+                    </div>
 
                     <button
                         type="button"
