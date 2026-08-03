@@ -143,8 +143,7 @@ const OverlayCanvas: React.FC<OverlayCanvasProps> = ({
             {buttons.map((btn) => {
                 const selected = selectedId === btn.id;
                 const def = SCENE_ACTIVITY_DEFS.find((d) => d.id === btn.id);
-                const activityId = (def?.id || 'read') as SceneActivityId;
-                const Icon = ICONS[activityId] || BookOpen;
+                const Icon = def ? ICONS[def.id] : BookOpen;
                 const label = btn.label || def?.label || btn.id;
                 const iconSrc = btn.iconUrl ? getMediaUrl(btn.iconUrl) : '';
 

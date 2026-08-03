@@ -4,7 +4,11 @@ import DevicePreview from './DevicePreview';
 import OverlayCanvas from './OverlayCanvas';
 import TriggerBoard from './TriggerBoard';
 import {
+    defaultDialogueButton,
+    defaultDialogueButtonTablet,
     ensureDefaultButtons,
+    isDialogueButtonId,
+    newId,
     type SceneAnimation,
     type SceneDevice,
     type SceneLayout,
@@ -99,6 +103,33 @@ const SceneStudio: React.FC<SceneStudioProps> = ({
         ) {
             onSceneLayout(layoutWithDefaults);
         }
+    };
+
+    /** Place a tap-to-talk bubble on both phone + tablet (drag to fine-tune). */
+    const addDialogueButton = () => {
+        const existing =
+            layoutWithDefaults.phone.buttons.some((b) => isDialogueButtonId(b.id)) ||
+            layoutWithDefaults.tablet.buttons.some((b) => isDialogueButtonId(b.id));
+        const id = existing ? newId('dialogue') : 'dialogue';
+        const phoneBtn = defaultDialogueButton(id);
+        const tabletBtn = defaultDialogueButtonTablet(id);
+        onSceneLayout({
+            phone: {
+                ...layoutWithDefaults.phone,
+                buttons: layoutWithDefaults.phone.buttons.some((b) => b.id === id)
+                    ? layoutWithDefaults.phone.buttons
+                    : [...layoutWithDefaults.phone.buttons, phoneBtn],
+            },
+            tablet: {
+                ...layoutWithDefaults.tablet,
+                buttons: layoutWithDefaults.tablet.buttons.some((b) => b.id === id)
+                    ? layoutWithDefaults.tablet.buttons
+                    : [...layoutWithDefaults.tablet.buttons, tabletBtn],
+            },
+        });
+        setDevice('phone');
+        setSelectedId(id);
+        setPreviewMode('scene');
     };
 
     const selectedButton = selectedId
@@ -344,7 +375,22 @@ const SceneStudio: React.FC<SceneStudioProps> = ({
                     <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                         Kid app keeps the built-in ACTIVITIES tray unless at least one button has an
                         uploaded icon. Select a button in the preview, then upload its icon below.
+                        Add a tap-to-talk bubble, wire it to a clip, and set the wire to “Then stay”
+                        for play → white fade → back to the scene.
                     </p>
+
+                    <button
+                        type="button"
+                        onClick={addDialogueButton}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-sm font-medium hover:bg-amber-100"
+                    >
+                        <img
+                            src="/assets/images/dialogue-tap-to-talk.png"
+                            alt=""
+                            className="w-7 h-7 object-contain"
+                        />
+                        Add tap-to-talk button
+                    </button>
 
                     <div className="rounded-lg border border-gray-200 p-3 space-y-2 bg-white">
                         <p className="text-sm font-medium text-gray-800">Selected button icon</p>

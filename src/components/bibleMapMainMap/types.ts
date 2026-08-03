@@ -38,7 +38,10 @@ export interface MainMapStoryMarker {
     heroImageUrl?: string;
     mainMapPosition?: Partial<MainMapPosition> | null;
     mainMapSize?: Partial<MainMapSizeLayout> | null;
-    /** When missing, stored coords are treated as legacy top-left. */
+    /**
+     * When missing, treated as badgeCenter (CMS editor always saves centers).
+     * Only explicit 'topLeft' triggers legacy chip→center conversion.
+     */
     mainMapPositionAnchor?: MainMapPositionAnchor | null;
     status?: string;
 }
@@ -241,7 +244,7 @@ export function resolveMainMapSize(
 
 /**
  * Resolve badge-center (x,y) for a layout key, walking the fallback chain.
- * Legacy saved points (no mainMapPositionAnchor / topLeft) are converted once for display.
+ * Only explicit topLeft anchors are converted; missing/badgeCenter use raw coords as centers.
  */
 export function resolveMainMapPoint(
     story: MainMapStoryMarker,
@@ -256,10 +259,10 @@ export function resolveMainMapPoint(
             x: clamp(Number(explicit!.x), 0, 100),
             y: clamp(Number(explicit!.y), 0, 100),
         };
-        if (story.mainMapPositionAnchor === 'badgeCenter') {
-            return raw;
+        if (story.mainMapPositionAnchor === 'topLeft') {
+            return legacyTopLeftToBadgeCenter(raw, resolveMainMapSize(story, sourceKey));
         }
-        return legacyTopLeftToBadgeCenter(raw, resolveMainMapSize(story, sourceKey));
+        return raw;
     }
     return defaultMainMapPoint(index, total);
 }

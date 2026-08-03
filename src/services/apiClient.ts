@@ -53,6 +53,11 @@ export const getMediaUrl = (url: string | undefined): string => {
     return url;
   }
   
+  // Bundled portal public assets (e.g. Scene Studio dialogue bubble)
+  if (url.startsWith('/assets/')) {
+    return url;
+  }
+
   // If it starts with /uploads, prepend the API base URL
   if (url.startsWith('/uploads')) {
     return `${API_BASE_URL}${url}`;

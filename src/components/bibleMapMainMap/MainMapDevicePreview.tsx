@@ -148,7 +148,7 @@ const MainMapDevicePreview: React.FC<MainMapDevicePreviewProps> = ({
                         <video
                             key={videoSrc}
                             src={videoSrc}
-                            className="absolute inset-0 w-full h-full object-cover object-center"
+                            className="absolute inset-0 w-full h-full object-cover object-bottom"
                             muted
                             loop
                             playsInline
@@ -160,7 +160,7 @@ const MainMapDevicePreview: React.FC<MainMapDevicePreviewProps> = ({
                         <img
                             src={mapSrc}
                             alt="Main map"
-                            className="absolute inset-0 w-full h-full object-cover object-center"
+                            className="absolute inset-0 w-full h-full object-cover object-bottom"
                             draggable={false}
                         />
                     ) : (

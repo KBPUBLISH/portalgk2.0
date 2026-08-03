@@ -63,14 +63,19 @@ const TriggerBoard: React.FC<TriggerBoardProps> = ({
 
     const addTrigger = () => {
         const fromButtonId = buttonOptions[0]?.id || 'read';
+        const isDialogue =
+            fromButtonId === 'dialogue' || fromButtonId.startsWith('dialogue_');
         onChangeTriggers([
             ...triggers,
             {
                 id: newId('trig'),
                 fromButtonId,
                 animationId: animations[0]?.id || '',
-                after: 'navigate',
-                navigateTo: asActivityId(fromButtonId) || 'read',
+                // Dialogue / tap-to-talk wires return to the scene after the clip.
+                after: isDialogue ? 'stay' : 'navigate',
+                navigateTo: isDialogue
+                    ? ''
+                    : asActivityId(fromButtonId) || 'read',
             },
         ]);
     };
@@ -100,9 +105,14 @@ const TriggerBoard: React.FC<TriggerBoardProps> = ({
                     },
                 ]);
             }
-        } catch (err) {
+        } catch (err: unknown) {
             console.error(err);
-            alert('Failed to upload animation video');
+            const apiMsg =
+                (err as { response?: { data?: { message?: string } } })?.response?.data
+                    ?.message ||
+                (err as { message?: string })?.message ||
+                'Unknown error';
+            alert(`Failed to upload animation video: ${apiMsg}`);
         } finally {
             setUploading(false);
             setPendingAnimId(null);

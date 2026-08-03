@@ -4,6 +4,41 @@ export type SceneActivityId = 'read' | 'quiz' | 'puzzle' | 'coloring' | 'game';
 export type SceneLockUntil = 'always' | 'content' | 'trigger';
 export type SceneAfterAction = 'navigate' | 'stay';
 
+/** Bundled dialogue / tap-to-talk bubble (portal + kid app public assets). */
+export const DIALOGUE_TAP_TO_TALK_ICON = '/assets/images/dialogue-tap-to-talk.png';
+
+export function isDialogueButtonId(id: string): boolean {
+    return id === 'dialogue' || id.startsWith('dialogue_');
+}
+
+/** Default phone placement for a tap-to-talk bubble (mid-scene, above activities). */
+export function defaultDialogueButton(id = 'dialogue'): SceneButton {
+    return {
+        id,
+        x: 72,
+        y: 38,
+        w: 18,
+        h: 14,
+        iconUrl: DIALOGUE_TAP_TO_TALK_ICON,
+        label: 'TAP TO TALK',
+        lockedUntil: 'always',
+    };
+}
+
+/** Default tablet placement for a tap-to-talk bubble. */
+export function defaultDialogueButtonTablet(id = 'dialogue'): SceneButton {
+    return {
+        id,
+        x: 74,
+        y: 36,
+        w: 14,
+        h: 12,
+        iconUrl: DIALOGUE_TAP_TO_TALK_ICON,
+        label: 'TAP TO TALK',
+        lockedUntil: 'always',
+    };
+}
+
 export interface SceneButton {
     id: string;
     x: number;

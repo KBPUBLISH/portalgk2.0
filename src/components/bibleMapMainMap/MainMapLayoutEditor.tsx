@@ -450,8 +450,8 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
             if (missingAnchor > 0) {
                 const msg =
                     `Saved ${savedOk} stor${savedOk === 1 ? 'y' : 'ies'}, but the API at ${API_BASE_URL} ` +
-                    `did not keep mainMapPositionAnchor=badgeCenter. Positions will drift on reload ` +
-                    `(legacy top-left conversion). Deploy the updated backend, then Save again.`;
+                    `did not keep mainMapPositionAnchor=badgeCenter. Kid app + portal now treat ` +
+                    `missing anchor as badge-center, but deploy the updated backend so the field persists.`;
                 setSaveError(msg);
                 alert(msg);
                 // Still clear dirty — write "succeeded", schema is the problem

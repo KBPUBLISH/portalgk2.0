@@ -80,14 +80,17 @@ const BookPageEditor: React.FC<BookPageEditorProps> = ({
             const formData = new FormData();
             formData.append('file', file);
             const isVideo = kind === 'video' || file.type.startsWith('video/');
+            // Backend expects pages/scroll (same as PageEditor) — not "background"
+            const uploadType =
+                kind === 'scroll' ? 'scroll' : isVideo || kind === 'background' ? 'pages' : kind;
             const endpoint = isVideo
-                ? `/api/upload/video?bookId=${encodeURIComponent(bookId)}&type=${kind}`
-                : `/api/upload/image?bookId=${encodeURIComponent(bookId)}&type=${kind}`;
+                ? `/api/upload/video?bookId=${encodeURIComponent(bookId)}&type=${uploadType}`
+                : `/api/upload/image?bookId=${encodeURIComponent(bookId)}&type=${uploadType}`;
             const res = await apiClient.post(endpoint, formData);
             const url = res.data.url as string;
             if (kind === 'scroll') {
                 patch({ scrollUrl: url });
-            } else if (kind === 'video') {
+            } else if (isVideo) {
                 const backgroundAudioUrl =
                     typeof res.data.backgroundAudioUrl === 'string'
                         ? res.data.backgroundAudioUrl
@@ -104,9 +107,14 @@ const BookPageEditor: React.FC<BookPageEditorProps> = ({
                     backgroundAudioUrl: undefined,
                 });
             }
-        } catch (err) {
+        } catch (err: unknown) {
             console.error(err);
-            alert(`Failed to upload ${kind}`);
+            const apiMsg =
+                (err as { response?: { data?: { message?: string } } })?.response?.data
+                    ?.message ||
+                (err as { message?: string })?.message ||
+                'Unknown error';
+            alert(`Failed to upload ${kind}: ${apiMsg}`);
         } finally {
             setUploading(null);
         }
