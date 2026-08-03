@@ -136,7 +136,8 @@ const TriggerBoard: React.FC<TriggerBoardProps> = ({
                         Trigger board
                     </h3>
                     <p className="text-xs text-gray-500 mt-0.5">
-                        Wire a button tap → animation video → navigate or stay.
+                        Wire activity buttons (READ, QUIZ, …) to clips. Tap-to-talk videos are set
+                        on the button cards above.
                     </p>
                 </div>
                 <div className="flex gap-2">

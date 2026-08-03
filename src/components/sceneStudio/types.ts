@@ -213,3 +213,98 @@ export const MAIN_MAP_DEVICE_FRAME: Record<
 export function newId(prefix: string): string {
     return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 }
+
+/** Deterministic clip id for a tap-to-talk button (CMS auto-wire, kid app unchanged). */
+export function dialogueAnimId(buttonId: string): string {
+    return `anim_for_${buttonId}`;
+}
+
+/** Deterministic wire id for a tap-to-talk button (CMS auto-wire, kid app unchanged). */
+export function dialogueTrigId(buttonId: string): string {
+    return `trig_for_${buttonId}`;
+}
+
+export function findTriggerForButton(
+    triggers: SceneTrigger[],
+    buttonId: string,
+): SceneTrigger | undefined {
+    return triggers.find((t) => t.fromButtonId === buttonId);
+}
+
+/** Resolve the video wired to a button (existing story wire, or deterministic anim id). */
+export function getButtonVideoUrl(
+    buttonId: string,
+    animations: SceneAnimation[],
+    triggers: SceneTrigger[],
+): string {
+    const trig = findTriggerForButton(triggers, buttonId);
+    if (trig?.animationId) {
+        const anim = animations.find((a) => a.id === trig.animationId);
+        if (anim?.videoUrl) return anim.videoUrl;
+    }
+    return animations.find((a) => a.id === dialogueAnimId(buttonId))?.videoUrl || '';
+}
+
+/**
+ * Upsert clip + stay wire for a button so the kid app plays video → white fade → scene.
+ * Preserves existing anim/trig ids when a wire already exists for the button.
+ */
+export function upsertButtonStayVideo(
+    buttonId: string,
+    videoUrl: string,
+    label: string,
+    animations: SceneAnimation[],
+    triggers: SceneTrigger[],
+): { animations: SceneAnimation[]; triggers: SceneTrigger[] } {
+    const existingTrig = findTriggerForButton(triggers, buttonId);
+    const animId = existingTrig?.animationId || dialogueAnimId(buttonId);
+    const trigId = existingTrig?.id || dialogueTrigId(buttonId);
+
+    const nextAnims = animations.some((a) => a.id === animId)
+        ? animations.map((a) =>
+              a.id === animId
+                  ? { ...a, videoUrl, label: label || a.label || 'Tap to talk' }
+                  : a,
+          )
+        : [
+              ...animations,
+              { id: animId, label: label || 'Tap to talk', videoUrl },
+          ];
+
+    const nextTrig: SceneTrigger = {
+        id: trigId,
+        fromButtonId: buttonId,
+        animationId: animId,
+        after: 'stay',
+        navigateTo: '',
+    };
+
+    let nextTriggers: SceneTrigger[];
+    if (triggers.some((t) => t.id === trigId)) {
+        nextTriggers = triggers.map((t) => (t.id === trigId ? nextTrig : t));
+    } else if (existingTrig) {
+        nextTriggers = triggers.map((t) =>
+            t.fromButtonId === buttonId ? nextTrig : t,
+        );
+    } else {
+        nextTriggers = [...triggers, nextTrig];
+    }
+
+    return { animations: nextAnims, triggers: nextTriggers };
+}
+
+/** Clear video for a button: remove its wire and unused clip. */
+export function clearButtonVideo(
+    buttonId: string,
+    animations: SceneAnimation[],
+    triggers: SceneTrigger[],
+): { animations: SceneAnimation[]; triggers: SceneTrigger[] } {
+    const trig = findTriggerForButton(triggers, buttonId);
+    const animId = trig?.animationId || dialogueAnimId(buttonId);
+    const nextTriggers = triggers.filter((t) => t.fromButtonId !== buttonId);
+    const animStillUsed = nextTriggers.some((t) => t.animationId === animId);
+    const nextAnims = animStillUsed
+        ? animations
+        : animations.filter((a) => a.id !== animId);
+    return { animations: nextAnims, triggers: nextTriggers };
+}

@@ -1,14 +1,18 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Upload, Clapperboard, Music, X } from 'lucide-react';
+import { Upload, Clapperboard, Music, X, Film, ChevronDown } from 'lucide-react';
 import DevicePreview from './DevicePreview';
 import OverlayCanvas from './OverlayCanvas';
 import TriggerBoard from './TriggerBoard';
 import {
+    clearButtonVideo,
     defaultDialogueButton,
     defaultDialogueButtonTablet,
+    DIALOGUE_TAP_TO_TALK_ICON,
     ensureDefaultButtons,
+    getButtonVideoUrl,
     isDialogueButtonId,
     newId,
+    upsertButtonStayVideo,
     type SceneAnimation,
     type SceneDevice,
     type SceneLayout,
@@ -64,10 +68,14 @@ const SceneStudio: React.FC<SceneStudioProps> = ({
     const [uploadingBg, setUploadingBg] = useState(false);
     const [uploadingMusic, setUploadingMusic] = useState(false);
     const [uploadingBtnIcon, setUploadingBtnIcon] = useState(false);
+    const [uploadingBtnVideoId, setUploadingBtnVideoId] = useState<string | null>(null);
+    const [iconUploadTargetId, setIconUploadTargetId] = useState<string | null>(null);
+    const [showAdvancedWires, setShowAdvancedWires] = useState(false);
     const introRef = useRef<HTMLInputElement>(null);
     const bgRef = useRef<HTMLInputElement>(null);
     const musicRef = useRef<HTMLInputElement>(null);
     const btnIconRef = useRef<HTMLInputElement>(null);
+    const btnVideoRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
     const layoutWithDefaults = useMemo(
         () => ensureDefaultButtons(sceneLayout),
@@ -79,11 +87,42 @@ const SceneStudio: React.FC<SceneStudioProps> = ({
         previewMode === 'intro' ? introVideoUrl : sceneBgVideoUrl,
     );
 
+    /** Unique tap-to-talk buttons across phone + tablet (same id on both). */
+    const dialogueButtons = useMemo(() => {
+        const byId = new Map<string, (typeof deviceLayout.buttons)[0]>();
+        for (const b of layoutWithDefaults.phone.buttons) {
+            if (isDialogueButtonId(b.id)) byId.set(b.id, b);
+        }
+        for (const b of layoutWithDefaults.tablet.buttons) {
+            if (isDialogueButtonId(b.id) && !byId.has(b.id)) byId.set(b.id, b);
+        }
+        return Array.from(byId.values());
+    }, [layoutWithDefaults]);
+
     const setDeviceButtons = (buttons: typeof deviceLayout.buttons) => {
         // Persist preview defaults once the editor actually places/edits buttons.
         onSceneLayout({
             ...layoutWithDefaults,
             [device]: { ...deviceLayout, buttons },
+        });
+    };
+
+    /** Patch a button by id on both phone and tablet (icon / label stay in sync). */
+    const patchButtonBothDevices = (
+        buttonId: string,
+        patch: Partial<(typeof deviceLayout.buttons)[0]>,
+    ) => {
+        const patchList = (buttons: typeof deviceLayout.buttons) =>
+            buttons.map((b) => (b.id === buttonId ? { ...b, ...patch } : b));
+        onSceneLayout({
+            phone: {
+                ...layoutWithDefaults.phone,
+                buttons: patchList(layoutWithDefaults.phone.buttons),
+            },
+            tablet: {
+                ...layoutWithDefaults.tablet,
+                buttons: patchList(layoutWithDefaults.tablet.buttons),
+            },
         });
     };
 
@@ -135,25 +174,87 @@ const SceneStudio: React.FC<SceneStudioProps> = ({
     const selectedButton = selectedId
         ? deviceLayout.buttons.find((b) => b.id === selectedId)
         : undefined;
+    const selectedIsDialogue = selectedButton
+        ? isDialogueButtonId(selectedButton.id)
+        : false;
+
+    const openIconPicker = (buttonId: string) => {
+        setSelectedId(buttonId);
+        setIconUploadTargetId(buttonId);
+        setTimeout(() => btnIconRef.current?.click(), 0);
+    };
 
     const handleButtonIconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         e.target.value = '';
-        if (!file || !selectedId) return;
+        const buttonId = iconUploadTargetId || selectedId;
+        if (!file || !buttonId) return;
         setUploadingBtnIcon(true);
         try {
             const url = await onUploadButtonIcon(file);
-            setDeviceButtons(
-                deviceLayout.buttons.map((b) =>
-                    b.id === selectedId ? { ...b, iconUrl: url } : b,
-                ),
-            );
+            if (isDialogueButtonId(buttonId)) {
+                patchButtonBothDevices(buttonId, { iconUrl: url });
+            } else {
+                setDeviceButtons(
+                    deviceLayout.buttons.map((b) =>
+                        b.id === buttonId ? { ...b, iconUrl: url } : b,
+                    ),
+                );
+            }
         } catch (err) {
             console.error(err);
             alert('Failed to upload button icon');
         } finally {
             setUploadingBtnIcon(false);
+            setIconUploadTargetId(null);
         }
+    };
+
+    const handleDialogueVideoUpload = async (
+        buttonId: string,
+        e: React.ChangeEvent<HTMLInputElement>,
+    ) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+        setUploadingBtnVideoId(buttonId);
+        try {
+            const url = await onUploadVideo(file, 'scene-anim');
+            const btn =
+                dialogueButtons.find((b) => b.id === buttonId) ||
+                deviceLayout.buttons.find((b) => b.id === buttonId);
+            const label = btn?.label || 'Tap to talk';
+            const { animations, triggers } = upsertButtonStayVideo(
+                buttonId,
+                url,
+                label,
+                sceneAnimations,
+                sceneTriggers,
+            );
+            onSceneAnimations(animations);
+            onSceneTriggers(triggers);
+            setSelectedId(buttonId);
+        } catch (err) {
+            console.error(err);
+            const apiMsg =
+                (err as { response?: { data?: { message?: string } } })?.response?.data
+                    ?.message ||
+                (err as { message?: string })?.message ||
+                'Unknown error';
+            alert(`Failed to upload tap-to-talk video: ${apiMsg}`);
+        } finally {
+            setUploadingBtnVideoId(null);
+        }
+    };
+
+    const handleClearDialogueVideo = (buttonId: string) => {
+        const { animations, triggers } = clearButtonVideo(
+            buttonId,
+            sceneAnimations,
+            sceneTriggers,
+        );
+        onSceneAnimations(animations);
+        onSceneTriggers(triggers);
     };
 
     const handleIntroUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -214,9 +315,8 @@ const SceneStudio: React.FC<SceneStudioProps> = ({
                     <div>
                         <p className="font-medium">Scene Studio</p>
                         <p className="text-emerald-800/90 text-xs mt-1">
-                            Upload the intro animation, looping garden BG, and scene music; drag
-                            activity buttons for phone/tablet; then wire tap → animation video →
-                            navigate.
+                            Upload intro, looping garden BG, and scene music. Add a tap-to-talk
+                            button, upload its video, and place it on the phone/tablet preview.
                         </p>
                     </div>
                 </div>
@@ -373,10 +473,8 @@ const SceneStudio: React.FC<SceneStudioProps> = ({
                     </label>
 
                     <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                        Kid app keeps the built-in ACTIVITIES tray unless at least one button has an
-                        uploaded icon. Select a button in the preview, then upload its icon below.
-                        Add a tap-to-talk bubble, wire it to a clip, and set the wire to “Then stay”
-                        for play → white fade → back to the scene.
+                        Add a button, upload its video, place it on the preview. On tap the kid app
+                        plays the video, fades to white, then returns to the scene.
                     </p>
 
                     <button
@@ -392,63 +490,239 @@ const SceneStudio: React.FC<SceneStudioProps> = ({
                         Add tap-to-talk button
                     </button>
 
-                    <div className="rounded-lg border border-gray-200 p-3 space-y-2 bg-white">
-                        <p className="text-sm font-medium text-gray-800">Selected button icon</p>
-                        {selectedButton ? (
-                            <>
-                                <p className="text-xs text-gray-500">
-                                    {selectedButton.label || selectedButton.id}
-                                </p>
-                                {selectedButton.iconUrl ? (
-                                    <div className="flex items-center gap-2">
-                                        <img
-                                            src={getMediaUrl(selectedButton.iconUrl)}
-                                            alt=""
-                                            className="w-12 h-12 object-contain rounded border border-gray-100 bg-gray-50"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                setDeviceButtons(
-                                                    deviceLayout.buttons.map((b) =>
-                                                        b.id === selectedButton.id
-                                                            ? { ...b, iconUrl: undefined }
-                                                            : b,
-                                                    ),
-                                                )
-                                            }
-                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50"
-                                        >
-                                            <X className="w-3.5 h-3.5" />
-                                            Clear icon
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <p className="text-xs text-gray-400">No custom icon yet</p>
-                                )}
-                                <input
-                                    ref={btnIconRef}
-                                    type="file"
-                                    accept="image/png,image/jpeg,image/webp,image/gif"
-                                    className="hidden"
-                                    onChange={handleButtonIconUpload}
-                                />
-                                <button
-                                    type="button"
-                                    disabled={uploadingBtnIcon}
-                                    onClick={() => btnIconRef.current?.click()}
-                                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 disabled:opacity-50"
-                                >
-                                    <Upload className="w-3.5 h-3.5" />
-                                    {uploadingBtnIcon ? 'Uploading…' : 'Upload button icon'}
-                                </button>
-                            </>
+                    <input
+                        ref={btnIconRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/gif"
+                        className="hidden"
+                        onChange={handleButtonIconUpload}
+                    />
+
+                    {/* One card per tap-to-talk: icon + video (auto-wires under the hood). */}
+                    <div className="space-y-3">
+                        {dialogueButtons.length === 0 ? (
+                            <div className="rounded-lg border border-dashed border-amber-200 bg-amber-50/40 p-4 text-xs text-amber-900/80">
+                                No tap-to-talk buttons yet. Click “Add tap-to-talk button” to place
+                                a bubble on phone and tablet.
+                            </div>
                         ) : (
-                            <p className="text-xs text-gray-400">
-                                Click an activity button in the device preview to select it.
-                            </p>
+                            dialogueButtons.map((btn) => {
+                                const videoUrl = getButtonVideoUrl(
+                                    btn.id,
+                                    sceneAnimations,
+                                    sceneTriggers,
+                                );
+                                const isSelected = selectedId === btn.id;
+                                const uploadingVideo = uploadingBtnVideoId === btn.id;
+                                const hasCustomIcon =
+                                    !!btn.iconUrl &&
+                                    btn.iconUrl !== DIALOGUE_TAP_TO_TALK_ICON;
+                                return (
+                                    <div
+                                        key={btn.id}
+                                        role="button"
+                                        tabIndex={0}
+                                        onClick={() => setSelectedId(btn.id)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                e.preventDefault();
+                                                setSelectedId(btn.id);
+                                            }
+                                        }}
+                                        className={`rounded-lg border p-3 space-y-3 bg-white cursor-pointer transition-colors ${
+                                            isSelected
+                                                ? 'border-amber-400 ring-2 ring-amber-200'
+                                                : 'border-gray-200 hover:border-amber-200'
+                                        }`}
+                                    >
+                                        <div className="flex items-center justify-between gap-2">
+                                            <p className="text-sm font-medium text-gray-800">
+                                                {btn.label || 'TAP TO TALK'}
+                                            </p>
+                                            <span className="text-[10px] uppercase tracking-wide text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">
+                                                Tap to talk
+                                            </span>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <p className="text-xs font-medium text-gray-600">
+                                                Button icon
+                                            </p>
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <img
+                                                    src={getMediaUrl(
+                                                        btn.iconUrl || DIALOGUE_TAP_TO_TALK_ICON,
+                                                    )}
+                                                    alt=""
+                                                    className="w-12 h-12 object-contain rounded border border-gray-100 bg-gray-50"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    disabled={
+                                                        uploadingBtnIcon &&
+                                                        iconUploadTargetId === btn.id
+                                                    }
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        openIconPicker(btn.id);
+                                                    }}
+                                                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 disabled:opacity-50"
+                                                >
+                                                    <Upload className="w-3.5 h-3.5" />
+                                                    {uploadingBtnIcon &&
+                                                    iconUploadTargetId === btn.id
+                                                        ? 'Uploading…'
+                                                        : 'Upload button icon'}
+                                                </button>
+                                                {hasCustomIcon ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            patchButtonBothDevices(btn.id, {
+                                                                iconUrl: DIALOGUE_TAP_TO_TALK_ICON,
+                                                            });
+                                                        }}
+                                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50"
+                                                    >
+                                                        <X className="w-3.5 h-3.5" />
+                                                        Clear icon
+                                                    </button>
+                                                ) : null}
+                                            </div>
+                                            <p className="text-[11px] text-gray-400">
+                                                Default is the dialogue bubble. Drag the button on
+                                                the preview to place it.
+                                            </p>
+                                        </div>
+
+                                        <div className="space-y-2 border-t border-gray-100 pt-3">
+                                            <p className="text-xs font-medium text-gray-600">
+                                                Tap video
+                                            </p>
+                                            <input
+                                                ref={(el) => {
+                                                    btnVideoRefs.current[btn.id] = el;
+                                                }}
+                                                type="file"
+                                                accept="video/*"
+                                                className="hidden"
+                                                onChange={(e) =>
+                                                    handleDialogueVideoUpload(btn.id, e)
+                                                }
+                                            />
+                                            {videoUrl ? (
+                                                <div className="space-y-2">
+                                                    <video
+                                                        src={getMediaUrl(videoUrl)}
+                                                        className="w-full h-28 object-cover rounded bg-black"
+                                                        muted
+                                                        playsInline
+                                                        controls
+                                                    />
+                                                    <div className="flex flex-wrap gap-2">
+                                                        <button
+                                                            type="button"
+                                                            disabled={uploadingVideo}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                btnVideoRefs.current[
+                                                                    btn.id
+                                                                ]?.click();
+                                                            }}
+                                                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 text-xs hover:bg-gray-50 disabled:opacity-50"
+                                                        >
+                                                            <Film className="w-3.5 h-3.5" />
+                                                            {uploadingVideo
+                                                                ? 'Uploading…'
+                                                                : 'Replace video'}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleClearDialogueVideo(btn.id);
+                                                            }}
+                                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50"
+                                                        >
+                                                            <X className="w-3.5 h-3.5" />
+                                                            Clear video
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    disabled={uploadingVideo}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        btnVideoRefs.current[btn.id]?.click();
+                                                    }}
+                                                    className="w-full h-24 rounded-lg border border-dashed border-amber-300 bg-amber-50/50 text-xs text-amber-900 inline-flex flex-col items-center justify-center gap-1 hover:bg-amber-50 disabled:opacity-50"
+                                                >
+                                                    <Film className="w-4 h-4" />
+                                                    {uploadingVideo
+                                                        ? 'Uploading…'
+                                                        : 'Upload video'}
+                                                    <span className="text-[10px] text-amber-800/70">
+                                                        Plays on tap, then returns to the scene
+                                                    </span>
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })
                         )}
                     </div>
+
+                    {/* Activity (non-dialogue) button icon when selected in preview */}
+                    {selectedButton && !selectedIsDialogue ? (
+                        <div className="rounded-lg border border-gray-200 p-3 space-y-2 bg-white">
+                            <p className="text-sm font-medium text-gray-800">
+                                Selected activity button icon
+                            </p>
+                            <p className="text-xs text-gray-500">
+                                {selectedButton.label || selectedButton.id}
+                            </p>
+                            {selectedButton.iconUrl ? (
+                                <div className="flex items-center gap-2">
+                                    <img
+                                        src={getMediaUrl(selectedButton.iconUrl)}
+                                        alt=""
+                                        className="w-12 h-12 object-contain rounded border border-gray-100 bg-gray-50"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setDeviceButtons(
+                                                deviceLayout.buttons.map((b) =>
+                                                    b.id === selectedButton.id
+                                                        ? { ...b, iconUrl: undefined }
+                                                        : b,
+                                                ),
+                                            )
+                                        }
+                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50"
+                                    >
+                                        <X className="w-3.5 h-3.5" />
+                                        Clear icon
+                                    </button>
+                                </div>
+                            ) : (
+                                <p className="text-xs text-gray-400">No custom icon yet</p>
+                            )}
+                            <button
+                                type="button"
+                                disabled={uploadingBtnIcon}
+                                onClick={() => openIconPicker(selectedButton.id)}
+                                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 disabled:opacity-50"
+                            >
+                                <Upload className="w-3.5 h-3.5" />
+                                {uploadingBtnIcon ? 'Uploading…' : 'Upload button icon'}
+                            </button>
+                        </div>
+                    ) : null}
 
                     <button
                         type="button"
@@ -529,14 +803,43 @@ const SceneStudio: React.FC<SceneStudioProps> = ({
                 </div>
             </div>
 
-            <TriggerBoard
-                buttons={deviceLayout.buttons}
-                animations={sceneAnimations}
-                triggers={sceneTriggers}
-                onChangeAnimations={onSceneAnimations}
-                onChangeTriggers={onSceneTriggers}
-                onUploadAnimationVideo={(file) => onUploadVideo(file, 'scene-anim')}
-            />
+            {/* Advanced: keep Trigger board for activity wires / legacy packs — collapsed by default. */}
+            <div className="rounded-xl border border-gray-200 bg-gray-50/60">
+                <button
+                    type="button"
+                    onClick={() => setShowAdvancedWires((v) => !v)}
+                    className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left"
+                >
+                    <div>
+                        <p className="text-sm font-medium text-gray-800">
+                            Advanced: activity wires
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                            Optional — wire READ / QUIZ / etc. to clips. Tap-to-talk videos are
+                            managed on the cards above.
+                        </p>
+                    </div>
+                    <ChevronDown
+                        className={`w-4 h-4 text-gray-500 shrink-0 transition-transform ${
+                            showAdvancedWires ? 'rotate-180' : ''
+                        }`}
+                    />
+                </button>
+                {showAdvancedWires ? (
+                    <div className="px-4 pb-4">
+                        <TriggerBoard
+                            buttons={deviceLayout.buttons}
+                            animations={sceneAnimations}
+                            triggers={sceneTriggers}
+                            onChangeAnimations={onSceneAnimations}
+                            onChangeTriggers={onSceneTriggers}
+                            onUploadAnimationVideo={(file) =>
+                                onUploadVideo(file, 'scene-anim')
+                            }
+                        />
+                    </div>
+                ) : null}
+            </div>
         </div>
     );
 };
