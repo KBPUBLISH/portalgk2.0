@@ -7,7 +7,8 @@ import {
     Puzzle,
     Palette,
     HelpCircle,
-    Gamepad2,
+    Gift,
+    Trash2,
     LayoutDashboard,
     ExternalLink,
     Plus,
@@ -47,7 +48,7 @@ import {
 import BibleMapBookBuilder from '../components/bibleMapBook/BibleMapBookBuilder';
 import OneClickPackPanel from '../components/bibleMapBook/OneClickPackPanel';
 
-type PackTab = 'overview' | 'scene' | 'book' | 'puzzle' | 'coloring' | 'quiz' | 'game';
+type PackTab = 'overview' | 'scene' | 'book' | 'puzzle' | 'coloring' | 'quiz' | 'rewards';
 
 interface IslandOption {
     _id: string;
@@ -153,6 +154,8 @@ interface StoryFormState {
     gameWebviewUrl: string;
     gameWebviewCover: string;
     gameWebviewDescription: string;
+    rewardsEnabled: boolean;
+    rewardsPool: RewardPoolItem[];
     sceneLayout: SceneLayout;
     sceneAnimations: SceneAnimation[];
     sceneTriggers: SceneTrigger[];
@@ -165,6 +168,34 @@ interface CatalogGame {
     enabled?: boolean;
 }
 
+type RewardPoolType = 'character' | 'game' | 'coins' | 'book_template';
+
+interface RewardPoolItem {
+    id: string;
+    type: RewardPoolType;
+    title: string;
+    imageUrl: string;
+    characterName: string;
+    gameUrl: string;
+    bookId: string;
+    bookCoverUrl: string;
+    coinMin: number;
+    coinMax: number;
+}
+
+const emptyRewardItem = (type: RewardPoolType = 'coins'): RewardPoolItem => ({
+    id: `reward-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    type,
+    title: type === 'coins' ? 'Gold Coins' : type === 'character' ? 'Character' : type === 'game' ? 'New Game' : 'Story Template',
+    imageUrl: '',
+    characterName: '',
+    gameUrl: '',
+    bookId: '',
+    bookCoverUrl: '',
+    coinMin: 100,
+    coinMax: 1000,
+});
+
 const TABS: { id: PackTab; label: string; icon: React.ElementType }[] = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'scene', label: 'Scene', icon: Clapperboard },
@@ -172,7 +203,7 @@ const TABS: { id: PackTab; label: string; icon: React.ElementType }[] = [
     { id: 'puzzle', label: 'Puzzle', icon: Puzzle },
     { id: 'coloring', label: 'Coloring', icon: Palette },
     { id: 'quiz', label: 'Quiz', icon: HelpCircle },
-    { id: 'game', label: 'Game', icon: Gamepad2 },
+    { id: 'rewards', label: 'Rewards', icon: Gift },
 ];
 
 const emptyForm = (islandId = ''): StoryFormState => ({
@@ -210,6 +241,8 @@ const emptyForm = (islandId = ''): StoryFormState => ({
     gameWebviewUrl: '',
     gameWebviewCover: '',
     gameWebviewDescription: '',
+    rewardsEnabled: true,
+    rewardsPool: [emptyRewardItem('coins')],
     sceneLayout: emptySceneLayout(),
     sceneAnimations: [],
     sceneTriggers: [],
@@ -605,6 +638,27 @@ const BibleMapStoryForm: React.FC = () => {
                     gameWebviewUrl: story.game?.webview?.url || '',
                     gameWebviewCover: story.game?.webview?.coverImage || '',
                     gameWebviewDescription: story.game?.webview?.description || '',
+                    rewardsEnabled: story.rewards?.enabled !== false,
+                    rewardsPool: Array.isArray(story.rewards?.pool) && story.rewards.pool.length
+                        ? story.rewards.pool.map((r: Record<string, unknown>) => ({
+                              id: String(r.id || emptyRewardItem().id),
+                              type: (['character', 'game', 'coins', 'book_template'].includes(String(r.type))
+                                  ? String(r.type)
+                                  : 'coins') as RewardPoolType,
+                              title: String(r.title || ''),
+                              imageUrl: String(r.imageUrl || ''),
+                              characterName: String(r.characterName || ''),
+                              gameUrl: String(r.gameUrl || ''),
+                              bookId: r.bookId
+                                  ? String(typeof r.bookId === 'object' && r.bookId && '_id' in (r.bookId as object)
+                                      ? (r.bookId as { _id: string })._id
+                                      : r.bookId)
+                                  : '',
+                              bookCoverUrl: String(r.bookCoverUrl || ''),
+                              coinMin: typeof r.coinMin === 'number' ? r.coinMin : 100,
+                              coinMax: typeof r.coinMax === 'number' ? r.coinMax : 1000,
+                          }))
+                        : [emptyRewardItem('coins')],
                     sceneLayout: normalizeLoadedLayout(story.sceneLayout),
                     sceneAnimations: Array.isArray(story.sceneAnimations)
                         ? story.sceneAnimations
@@ -634,6 +688,7 @@ const BibleMapStoryForm: React.FC = () => {
                                       t.navigateTo === 'quiz' ||
                                       t.navigateTo === 'puzzle' ||
                                       t.navigateTo === 'coloring' ||
+                                      t.navigateTo === 'rewards' ||
                                       t.navigateTo === 'game'
                                           ? t.navigateTo
                                           : '',
@@ -739,7 +794,7 @@ const BibleMapStoryForm: React.FC = () => {
                                 ).length > 0,
                         )
                       : false,
-            game: form.gameEnabled && form.gameKind !== 'none',
+            rewards: form.rewardsEnabled && form.rewardsPool.length > 0,
         }),
         [form],
     );
@@ -808,6 +863,23 @@ const BibleMapStoryForm: React.FC = () => {
                           description: form.gameWebviewDescription,
                       }
                     : undefined,
+        },
+        rewards: {
+            enabled: form.rewardsEnabled,
+            pool: form.rewardsPool
+                .filter((r) => r.id && r.type)
+                .map((r) => ({
+                    id: r.id,
+                    type: r.type,
+                    title: r.title,
+                    imageUrl: r.imageUrl || undefined,
+                    characterName: r.characterName || undefined,
+                    gameUrl: r.gameUrl || undefined,
+                    bookId: r.bookId || undefined,
+                    bookCoverUrl: r.bookCoverUrl || undefined,
+                    coinMin: r.type === 'coins' ? r.coinMin : undefined,
+                    coinMax: r.type === 'coins' ? r.coinMax : undefined,
+                })),
         },
     });
 
@@ -1033,7 +1105,7 @@ const BibleMapStoryForm: React.FC = () => {
                                 : form.displayTitle || form.title || 'Edit Story Pack'}
                         </h1>
                         <p className="text-sm text-gray-500 mt-1">
-                            Bundle Read + Puzzle + Coloring + Quiz + Game for one map adventure.
+                            Bundle Read + Puzzle + Coloring + Quiz + Rewards for one map adventure.
                         </p>
                     </div>
                     <button
@@ -1075,7 +1147,7 @@ const BibleMapStoryForm: React.FC = () => {
                         ['puzzle', 'Puzzle'],
                         ['coloring', 'Coloring'],
                         ['quiz', 'Quiz'],
-                        ['game', 'Game'],
+                        ['rewards', 'Rewards'],
                     ] as const
                 ).map(([key, label]) => (
                     <span
@@ -1991,29 +2063,328 @@ const BibleMapStoryForm: React.FC = () => {
                     />
                 )}
 
-                {tab === 'game' && (
+                {tab === 'rewards' && (
                     <div className="space-y-5">
                         <label className="flex items-center gap-2 cursor-pointer">
                             <input
                                 type="checkbox"
-                                checked={form.gameEnabled}
-                                onChange={(e) => {
-                                    update('gameEnabled', e.target.checked);
-                                    if (e.target.checked && form.gameKind === 'none') {
-                                        update('gameKind', 'catalog');
-                                    }
-                                }}
+                                checked={form.rewardsEnabled}
+                                onChange={(e) => update('rewardsEnabled', e.target.checked)}
                                 className="w-4 h-4 text-emerald-600 rounded"
                             />
-                            <span className="text-sm font-medium text-gray-800">Enable game unlock</span>
+                            <span className="text-sm font-medium text-gray-800">
+                                Enable Rewards loot box (Island ACTIVITIES)
+                            </span>
                         </label>
+                        <p className="text-xs text-gray-500 max-w-xl">
+                            Kids unlock Rewards after Read + Quiz. Configure the loot pool below
+                            (characters, games, coins, Dive Deeper book templates). Empty pool →
+                            app defaults to gold coins (100–1000).
+                        </p>
 
-                        {form.gameEnabled && (
-                            <>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Game type
-                                    </label>
+                        {form.rewardsEnabled && (
+                            <div className="space-y-4">
+                                {form.rewardsPool.map((item, idx) => (
+                                    <div
+                                        key={item.id}
+                                        className="border border-gray-200 rounded-xl p-4 space-y-3 bg-white max-w-2xl"
+                                    >
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="text-sm font-semibold text-gray-800">
+                                                Reward {idx + 1}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    update(
+                                                        'rewardsPool',
+                                                        form.rewardsPool.filter((_, i) => i !== idx),
+                                                    )
+                                                }
+                                                className="text-red-500 hover:text-red-700 p-1"
+                                                aria-label="Remove reward"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-600 mb-1">
+                                                    Type
+                                                </label>
+                                                <select
+                                                    value={item.type}
+                                                    onChange={(e) => {
+                                                        const type = e.target.value as RewardPoolType;
+                                                        const next = [...form.rewardsPool];
+                                                        next[idx] = {
+                                                            ...item,
+                                                            type,
+                                                            title:
+                                                                item.title ||
+                                                                emptyRewardItem(type).title,
+                                                        };
+                                                        update('rewardsPool', next);
+                                                    }}
+                                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-sm"
+                                                >
+                                                    <option value="coins">Gold Coins</option>
+                                                    <option value="character">Character</option>
+                                                    <option value="game">New Game</option>
+                                                    <option value="book_template">
+                                                        Book template (Dive Deeper)
+                                                    </option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-600 mb-1">
+                                                    Title
+                                                </label>
+                                                <input
+                                                    value={item.title}
+                                                    onChange={(e) => {
+                                                        const next = [...form.rewardsPool];
+                                                        next[idx] = { ...item, title: e.target.value };
+                                                        update('rewardsPool', next);
+                                                    }}
+                                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                                    placeholder="Display title"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {(item.type === 'character' ||
+                                            item.type === 'game' ||
+                                            item.type === 'book_template') && (
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-600 mb-1">
+                                                    Image URL
+                                                </label>
+                                                <div className="flex gap-2 items-center">
+                                                    <input
+                                                        value={item.imageUrl}
+                                                        onChange={(e) => {
+                                                            const next = [...form.rewardsPool];
+                                                            next[idx] = {
+                                                                ...item,
+                                                                imageUrl: e.target.value,
+                                                            };
+                                                            update('rewardsPool', next);
+                                                        }}
+                                                        className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                                        placeholder="https://… or upload"
+                                                    />
+                                                    <label className="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-300 text-xs font-medium cursor-pointer hover:bg-gray-50">
+                                                        <Upload className="w-3.5 h-3.5" />
+                                                        Upload
+                                                        <input
+                                                            type="file"
+                                                            accept="image/*"
+                                                            className="hidden"
+                                                            onChange={async (e) => {
+                                                                const file = e.target.files?.[0];
+                                                                e.target.value = '';
+                                                                if (!file) return;
+                                                                try {
+                                                                    const fd = new FormData();
+                                                                    fd.append('image', file);
+                                                                    const islandKey =
+                                                                        form.islandId || 'bible-map';
+                                                                    const res = await apiClient.post(
+                                                                        `/api/upload/image?bookId=bible-map&type=reward-image&islandId=${encodeURIComponent(islandKey)}`,
+                                                                        fd,
+                                                                    );
+                                                                    const url =
+                                                                        res.data?.url ||
+                                                                        res.data?.imageUrl ||
+                                                                        '';
+                                                                    if (!url) throw new Error('No URL');
+                                                                    const next = [...form.rewardsPool];
+                                                                    next[idx] = {
+                                                                        ...item,
+                                                                        imageUrl: url,
+                                                                    };
+                                                                    update('rewardsPool', next);
+                                                                } catch (err) {
+                                                                    console.error(err);
+                                                                    alert('Failed to upload image');
+                                                                }
+                                                            }}
+                                                        />
+                                                    </label>
+                                                </div>
+                                                {item.imageUrl ? (
+                                                    <img
+                                                        src={getMediaUrl(item.imageUrl)}
+                                                        alt=""
+                                                        className="mt-2 w-16 h-16 object-cover rounded-lg border"
+                                                    />
+                                                ) : null}
+                                            </div>
+                                        )}
+
+                                        {item.type === 'character' && (
+                                            <input
+                                                value={item.characterName}
+                                                onChange={(e) => {
+                                                    const next = [...form.rewardsPool];
+                                                    next[idx] = {
+                                                        ...item,
+                                                        characterName: e.target.value,
+                                                    };
+                                                    update('rewardsPool', next);
+                                                }}
+                                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                                placeholder="Character name"
+                                            />
+                                        )}
+
+                                        {item.type === 'game' && (
+                                            <input
+                                                value={item.gameUrl}
+                                                onChange={(e) => {
+                                                    const next = [...form.rewardsPool];
+                                                    next[idx] = {
+                                                        ...item,
+                                                        gameUrl: e.target.value,
+                                                    };
+                                                    update('rewardsPool', next);
+                                                }}
+                                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                                placeholder="https://game-url…"
+                                            />
+                                        )}
+
+                                        {item.type === 'book_template' && (
+                                            <div className="space-y-2">
+                                                <select
+                                                    value={item.bookId}
+                                                    onChange={(e) => {
+                                                        const bookId = e.target.value;
+                                                        const book = bibleMapBooks.find(
+                                                            (b) => b._id === bookId,
+                                                        );
+                                                        const next = [...form.rewardsPool];
+                                                        next[idx] = {
+                                                            ...item,
+                                                            bookId,
+                                                            title: item.title || book?.title || '',
+                                                        };
+                                                        update('rewardsPool', next);
+                                                    }}
+                                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-sm"
+                                                >
+                                                    <option value="">— Kids Monthly / book id —</option>
+                                                    {bibleMapBooks.map((b) => (
+                                                        <option key={b._id} value={b._id}>
+                                                            {b.title}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <p className="text-[11px] text-gray-500">
+                                                    Prefer a Kids Monthly Book. Paste any book ObjectId in
+                                                    Image/title fields if not listed.
+                                                </p>
+                                                <input
+                                                    value={item.bookId}
+                                                    onChange={(e) => {
+                                                        const next = [...form.rewardsPool];
+                                                        next[idx] = {
+                                                            ...item,
+                                                            bookId: e.target.value,
+                                                        };
+                                                        update('rewardsPool', next);
+                                                    }}
+                                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                                    placeholder="Or paste book ObjectId"
+                                                />
+                                            </div>
+                                        )}
+
+                                        {item.type === 'coins' && (
+                                            <div className="flex gap-3">
+                                                <div>
+                                                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                                                        Min
+                                                    </label>
+                                                    <input
+                                                        type="number"
+                                                        min={1}
+                                                        value={item.coinMin}
+                                                        onChange={(e) => {
+                                                            const next = [...form.rewardsPool];
+                                                            next[idx] = {
+                                                                ...item,
+                                                                coinMin: Number(e.target.value) || 100,
+                                                            };
+                                                            update('rewardsPool', next);
+                                                        }}
+                                                        className="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                                                        Max
+                                                    </label>
+                                                    <input
+                                                        type="number"
+                                                        min={1}
+                                                        value={item.coinMax}
+                                                        onChange={(e) => {
+                                                            const next = [...form.rewardsPool];
+                                                            next[idx] = {
+                                                                ...item,
+                                                                coinMax: Number(e.target.value) || 1000,
+                                                            };
+                                                            update('rewardsPool', next);
+                                                        }}
+                                                        className="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        update('rewardsPool', [
+                                            ...form.rewardsPool,
+                                            emptyRewardItem('character'),
+                                        ])
+                                    }
+                                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-300 text-emerald-700 text-sm font-medium hover:bg-emerald-50"
+                                >
+                                    <Plus className="w-4 h-4" /> Add reward
+                                </button>
+                            </div>
+                        )}
+
+                        <details className="mt-6 border border-gray-200 rounded-xl p-4 max-w-2xl bg-gray-50">
+                            <summary className="cursor-pointer text-sm font-medium text-gray-700">
+                                Legacy game unlock (optional)
+                            </summary>
+                            <p className="text-xs text-gray-500 mt-2 mb-3">
+                                Older packs used a single Game activity. Prefer Rewards pool type
+                                &quot;New Game&quot; above. Legacy fields still sync if needed.
+                            </p>
+                            <label className="flex items-center gap-2 cursor-pointer mb-3">
+                                <input
+                                    type="checkbox"
+                                    checked={form.gameEnabled}
+                                    onChange={(e) => {
+                                        update('gameEnabled', e.target.checked);
+                                        if (e.target.checked && form.gameKind === 'none') {
+                                            update('gameKind', 'webview');
+                                        }
+                                    }}
+                                    className="w-4 h-4 text-emerald-600 rounded"
+                                />
+                                <span className="text-sm text-gray-800">Enable legacy game</span>
+                            </label>
+                            {form.gameEnabled && (
+                                <div className="space-y-2">
                                     <select
                                         value={form.gameKind}
                                         onChange={(e) =>
@@ -2022,22 +2393,36 @@ const BibleMapStoryForm: React.FC = () => {
                                                 e.target.value as StoryFormState['gameKind'],
                                             )
                                         }
-                                        className="w-full max-w-md border border-gray-300 rounded-lg px-3 py-2 bg-white"
+                                        className="w-full max-w-md border border-gray-300 rounded-lg px-3 py-2 bg-white text-sm"
                                     >
                                         <option value="catalog">Catalog game</option>
                                         <option value="webview">Custom webview URL</option>
                                     </select>
-                                </div>
-
-                                {form.gameKind === 'catalog' && (
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Select game
-                                        </label>
+                                    {form.gameKind === 'webview' && (
+                                        <>
+                                            <input
+                                                value={form.gameWebviewTitle}
+                                                onChange={(e) =>
+                                                    update('gameWebviewTitle', e.target.value)
+                                                }
+                                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                                placeholder="Game title"
+                                            />
+                                            <input
+                                                value={form.gameWebviewUrl}
+                                                onChange={(e) =>
+                                                    update('gameWebviewUrl', e.target.value)
+                                                }
+                                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                                placeholder="https://game-url…"
+                                            />
+                                        </>
+                                    )}
+                                    {form.gameKind === 'catalog' && (
                                         <select
                                             value={form.gameId}
                                             onChange={(e) => update('gameId', e.target.value)}
-                                            className="w-full max-w-md border border-gray-300 rounded-lg px-3 py-2 bg-white"
+                                            className="w-full max-w-md border border-gray-300 rounded-lg px-3 py-2 bg-white text-sm"
                                         >
                                             <option value="">— Choose —</option>
                                             {games
@@ -2048,56 +2433,13 @@ const BibleMapStoryForm: React.FC = () => {
                                                     </option>
                                                 ))}
                                         </select>
-                                        <Link
-                                            to="/games"
-                                            className="text-xs text-indigo-600 hover:underline mt-1 inline-block"
-                                        >
-                                            Manage games catalog
-                                        </Link>
-                                    </div>
-                                )}
-
-                                {form.gameKind === 'webview' && (
-                                    <div className="space-y-3 max-w-xl">
-                                        <input
-                                            value={form.gameWebviewTitle}
-                                            onChange={(e) =>
-                                                update('gameWebviewTitle', e.target.value)
-                                            }
-                                            className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                                            placeholder="Game title"
-                                        />
-                                        <input
-                                            value={form.gameWebviewUrl}
-                                            onChange={(e) =>
-                                                update('gameWebviewUrl', e.target.value)
-                                            }
-                                            className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                                            placeholder="https://game-url…"
-                                        />
-                                        <input
-                                            value={form.gameWebviewCover}
-                                            onChange={(e) =>
-                                                update('gameWebviewCover', e.target.value)
-                                            }
-                                            className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                                            placeholder="Cover image URL"
-                                        />
-                                        <textarea
-                                            value={form.gameWebviewDescription}
-                                            onChange={(e) =>
-                                                update('gameWebviewDescription', e.target.value)
-                                            }
-                                            rows={2}
-                                            className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                                            placeholder="Short description"
-                                        />
-                                    </div>
-                                )}
-                            </>
-                        )}
+                                    )}
+                                </div>
+                            )}
+                        </details>
                     </div>
                 )}
+
             </div>
         </div>
     );

@@ -899,7 +899,7 @@ const BibleMapIslandForm: React.FC = () => {
                                                 Quiz
                                             </span>
                                             <span className={s.game ? 'text-emerald-700' : 'text-amber-600'}>
-                                                Game
+                                                Rewards
                                             </span>
                                         </div>
                                     ))}

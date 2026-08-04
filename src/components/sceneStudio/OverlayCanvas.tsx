@@ -16,7 +16,8 @@ const ICONS: Record<SceneActivityId, React.ElementType> = {
     quiz: HelpCircle,
     puzzle: Puzzle,
     coloring: Palette,
-    game: Gamepad2,
+    rewards: Gamepad2,
+    game: Gamepad2, // legacy CMS id
 };
 
 interface OverlayCanvasProps {

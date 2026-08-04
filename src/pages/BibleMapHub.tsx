@@ -45,6 +45,7 @@ interface MapStory {
     bookId?: { _id: string; title: string; status: string } | null;
     puzzle?: { enabled?: boolean };
     game?: { enabled?: boolean; kind?: string };
+    rewards?: { enabled?: boolean; pool?: unknown[] };
     quizMode?: string;
     coloringPageIds?: string[];
     mapIconUrl?: string;
@@ -186,7 +187,7 @@ const BibleMapHub: React.FC = () => {
                     </h1>
                     <p className="text-gray-600 mt-1 max-w-2xl">
                         Manage voyage islands and story packs. Each pack bundles Read, Puzzle,
-                        Coloring, Quiz, and Game unlocks for the map adventure.
+                        Coloring, Quiz, and Rewards unlocks for the map adventure.
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -405,8 +406,10 @@ const BibleMapHub: React.FC = () => {
                                         const hasQuiz = story.quizMode !== 'none';
                                         const hasPuzzle = !!story.puzzle?.enabled;
                                         const hasColoring = (story.coloringPageIds?.length ?? 0) > 0;
-                                        const hasGame =
-                                            !!story.game?.enabled && story.game?.kind !== 'none';
+                                        const hasRewards =
+                                            (Array.isArray(story.rewards?.pool) &&
+                                                story.rewards.pool.length > 0) ||
+                                            (!!story.game?.enabled && story.game?.kind !== 'none');
                                         return (
                                             <tr
                                                 key={story._id}
@@ -438,7 +441,7 @@ const BibleMapHub: React.FC = () => {
                                                         {activityDot(hasQuiz, 'Quiz')}
                                                         {activityDot(hasPuzzle, 'Puzzle')}
                                                         {activityDot(hasColoring, 'Color')}
-                                                        {activityDot(hasGame, 'Game')}
+                                                        {activityDot(hasRewards, 'Rewards')}
                                                     </div>
                                                 </td>
                                                 <td className="px-4 py-3">

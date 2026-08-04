@@ -23,6 +23,7 @@ const asActivityId = (id: string): SceneActivityId | '' =>
     id === 'quiz' ||
     id === 'puzzle' ||
     id === 'coloring' ||
+    id === 'rewards' ||
     id === 'game'
         ? id
         : '';

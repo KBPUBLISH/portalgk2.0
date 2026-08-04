@@ -1,6 +1,6 @@
 export type SceneDevice = 'phone' | 'tablet';
 export type ScenePreviewMode = 'intro' | 'scene';
-export type SceneActivityId = 'read' | 'quiz' | 'puzzle' | 'coloring' | 'game';
+export type SceneActivityId = 'read' | 'quiz' | 'puzzle' | 'coloring' | 'rewards' | 'game';
 export type SceneLockUntil = 'always' | 'content' | 'trigger';
 export type SceneAfterAction = 'navigate' | 'stay';
 
@@ -82,7 +82,7 @@ export const SCENE_ACTIVITY_DEFS: Array<{
     { id: 'quiz', label: 'QUIZZ' },
     { id: 'puzzle', label: 'PUZZLE' },
     { id: 'coloring', label: 'COLORING' },
-    { id: 'game', label: 'GAME' },
+    { id: 'rewards', label: 'REWARDS' },
 ];
 
 /**
@@ -91,10 +91,12 @@ export const SCENE_ACTIVITY_DEFS: Array<{
  */
 export function defaultPhoneButtons(): SceneButton[] {
     const ids = SCENE_ACTIVITY_DEFS;
-    const startX = 10;
+    const startX = 8;
     const gap = 1.5;
-    const w = 15;
-    const y = 72;
+    const w = 16;
+    // Lower on the frame so buttons sit in the main plank (not under the header).
+    // Kid app also pins activity icons into the board tray when board chrome is on.
+    const y = 84;
     const h = 14;
     return ids.map((d, i) => ({
         id: d.id,
@@ -109,11 +111,11 @@ export function defaultPhoneButtons(): SceneButton[] {
 
 export function defaultTabletButtons(): SceneButton[] {
     const ids = SCENE_ACTIVITY_DEFS;
-    const startX = 18;
+    const startX = 16;
     const gap = 2;
-    const w = 12;
-    const y = 74;
-    const h = 12;
+    const w = 13;
+    const y = 85;
+    const h = 13;
     return ids.map((d, i) => ({
         id: d.id,
         x: startX + i * (w + gap),
@@ -144,21 +146,31 @@ export function normalizeLoadedLayout(raw: unknown): SceneLayout {
         const buttons = Array.isArray(device.buttons)
             ? device.buttons
                   .filter((b): b is SceneButton => !!b && typeof b === 'object' && !!b.id)
-                  .map((b) => ({
-                      id: String(b.id),
-                      x: Number(b.x) || 0,
-                      y: Number(b.y) || 0,
-                      w: Number(b.w) || 14,
-                      h: Number(b.h) || 12,
-                      iconUrl: b.iconUrl ? String(b.iconUrl) : undefined,
-                      label: b.label ? String(b.label) : undefined,
-                      lockedUntil:
-                          b.lockedUntil === 'always' ||
-                          b.lockedUntil === 'content' ||
-                          b.lockedUntil === 'trigger'
-                              ? b.lockedUntil
-                              : 'content',
-                  }))
+                  .map((b) => {
+                      const rawId = String(b.id);
+                      const id = rawId === 'game' ? 'rewards' : rawId;
+                      const labelRaw = b.label ? String(b.label) : undefined;
+                      const label =
+                          id === 'rewards' &&
+                          (!labelRaw || labelRaw.toUpperCase() === 'GAME')
+                              ? 'REWARDS'
+                              : labelRaw;
+                      return {
+                          id,
+                          x: Number(b.x) || 0,
+                          y: Number(b.y) || 0,
+                          w: Number(b.w) || 14,
+                          h: Number(b.h) || 12,
+                          iconUrl: b.iconUrl ? String(b.iconUrl) : undefined,
+                          label,
+                          lockedUntil:
+                              b.lockedUntil === 'always' ||
+                              b.lockedUntil === 'content' ||
+                              b.lockedUntil === 'trigger'
+                                  ? b.lockedUntil
+                                  : 'content',
+                      };
+                  })
             : [];
         return {
             showActivitiesBoard: device.showActivitiesBoard !== false,
