@@ -1304,11 +1304,54 @@ const BibleMapStoryForm: React.FC = () => {
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
                                     Hero image URL
                                 </label>
-                                <input
-                                    value={form.heroImageUrl}
-                                    onChange={(e) => update('heroImageUrl', e.target.value)}
-                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                                />
+                                <div className="flex gap-2 items-center">
+                                    <input
+                                        value={form.heroImageUrl}
+                                        onChange={(e) => update('heroImageUrl', e.target.value)}
+                                        className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                        placeholder="https://… or upload"
+                                    />
+                                    <label className="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-300 text-xs font-medium cursor-pointer hover:bg-gray-50">
+                                        <Upload className="w-3.5 h-3.5" />
+                                        Upload
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={async (e) => {
+                                                const file = e.target.files?.[0];
+                                                e.target.value = '';
+                                                if (!file) return;
+                                                try {
+                                                    const fd = new FormData();
+                                                    fd.append('file', file);
+                                                    const islandKey =
+                                                        form.islandId || 'bible-map';
+                                                    const res = await apiClient.post(
+                                                        `/api/upload/image?bookId=bible-map&type=hero-image&islandId=${encodeURIComponent(islandKey)}`,
+                                                        fd,
+                                                    );
+                                                    const url =
+                                                        res.data?.url ||
+                                                        res.data?.imageUrl ||
+                                                        '';
+                                                    if (!url) throw new Error('No URL');
+                                                    update('heroImageUrl', url);
+                                                } catch (err) {
+                                                    console.error(err);
+                                                    alert('Failed to upload image');
+                                                }
+                                            }}
+                                        />
+                                    </label>
+                                </div>
+                                {form.heroImageUrl ? (
+                                    <img
+                                        src={getMediaUrl(form.heroImageUrl)}
+                                        alt=""
+                                        className="mt-2 w-16 h-16 object-cover rounded-lg border"
+                                    />
+                                ) : null}
                             </div>
                             <div className="md:col-span-2 flex items-end">
                                 <button
