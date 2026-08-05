@@ -2187,7 +2187,7 @@ const BibleMapStoryForm: React.FC = () => {
                                                                 if (!file) return;
                                                                 try {
                                                                     const fd = new FormData();
-                                                                    fd.append('image', file);
+                                                                    fd.append('file', file);
                                                                     const islandKey =
                                                                         form.islandId || 'bible-map';
                                                                     const res = await apiClient.post(
@@ -2240,19 +2240,24 @@ const BibleMapStoryForm: React.FC = () => {
                                         )}
 
                                         {item.type === 'game' && (
-                                            <input
-                                                value={item.gameUrl}
-                                                onChange={(e) => {
-                                                    const next = [...form.rewardsPool];
-                                                    next[idx] = {
-                                                        ...item,
-                                                        gameUrl: e.target.value,
-                                                    };
-                                                    update('rewardsPool', next);
-                                                }}
-                                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                                                placeholder="https://game-url…"
-                                            />
+                                            <div className="space-y-1">
+                                                <input
+                                                    value={item.gameUrl}
+                                                    onChange={(e) => {
+                                                        const next = [...form.rewardsPool];
+                                                        next[idx] = {
+                                                            ...item,
+                                                            gameUrl: e.target.value,
+                                                        };
+                                                        update('rewardsPool', next);
+                                                    }}
+                                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                                    placeholder="https://game-url…"
+                                                />
+                                                <p className="text-[11px] text-gray-500">
+                                                    Appears in the app Games Library when kids collect this reward.
+                                                </p>
+                                            </div>
                                         )}
 
                                         {item.type === 'book_template' && (
