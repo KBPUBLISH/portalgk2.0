@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
     ArrowLeft,
@@ -19,6 +19,7 @@ import {
     Loader2,
     Upload,
     X,
+    Play,
     Map as MapIcon,
 } from 'lucide-react';
 import apiClient, { getMediaUrl } from '../services/apiClient';
@@ -176,11 +177,24 @@ interface RewardPoolItem {
     title: string;
     imageUrl: string;
     characterName: string;
+    /** GLB 3D model URL — character walks the ship deck in-app */
+    modelUrl: string;
+    /** ElevenLabs voice id for in-app character TTS chat */
+    voiceId: string;
+    /** Optional freeform description of how this Bible character speaks/acts */
+    persona: string;
     gameUrl: string;
     bookId: string;
     bookCoverUrl: string;
     coinMin: number;
     coinMax: number;
+}
+
+/** Voice option from GET /api/tts/voices (new contract shape, legacy keys tolerated) */
+interface TtsVoiceOption {
+    id: string;
+    name: string;
+    previewUrl?: string;
 }
 
 const emptyRewardItem = (type: RewardPoolType = 'coins'): RewardPoolItem => ({
@@ -189,6 +203,9 @@ const emptyRewardItem = (type: RewardPoolType = 'coins'): RewardPoolItem => ({
     title: type === 'coins' ? 'Gold Coins' : type === 'character' ? 'Character' : type === 'game' ? 'New Game' : 'Story Template',
     imageUrl: '',
     characterName: '',
+    modelUrl: '',
+    voiceId: '',
+    persona: '',
     gameUrl: '',
     bookId: '',
     bookCoverUrl: '',
@@ -278,8 +295,105 @@ const BibleMapStoryForm: React.FC = () => {
     const [previewColoringId, setPreviewColoringId] = useState<string | null>(null);
     const [savingPalette, setSavingPalette] = useState(false);
 
+    // Character reward extras: ElevenLabs voice picker + GLB model upload
+    const [ttsVoices, setTtsVoices] = useState<TtsVoiceOption[]>([]);
+    const [ttsVoicesError, setTtsVoicesError] = useState(false);
+    const [ttsVoicesRequested, setTtsVoicesRequested] = useState(false);
+    const [uploadingModelFor, setUploadingModelFor] = useState<string | null>(null);
+    /** Local name/size of GLBs uploaded this session (URL only survives reload) */
+    const [modelFileMeta, setModelFileMeta] = useState<
+        Record<string, { name: string; size: number }>
+    >({});
+    const voicePreviewAudioRef = useRef<HTMLAudioElement | null>(null);
+
     const update = <K extends keyof StoryFormState>(key: K, value: StoryFormState[K]) => {
         setForm((prev) => ({ ...prev, [key]: value }));
+    };
+
+    // Load ElevenLabs voices the first time the Rewards tab opens.
+    // Endpoint returns { voices: [{ id, name, previewUrl? }] } (legacy bare-array/keys tolerated).
+    useEffect(() => {
+        if (tab !== 'rewards' || ttsVoicesRequested) return;
+        setTtsVoicesRequested(true);
+        (async () => {
+            try {
+                const res = await apiClient.get('/api/tts/voices');
+                const raw: Record<string, unknown>[] = Array.isArray(res.data)
+                    ? res.data
+                    : res.data?.voices ?? [];
+                const list: TtsVoiceOption[] = raw
+                    .map((v) => ({
+                        id: String(v.id || v.voice_id || ''),
+                        name: String(v.name || ''),
+                        previewUrl: v.previewUrl
+                            ? String(v.previewUrl)
+                            : v.preview_url
+                              ? String(v.preview_url)
+                              : undefined,
+                    }))
+                    .filter((v) => v.id && v.name);
+                if (list.length === 0) throw new Error('No voices returned');
+                setTtsVoices(list);
+                setTtsVoicesError(false);
+            } catch (err) {
+                console.error('Failed to load TTS voices:', err);
+                setTtsVoicesError(true);
+            }
+        })();
+    }, [tab, ttsVoicesRequested]);
+
+    useEffect(
+        () => () => {
+            voicePreviewAudioRef.current?.pause();
+        },
+        [],
+    );
+
+    const playVoicePreview = (url: string) => {
+        voicePreviewAudioRef.current?.pause();
+        const audio = new Audio(url);
+        voicePreviewAudioRef.current = audio;
+        void audio.play().catch(() => alert('Could not play voice preview'));
+    };
+
+    const handleCharacterModelUpload = async (rewardId: string, file: File) => {
+        if (!/\.glb$/i.test(file.name)) {
+            alert('Please upload a .glb 3D model file');
+            return;
+        }
+        if (file.size > 25 * 1024 * 1024) {
+            alert('Model file is too large. Maximum size is 25 MB.');
+            return;
+        }
+        setUploadingModelFor(rewardId);
+        try {
+            const island = islands.find((i) => i._id === form.islandId);
+            const islandKey = island?.slug || form.islandId || id || 'temp';
+            const fd = new FormData();
+            // Field name must be `file` — the upload endpoint reads upload.single('file')
+            fd.append('file', file);
+            const res = await apiClient.post(
+                `/api/upload/image?bookId=bible-map&type=character-model&islandId=${encodeURIComponent(islandKey)}`,
+                fd,
+            );
+            const url = String(res.data?.url || '');
+            if (!url) throw new Error('No URL returned');
+            setForm((prev) => ({
+                ...prev,
+                rewardsPool: prev.rewardsPool.map((r) =>
+                    r.id === rewardId ? { ...r, modelUrl: url } : r,
+                ),
+            }));
+            setModelFileMeta((prev) => ({
+                ...prev,
+                [rewardId]: { name: file.name, size: file.size },
+            }));
+        } catch (err) {
+            console.error(err);
+            alert('Failed to upload 3D model');
+        } finally {
+            setUploadingModelFor(null);
+        }
     };
 
     const togglePuzzleDifficulty = (level: 'easy' | 'medium' | 'hard') => {
@@ -648,6 +762,9 @@ const BibleMapStoryForm: React.FC = () => {
                               title: String(r.title || ''),
                               imageUrl: String(r.imageUrl || ''),
                               characterName: String(r.characterName || ''),
+                              modelUrl: String(r.modelUrl || ''),
+                              voiceId: String(r.voiceId || ''),
+                              persona: String(r.persona || ''),
                               gameUrl: String(r.gameUrl || ''),
                               bookId: r.bookId
                                   ? String(typeof r.bookId === 'object' && r.bookId && '_id' in (r.bookId as object)
@@ -874,6 +991,9 @@ const BibleMapStoryForm: React.FC = () => {
                     title: r.title,
                     imageUrl: r.imageUrl || undefined,
                     characterName: r.characterName || undefined,
+                    modelUrl: r.modelUrl || undefined,
+                    voiceId: r.voiceId || undefined,
+                    persona: r.persona || undefined,
                     gameUrl: r.gameUrl || undefined,
                     bookId: r.bookId || undefined,
                     bookCoverUrl: r.bookCoverUrl || undefined,
@@ -2267,19 +2387,217 @@ const BibleMapStoryForm: React.FC = () => {
                                         )}
 
                                         {item.type === 'character' && (
-                                            <input
-                                                value={item.characterName}
-                                                onChange={(e) => {
-                                                    const next = [...form.rewardsPool];
-                                                    next[idx] = {
-                                                        ...item,
-                                                        characterName: e.target.value,
-                                                    };
-                                                    update('rewardsPool', next);
-                                                }}
-                                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                                                placeholder="Character name"
-                                            />
+                                            <div className="space-y-3">
+                                                <input
+                                                    value={item.characterName}
+                                                    onChange={(e) => {
+                                                        const next = [...form.rewardsPool];
+                                                        next[idx] = {
+                                                            ...item,
+                                                            characterName: e.target.value,
+                                                        };
+                                                        update('rewardsPool', next);
+                                                    }}
+                                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                                    placeholder="Character name"
+                                                />
+
+                                                <div>
+                                                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                                                        3D model (.glb)
+                                                    </label>
+                                                    {item.modelUrl ? (
+                                                        <div className="flex items-center gap-2 text-sm">
+                                                            <span
+                                                                className="truncate max-w-[18rem] text-gray-700"
+                                                                title={item.modelUrl}
+                                                            >
+                                                                {modelFileMeta[item.id]?.name ||
+                                                                    decodeURIComponent(
+                                                                        item.modelUrl
+                                                                            .split('/')
+                                                                            .pop() || '3D model',
+                                                                    )}
+                                                            </span>
+                                                            {modelFileMeta[item.id] ? (
+                                                                <span className="text-xs text-gray-400 shrink-0">
+                                                                    {(
+                                                                        modelFileMeta[item.id].size /
+                                                                        1024 /
+                                                                        1024
+                                                                    ).toFixed(1)}{' '}
+                                                                    MB
+                                                                </span>
+                                                            ) : null}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    const next = [
+                                                                        ...form.rewardsPool,
+                                                                    ];
+                                                                    next[idx] = {
+                                                                        ...item,
+                                                                        modelUrl: '',
+                                                                    };
+                                                                    update('rewardsPool', next);
+                                                                }}
+                                                                className="text-red-500 hover:text-red-700 p-1 shrink-0"
+                                                                aria-label="Remove 3D model"
+                                                            >
+                                                                <X className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 text-xs font-medium cursor-pointer hover:bg-gray-50">
+                                                            {uploadingModelFor === item.id ? (
+                                                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                            ) : (
+                                                                <Upload className="w-3.5 h-3.5" />
+                                                            )}
+                                                            {uploadingModelFor === item.id
+                                                                ? 'Uploading…'
+                                                                : 'Upload .glb model'}
+                                                            <input
+                                                                type="file"
+                                                                accept=".glb,model/gltf-binary"
+                                                                className="hidden"
+                                                                disabled={
+                                                                    uploadingModelFor === item.id
+                                                                }
+                                                                onChange={(e) => {
+                                                                    const file =
+                                                                        e.target.files?.[0];
+                                                                    e.target.value = '';
+                                                                    if (!file) return;
+                                                                    void handleCharacterModelUpload(
+                                                                        item.id,
+                                                                        file,
+                                                                    );
+                                                                }}
+                                                            />
+                                                        </label>
+                                                    )}
+                                                    <p className="text-[11px] text-gray-500 mt-1">
+                                                        Character walks the ship deck in-app. Max 25 MB.
+                                                    </p>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                                                        Voice (ElevenLabs)
+                                                    </label>
+                                                    {ttsVoicesError ? (
+                                                        <div>
+                                                            <input
+                                                                value={item.voiceId}
+                                                                onChange={(e) => {
+                                                                    const next = [
+                                                                        ...form.rewardsPool,
+                                                                    ];
+                                                                    next[idx] = {
+                                                                        ...item,
+                                                                        voiceId: e.target.value,
+                                                                    };
+                                                                    update('rewardsPool', next);
+                                                                }}
+                                                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                                                placeholder="ElevenLabs voice id"
+                                                            />
+                                                            <p className="text-[11px] text-amber-600 mt-1">
+                                                                Voice list unavailable (is
+                                                                ELEVENLABS_API_KEY configured?).
+                                                                Paste a voice id manually.
+                                                            </p>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex gap-2 items-center">
+                                                            <select
+                                                                value={item.voiceId}
+                                                                onChange={(e) => {
+                                                                    const next = [
+                                                                        ...form.rewardsPool,
+                                                                    ];
+                                                                    next[idx] = {
+                                                                        ...item,
+                                                                        voiceId: e.target.value,
+                                                                    };
+                                                                    update('rewardsPool', next);
+                                                                }}
+                                                                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 bg-white text-sm"
+                                                            >
+                                                                <option value="">
+                                                                    — No voice (chat disabled) —
+                                                                </option>
+                                                                {item.voiceId &&
+                                                                    !ttsVoices.some(
+                                                                        (v) =>
+                                                                            v.id === item.voiceId,
+                                                                    ) && (
+                                                                        <option
+                                                                            value={item.voiceId}
+                                                                        >
+                                                                            {item.voiceId} (not in
+                                                                            list)
+                                                                        </option>
+                                                                    )}
+                                                                {ttsVoices.map((v) => (
+                                                                    <option
+                                                                        key={v.id}
+                                                                        value={v.id}
+                                                                    >
+                                                                        {v.name}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                            {(() => {
+                                                                const previewUrl = ttsVoices.find(
+                                                                    (v) => v.id === item.voiceId,
+                                                                )?.previewUrl;
+                                                                return previewUrl ? (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() =>
+                                                                            playVoicePreview(
+                                                                                previewUrl,
+                                                                            )
+                                                                        }
+                                                                        className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 shrink-0"
+                                                                        title="Play voice preview"
+                                                                        aria-label="Play voice preview"
+                                                                    >
+                                                                        <Play className="w-4 h-4 text-emerald-600" />
+                                                                    </button>
+                                                                ) : null;
+                                                            })()}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                                                        Persona / how this character speaks
+                                                        (optional)
+                                                    </label>
+                                                    <textarea
+                                                        value={item.persona}
+                                                        onChange={(e) => {
+                                                            const next = [...form.rewardsPool];
+                                                            next[idx] = {
+                                                                ...item,
+                                                                persona: e.target.value,
+                                                            };
+                                                            update('rewardsPool', next);
+                                                        }}
+                                                        rows={3}
+                                                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                                        placeholder="e.g. Noah is gentle and grateful, loves talking about animals and God's promises, often mentions the rainbow…"
+                                                    />
+                                                    <p className="text-[11px] text-gray-500 mt-1">
+                                                        Guides the in-app AI chat so the character
+                                                        stays true to their Bible story.
+                                                    </p>
+                                                </div>
+                                            </div>
                                         )}
 
                                         {item.type === 'game' && (
