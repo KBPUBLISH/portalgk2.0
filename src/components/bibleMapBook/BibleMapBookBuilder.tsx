@@ -77,6 +77,15 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
     const [generatingPageImage, setGeneratingPageImage] = useState<number | null>(null);
     const [enhancingSource, setEnhancingSource] = useState(false);
 
+    // Parent passes onBookLinked as an inline arrow, so its identity changes every
+    // parent render. Read it through a ref so loadPages stays stable — otherwise any
+    // parent re-render (e.g. the pack-level Save) refetches pages and silently wipes
+    // unsaved local edits like a just-replaced background image.
+    const onBookLinkedRef = useRef(onBookLinked);
+    useEffect(() => {
+        onBookLinkedRef.current = onBookLinked;
+    });
+
     const applyBookMusic = (book: unknown) => {
         const url = backgroundMusicUrlFromBook(book);
         setBackgroundMusicUrl(url);
@@ -93,7 +102,7 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
         try {
             const res = await apiClient.get(`/api/bible-map/stories/${storyId}/reading-pages`);
             if (res.data.bookId && !bookId) {
-                onBookLinked(res.data.bookId, res.data.book);
+                onBookLinkedRef.current(res.data.bookId, res.data.book);
             }
             if (res.data.book) {
                 applyBookMusic(res.data.book);
@@ -108,7 +117,7 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
         } finally {
             setLoading(false);
         }
-    }, [storyId, bookId, onBookLinked]);
+    }, [storyId, bookId]);
 
     useEffect(() => {
         void loadPages();
@@ -1042,11 +1051,24 @@ const BibleMapBookBuilder: React.FC<BibleMapBookBuilderProps> = ({
                             bookPages={pages}
                             backgroundMusicUrl={backgroundMusicUrl || undefined}
                             onLevelChange={setLevel}
-                            onChange={(next) =>
-                                setPages((prev) =>
-                                    prev.map((p, i) => (i === activePage ? next : p)),
-                                )
-                            }
+                            onChange={(next, opts) => {
+                                const nextPages = pages.map((p, i) =>
+                                    i === activePage ? next : p,
+                                );
+                                setPages(nextPages);
+                                // Media uploads/deletes save immediately (like AI page
+                                // generation) so they survive without "Save pages".
+                                if (opts?.persistMedia && bookId) {
+                                    void persistPages(nextPages, { quiet: true }).catch(
+                                        (err) => {
+                                            console.error(err);
+                                            alert(
+                                                'Upload succeeded but saving the page failed — click "Save pages" to keep it.',
+                                            );
+                                        },
+                                    );
+                                }
+                            }}
                             bookId={bookId}
                             onGenerateImage={(extraPrompt) =>
                                 void handleGeneratePageImage(current.pageNumber, extraPrompt)

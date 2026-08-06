@@ -22,7 +22,8 @@ interface BookPageEditorProps {
     /** Book-level looping background music (files.audio) */
     backgroundMusicUrl?: string;
     onLevelChange: (level: ReadingLevelKey) => void;
-    onChange: (next: ReadingPageDraft) => void;
+    /** persistMedia asks the parent to save pages immediately (media uploads/deletes) */
+    onChange: (next: ReadingPageDraft, opts?: { persistMedia?: boolean }) => void;
     /** Optional extra art-direction prompt from CMS when regenerating this page */
     onGenerateImage?: (extraPrompt?: string) => void;
     generatingImage?: boolean;
@@ -53,7 +54,8 @@ const BookPageEditor: React.FC<BookPageEditorProps> = ({
         setExtraPrompt('');
     }, [page.pageNumber]);
 
-    const patch = (partial: Partial<ReadingPageDraft>) => onChange({ ...page, ...partial });
+    const patch = (partial: Partial<ReadingPageDraft>, opts?: { persistMedia?: boolean }) =>
+        onChange({ ...page, ...partial }, opts);
 
     const patchLevel = (
         key: ReadingLevelKey,
@@ -89,23 +91,29 @@ const BookPageEditor: React.FC<BookPageEditorProps> = ({
             const res = await apiClient.post(endpoint, formData);
             const url = res.data.url as string;
             if (kind === 'scroll') {
-                patch({ scrollUrl: url });
+                patch({ scrollUrl: url }, { persistMedia: true });
             } else if (isVideo) {
                 const backgroundAudioUrl =
                     typeof res.data.backgroundAudioUrl === 'string'
                         ? res.data.backgroundAudioUrl
                         : undefined;
-                patch({
-                    backgroundUrl: url,
-                    backgroundType: 'video',
-                    backgroundAudioUrl,
-                });
+                patch(
+                    {
+                        backgroundUrl: url,
+                        backgroundType: 'video',
+                        backgroundAudioUrl,
+                    },
+                    { persistMedia: true },
+                );
             } else {
-                patch({
-                    backgroundUrl: url,
-                    backgroundType: 'image',
-                    backgroundAudioUrl: undefined,
-                });
+                patch(
+                    {
+                        backgroundUrl: url,
+                        backgroundType: 'image',
+                        backgroundAudioUrl: undefined,
+                    },
+                    { persistMedia: true },
+                );
             }
         } catch (err: unknown) {
             console.error(err);
@@ -123,11 +131,14 @@ const BookPageEditor: React.FC<BookPageEditorProps> = ({
     const clearBackground = () => {
         if (!page.backgroundUrl) return;
         if (!window.confirm('Remove this page’s background image/video?')) return;
-        patch({
-            backgroundUrl: '',
-            backgroundType: 'image',
-            backgroundAudioUrl: undefined,
-        });
+        patch(
+            {
+                backgroundUrl: '',
+                backgroundType: 'image',
+                backgroundAudioUrl: undefined,
+            },
+            { persistMedia: true },
+        );
     };
 
     const clearScroll = () => {
@@ -135,7 +146,7 @@ const BookPageEditor: React.FC<BookPageEditorProps> = ({
         if (!window.confirm('Clear custom scroll? The default parchment will be used on save.')) {
             return;
         }
-        patch({ scrollUrl: '' });
+        patch({ scrollUrl: '' }, { persistMedia: true });
     };
 
     const bgPreviewUrl = page.backgroundUrl ? getMediaUrl(page.backgroundUrl) : '';
