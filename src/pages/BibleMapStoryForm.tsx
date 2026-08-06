@@ -132,7 +132,6 @@ interface StoryFormState {
     mapIconUrl: string;
     mainMapPosition: MainMapPosition;
     mainMapSize: MainMapSizeLayout;
-    introVideoUrl: string;
     sceneBgVideoUrl: string;
     sceneMusicUrl: string;
     status: 'draft' | 'published' | 'archived';
@@ -235,7 +234,6 @@ const emptyForm = (islandId = ''): StoryFormState => ({
     mapIconUrl: '',
     mainMapPosition: normalizeMainMapPosition(null, 0, 1),
     mainMapSize: { ...DEFAULT_MAIN_MAP_SIZE },
-    introVideoUrl: '',
     sceneBgVideoUrl: '',
     sceneMusicUrl: '',
     status: 'draft',
@@ -504,7 +502,7 @@ const BibleMapStoryForm: React.FC = () => {
 
     const uploadSceneVideo = async (
         file: File,
-        kind: 'intro' | 'scene-bg' | 'scene-anim',
+        kind: 'scene-bg' | 'scene-anim',
     ): Promise<string> => {
         const island = islands.find((i) => i._id === form.islandId);
         const islandKey = island?.slug || form.islandId || id || 'temp';
@@ -689,7 +687,6 @@ const BibleMapStoryForm: React.FC = () => {
                             h: story.mainMapSize?.tablet?.h ?? DEFAULT_MAIN_MAP_SIZE.tablet.h,
                         },
                     },
-                    introVideoUrl: story.introVideoUrl || '',
                     sceneBgVideoUrl: story.sceneBgVideoUrl || '',
                     sceneMusicUrl: story.sceneMusicUrl || '',
                     status: story.status || 'draft',
@@ -929,7 +926,6 @@ const BibleMapStoryForm: React.FC = () => {
         heroImageUrl: form.heroImageUrl.trim() || undefined,
         // Icon can be set here; phone/tablet placement is edited on the island main map layout
         mapIconUrl: form.mapIconUrl.trim() || null,
-        introVideoUrl: form.introVideoUrl.trim() || undefined,
         sceneBgVideoUrl: form.sceneBgVideoUrl.trim() || undefined,
         sceneMusicUrl: form.sceneMusicUrl.trim() || null,
         status: form.status,
@@ -1597,14 +1593,12 @@ const BibleMapStoryForm: React.FC = () => {
                 {tab === 'scene' && (
                     <SceneStudio
                         sceneTitle={form.displayTitle}
-                        introVideoUrl={form.introVideoUrl}
                         sceneBgVideoUrl={form.sceneBgVideoUrl}
                         sceneMusicUrl={form.sceneMusicUrl}
                         sceneLayout={form.sceneLayout}
                         sceneAnimations={form.sceneAnimations}
                         sceneTriggers={form.sceneTriggers}
                         onSceneTitle={(title) => update('displayTitle', title)}
-                        onIntroVideoUrl={(url) => update('introVideoUrl', url)}
                         onSceneBgVideoUrl={(url) => update('sceneBgVideoUrl', url)}
                         onSceneMusicUrl={(url) => update('sceneMusicUrl', url)}
                         onSceneLayout={(layout) => update('sceneLayout', layout)}

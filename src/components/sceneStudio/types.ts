@@ -1,5 +1,4 @@
 export type SceneDevice = 'phone' | 'tablet';
-export type ScenePreviewMode = 'intro' | 'scene';
 export type SceneActivityId = 'read' | 'quiz' | 'puzzle' | 'coloring' | 'rewards' | 'game';
 export type SceneLockUntil = 'always' | 'content' | 'trigger';
 export type SceneAfterAction = 'navigate' | 'stay';

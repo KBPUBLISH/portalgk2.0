@@ -1,10 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Volume2, VolumeX } from 'lucide-react';
-import { DEVICE_FRAME, type SceneDevice, type ScenePreviewMode } from './types';
+import { DEVICE_FRAME, type SceneDevice } from './types';
 
 interface DevicePreviewProps {
     device: SceneDevice;
-    mode: ScenePreviewMode;
     videoUrl: string;
     /** Title shown in the wood header bar (kid app scene title). */
     sceneTitle?: string;
@@ -16,7 +15,6 @@ interface DevicePreviewProps {
  */
 const DevicePreview: React.FC<DevicePreviewProps> = ({
     device,
-    mode,
     videoUrl,
     sceneTitle = '',
     children,
@@ -29,7 +27,7 @@ const DevicePreview: React.FC<DevicePreviewProps> = ({
 
     useEffect(() => {
         setSoundOn(false);
-    }, [videoUrl, mode]);
+    }, [videoUrl]);
 
     useEffect(() => {
         const el = videoRef.current;
@@ -65,18 +63,18 @@ const DevicePreview: React.FC<DevicePreviewProps> = ({
             {hasVideo ? (
                 <video
                     ref={videoRef}
-                    key={`${mode}-${videoUrl}`}
+                    key={videoUrl}
                     src={videoUrl}
                     className="absolute inset-0 w-full h-full object-cover"
                     muted={!soundOn}
-                    loop={mode === 'scene'}
+                    loop
                     playsInline
                     autoPlay
                     preload="auto"
                 />
             ) : (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#1a4a28] text-white/70 px-4 text-center text-xs">
-                    <p>No {mode === 'intro' ? 'intro' : 'scene BG'} video</p>
+                    <p>No scene BG video</p>
                     <p className="text-white/40">Upload above to preview</p>
                 </div>
             )}
