@@ -298,6 +298,8 @@ const BibleMapStoryForm: React.FC = () => {
     const [ttsVoicesError, setTtsVoicesError] = useState(false);
     const [ttsVoicesRequested, setTtsVoicesRequested] = useState(false);
     const [uploadingModelFor, setUploadingModelFor] = useState<string | null>(null);
+    /** Progress label while a GLB is being optimized/uploaded ("Optimizing model…") */
+    const [modelUploadStatus, setModelUploadStatus] = useState<string | null>(null);
     /** Local name/size of GLBs uploaded this session (URL only survives reload) */
     const [modelFileMeta, setModelFileMeta] = useState<
         Record<string, { name: string; size: number }>
@@ -354,22 +356,71 @@ const BibleMapStoryForm: React.FC = () => {
         void audio.play().catch(() => alert('Could not play voice preview'));
     };
 
+    const formatMb = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+
     const handleCharacterModelUpload = async (rewardId: string, file: File) => {
         if (!/\.glb$/i.test(file.name)) {
             alert('Please upload a .glb 3D model file');
             return;
         }
-        if (file.size > 25 * 1024 * 1024) {
-            alert('Model file is too large. Maximum size is 25 MB.');
+        // Raw Meshy exports run 15–40 MB; we auto-optimize before upload, so
+        // only reject truly unreasonable inputs here.
+        if (file.size > 100 * 1024 * 1024) {
+            alert(
+                `Model file is too large (${formatMb(file.size)}). ` +
+                    'Maximum input size is 100 MB.',
+            );
             return;
         }
         setUploadingModelFor(rewardId);
+        setModelUploadStatus('Optimizing model…');
+
+        // Auto-optimize (Draco + webp textures + animation resample) before
+        // upload. On any failure fall back to uploading the raw file.
+        let uploadFile = file;
+        let optimizeFailed = false;
+        try {
+            const { optimizeGlb } = await import('../utils/glbOptimizer');
+            const result = await optimizeGlb(file, (msg) =>
+                setModelUploadStatus(msg),
+            );
+            uploadFile = result.file;
+            if (result.keptOriginal) {
+                setModelUploadStatus('Already optimized — uploading…');
+            } else {
+                setModelUploadStatus(
+                    `Optimized ${formatMb(result.originalSize)} → ${formatMb(result.optimizedSize)} — uploading…`,
+                );
+            }
+        } catch (err) {
+            console.warn(
+                'GLB optimization failed — falling back to the original file:',
+                err,
+            );
+            optimizeFailed = true;
+            uploadFile = file;
+            setModelUploadStatus('Uploading original…');
+        }
+
+        // Cap the actual POST body. Optimized output lands way under this;
+        // the fallback (raw) path may not.
+        if (uploadFile.size > 25 * 1024 * 1024) {
+            alert(
+                `Model file is too large (${formatMb(uploadFile.size)}). ` +
+                    'Automatic optimization failed, and the original exceeds the 25 MB upload limit. ' +
+                    'Try compressing the model manually (e.g. gltf-transform with Draco + webp textures).',
+            );
+            setUploadingModelFor(null);
+            setModelUploadStatus(null);
+            return;
+        }
+
         try {
             const island = islands.find((i) => i._id === form.islandId);
             const islandKey = island?.slug || form.islandId || id || 'temp';
             const fd = new FormData();
             // Field name must be `file` — the upload endpoint reads upload.single('file')
-            fd.append('file', file);
+            fd.append('file', uploadFile);
             const res = await apiClient.post(
                 `/api/upload/image?bookId=bible-map&type=character-model&islandId=${encodeURIComponent(islandKey)}`,
                 fd,
@@ -384,13 +435,20 @@ const BibleMapStoryForm: React.FC = () => {
             }));
             setModelFileMeta((prev) => ({
                 ...prev,
-                [rewardId]: { name: file.name, size: file.size },
+                [rewardId]: { name: file.name, size: uploadFile.size },
             }));
+            if (optimizeFailed) {
+                alert(
+                    'Heads up: automatic model optimization failed, so the original file was uploaded as-is. ' +
+                        'It may load slowly in the app — consider compressing it manually.',
+                );
+            }
         } catch (err) {
             console.error(err);
             alert('Failed to upload 3D model');
         } finally {
             setUploadingModelFor(null);
+            setModelUploadStatus(null);
         }
     };
 
@@ -2449,7 +2507,8 @@ const BibleMapStoryForm: React.FC = () => {
                                                                 <Upload className="w-3.5 h-3.5" />
                                                             )}
                                                             {uploadingModelFor === item.id
-                                                                ? 'Uploading…'
+                                                                ? modelUploadStatus ||
+                                                                  'Uploading…'
                                                                 : 'Upload .glb model'}
                                                             <input
                                                                 type="file"
@@ -2472,7 +2531,9 @@ const BibleMapStoryForm: React.FC = () => {
                                                         </label>
                                                     )}
                                                     <p className="text-[11px] text-gray-500 mt-1">
-                                                        Character walks the ship deck in-app. Max 25 MB.
+                                                        Character walks the ship deck in-app.
+                                                        Large models are optimized automatically
+                                                        before upload (Draco + webp textures).
                                                     </p>
                                                 </div>
 
