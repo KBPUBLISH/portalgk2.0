@@ -69,6 +69,13 @@ import CreatorProfile from './pages/creator/CreatorProfile';
 import HubCreators from './pages/admin/HubCreators';
 import HubReview from './pages/admin/HubReview';
 
+// Church Partnership
+import ChurchSignup from './pages/church/ChurchSignup';
+import ChurchLogin from './pages/church/ChurchLogin';
+import ChurchDashboard from './pages/church/ChurchDashboard';
+import JoinChurch from './pages/JoinChurch';
+import Churches from './pages/admin/Churches';
+
 function App() {
   return (
     <AuthProvider>
@@ -82,6 +89,13 @@ function App() {
           {/* Creator Portal - Public */}
           <Route path="/creator/login" element={<CreatorLogin />} />
           <Route path="/creator/accept-invite" element={<CreatorAcceptInvite />} />
+          
+          {/* Church Partnership - Public */}
+          <Route path="/church/signup" element={<ChurchSignup />} />
+          <Route path="/church/login" element={<ChurchLogin />} />
+          <Route path="/church" element={<ChurchDashboard />} />
+          <Route path="/join" element={<JoinChurch />} />
+          <Route path="/join/:code" element={<JoinChurch />} />
           
           {/* Creator Portal - Protected */}
           <Route path="/creator" element={
@@ -166,6 +180,9 @@ function App() {
             {/* Godly Hub Admin */}
             <Route path="hub/creators" element={<HubCreators />} />
             <Route path="hub/review" element={<HubReview />} />
+            
+            {/* Church Partnership Admin */}
+            <Route path="churches" element={<Churches />} />
           </Route>
         </Routes>
       </Router>
