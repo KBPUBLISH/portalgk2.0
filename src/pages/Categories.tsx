@@ -10,6 +10,7 @@ interface Category {
     gradientFrom?: string;
     gradientTo?: string;
     icon?: string;
+    iconImage?: string;
     image?: string;
     contentType: 'Book' | 'Audio';
 }
@@ -42,12 +43,13 @@ const Categories: React.FC = () => {
         gradientFrom: '#6366f1',
         gradientTo: '#8b5cf6',
         icon: '',
+        iconImage: '',
         image: '',
         contentType: 'Book' as 'Book' | 'Audio',
     });
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState<string | null>(null);
-    const [uploading, setUploading] = useState(false);
+    const [uploading, setUploading] = useState<'image' | 'iconImage' | null>(null);
 
     useEffect(() => {
         fetchCategories();
@@ -74,6 +76,7 @@ const Categories: React.FC = () => {
                 gradientFrom: category.gradientFrom || category.color || '#6366f1',
                 gradientTo: category.gradientTo || '#8b5cf6',
                 icon: category.icon || '',
+                iconImage: category.iconImage || '',
                 image: category.image || '',
                 contentType: category.contentType || 'Book',
             });
@@ -86,6 +89,7 @@ const Categories: React.FC = () => {
                 gradientFrom: '#6366f1',
                 gradientTo: '#8b5cf6',
                 icon: '',
+                iconImage: '',
                 image: '',
                 contentType: 'Book',
             });
@@ -103,14 +107,15 @@ const Categories: React.FC = () => {
             gradientFrom: '#6366f1',
             gradientTo: '#8b5cf6',
             icon: '',
+            iconImage: '',
             image: '',
             contentType: 'Book',
         });
     };
 
-    // Handle image upload
-    const handleImageUpload = async (file: File) => {
-        setUploading(true);
+    // Handle image upload (shared by the wide category image and the square icon image)
+    const handleImageUpload = async (file: File, field: 'image' | 'iconImage') => {
+        setUploading(field);
         const formDataUpload = new FormData();
         formDataUpload.append('file', file);
 
@@ -118,12 +123,12 @@ const Categories: React.FC = () => {
             const response = await apiClient.post('/api/upload/image?bookId=categories&type=cover', formDataUpload, {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
-            setFormData(prev => ({ ...prev, image: response.data.url }));
+            setFormData(prev => ({ ...prev, [field]: response.data.url }));
         } catch (error) {
             console.error('Error uploading image:', error);
             alert('Failed to upload image');
         } finally {
-            setUploading(false);
+            setUploading(null);
         }
     };
 
@@ -260,8 +265,8 @@ const Categories: React.FC = () => {
 
             {/* Modal */}
             {showModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-                    <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 my-8">
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 max-h-[calc(100vh-2rem)] overflow-y-auto">
                         <h2 className="text-2xl font-bold text-gray-800 mb-4">
                             {editingCategory ? 'Edit Category' : 'Create Category'}
                         </h2>
@@ -400,8 +405,8 @@ const Categories: React.FC = () => {
                                     Category Image <span className="text-gray-400 font-normal">(ultra-wide format recommended)</span>
                                 </label>
                                 <div className="flex gap-4 items-start">
-                                    <label className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-4 cursor-pointer hover:border-indigo-500 transition-colors ${uploading ? 'opacity-50' : ''}`}>
-                                        {uploading ? (
+                                    <label className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-4 cursor-pointer hover:border-indigo-500 transition-colors ${uploading === 'image' ? 'opacity-50' : ''}`}>
+                                        {uploading === 'image' ? (
                                             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600" />
                                         ) : (
                                             <>
@@ -412,9 +417,9 @@ const Categories: React.FC = () => {
                                         <input
                                             type="file"
                                             accept="image/*"
-                                            onChange={(e) => e.target.files?.[0] && handleImageUpload(e.target.files[0])}
+                                            onChange={(e) => e.target.files?.[0] && handleImageUpload(e.target.files[0], 'image')}
                                             className="hidden"
-                                            disabled={uploading}
+                                            disabled={uploading !== null}
                                         />
                                     </label>
                                     {formData.image && (
@@ -474,9 +479,50 @@ const Categories: React.FC = () => {
                                 </div>
                             </div>
                             
+                            {/* Icon Image Upload */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Icon (emoji)
+                                    Icon Image <span className="text-gray-400 font-normal">(square, shown as the category icon in the app)</span>
+                                </label>
+                                <div className="flex gap-4 items-center">
+                                    {formData.iconImage && (
+                                        <img
+                                            src={formData.iconImage}
+                                            alt="Icon preview"
+                                            className="w-16 h-16 rounded-xl object-cover border border-gray-200"
+                                        />
+                                    )}
+                                    <label className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-4 cursor-pointer hover:border-indigo-500 transition-colors ${uploading === 'iconImage' ? 'opacity-50' : ''}`}>
+                                        {uploading === 'iconImage' ? (
+                                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600" />
+                                        ) : (
+                                            <>
+                                                <Upload className="w-6 h-6 text-gray-400 mb-1" />
+                                                <span className="text-xs text-gray-600">{formData.iconImage ? 'Change icon' : 'Upload icon'}</span>
+                                            </>
+                                        )}
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={(e) => e.target.files?.[0] && handleImageUpload(e.target.files[0], 'iconImage')}
+                                            className="hidden"
+                                            disabled={uploading !== null}
+                                        />
+                                    </label>
+                                    {formData.iconImage && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setFormData({ ...formData, iconImage: '' })}
+                                            className="text-red-500 hover:text-red-600 text-sm"
+                                        >
+                                            Remove
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Icon (emoji) <span className="text-gray-400 font-normal">(fallback if no icon image)</span>
                                 </label>
                                 <input
                                     type="text"
