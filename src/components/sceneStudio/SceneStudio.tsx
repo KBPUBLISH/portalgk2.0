@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Upload, Clapperboard, Music, X, Film, ChevronDown } from 'lucide-react';
+import { Upload, Clapperboard, Music, X, Film, ChevronDown, Trash2 } from 'lucide-react';
 import DevicePreview from './DevicePreview';
 import OverlayCanvas from './OverlayCanvas';
 import TriggerBoard from './TriggerBoard';
@@ -12,6 +12,7 @@ import {
     getButtonVideoUrl,
     isDialogueButtonId,
     newId,
+    removeButtonFromLayout,
     upsertButtonStayVideo,
     type SceneAnimation,
     type SceneDevice,
@@ -246,6 +247,25 @@ const SceneStudio: React.FC<SceneStudioProps> = ({
         onSceneTriggers(triggers);
     };
 
+    const handleDeleteDialogueButton = (buttonId: string) => {
+        if (
+            !window.confirm(
+                'Remove this tap-to-talk button from the scene? Its animation video will be removed too.',
+            )
+        ) {
+            return;
+        }
+        const { animations, triggers } = clearButtonVideo(
+            buttonId,
+            sceneAnimations,
+            sceneTriggers,
+        );
+        onSceneAnimations(animations);
+        onSceneTriggers(triggers);
+        onSceneLayout(removeButtonFromLayout(buttonId, layoutWithDefaults));
+        if (selectedId === buttonId) setSelectedId(null);
+    };
+
     const handleBgUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         e.target.value = '';
@@ -477,9 +497,23 @@ const SceneStudio: React.FC<SceneStudioProps> = ({
                                             <p className="text-sm font-medium text-gray-800">
                                                 {btn.label || 'TAP TO TALK'}
                                             </p>
-                                            <span className="text-[10px] uppercase tracking-wide text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">
-                                                Tap to talk
-                                            </span>
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                <span className="text-[10px] uppercase tracking-wide text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">
+                                                    Tap to talk
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDeleteDialogueButton(btn.id);
+                                                    }}
+                                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-red-200 text-xs text-red-600 hover:bg-red-50"
+                                                    title="Remove this button from the scene"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                    Delete
+                                                </button>
+                                            </div>
                                         </div>
 
                                         <div className="space-y-2">

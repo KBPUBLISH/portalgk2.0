@@ -195,11 +195,21 @@ const TriggerBoard: React.FC<TriggerBoardProps> = ({
                                     />
                                     <button
                                         type="button"
-                                        onClick={() =>
+                                        onClick={() => {
+                                            if (
+                                                !window.confirm(
+                                                    'Delete this animation clip? Any wires using it will be removed.',
+                                                )
+                                            ) {
+                                                return;
+                                            }
                                             onChangeAnimations(
                                                 animations.filter((a) => a.id !== anim.id),
-                                            )
-                                        }
+                                            );
+                                            onChangeTriggers(
+                                                triggers.filter((t) => t.animationId !== anim.id),
+                                            );
+                                        }}
                                         className="p-1 text-gray-400 hover:text-red-600"
                                         aria-label="Remove clip"
                                     >

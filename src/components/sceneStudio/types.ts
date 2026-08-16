@@ -319,3 +319,16 @@ export function clearButtonVideo(
         : animations.filter((a) => a.id !== animId);
     return { animations: nextAnims, triggers: nextTriggers };
 }
+
+/** Remove a button from both phone and tablet layouts (e.g. delete tap-to-talk icon). */
+export function removeButtonFromLayout(
+    buttonId: string,
+    layout: SceneLayout,
+): SceneLayout {
+    const drop = (buttons: SceneButton[]) =>
+        buttons.filter((b) => b.id !== buttonId);
+    return {
+        phone: { ...layout.phone, buttons: drop(layout.phone.buttons) },
+        tablet: { ...layout.tablet, buttons: drop(layout.tablet.buttons) },
+    };
+}
