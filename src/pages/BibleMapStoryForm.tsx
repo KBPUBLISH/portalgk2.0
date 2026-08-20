@@ -48,6 +48,7 @@ import {
 } from '../components/sceneStudio/types';
 import BibleMapBookBuilder from '../components/bibleMapBook/BibleMapBookBuilder';
 import OneClickPackPanel from '../components/bibleMapBook/OneClickPackPanel';
+import TextQuizAiPanel from '../components/bibleMapBook/TextQuizAiPanel';
 
 type PackTab = 'overview' | 'scene' | 'book' | 'puzzle' | 'coloring' | 'quiz' | 'rewards';
 
@@ -1312,6 +1313,21 @@ const BibleMapStoryForm: React.FC = () => {
                     }}
                 />
             </div>
+
+            {/* Text-only AI: age scripts + quizzes, never touches images */}
+            {!isNew && id && (
+                <div className="mb-4" id="text-quiz-ai">
+                    <TextQuizAiPanel
+                        storyId={id}
+                        title={form.title}
+                        scriptureRef={form.scriptureRef}
+                        verse={form.verse}
+                        onComplete={(completedStoryId) => {
+                            window.location.assign(`/bible-map/stories/${completedStoryId}`);
+                        }}
+                    />
+                </div>
+            )}
 
             {/* Readiness strip */}
             <div className="flex flex-wrap gap-2 mb-4">
