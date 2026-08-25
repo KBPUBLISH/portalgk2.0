@@ -291,6 +291,8 @@ const BibleMapStoryForm: React.FC = () => {
     const [generatingMapIconAi, setGeneratingMapIconAi] = useState(false);
     const [generatingPuzzleAi, setGeneratingPuzzleAi] = useState(false);
     const [generatingColoringAi, setGeneratingColoringAi] = useState(false);
+    const [generatingGameIconFor, setGeneratingGameIconFor] = useState<string | null>(null);
+    const [gameIconExtraById, setGameIconExtraById] = useState<Record<string, string>>({});
     const [previewColoringId, setPreviewColoringId] = useState<string | null>(null);
     const [savingPalette, setSavingPalette] = useState(false);
 
@@ -1251,6 +1253,47 @@ const BibleMapStoryForm: React.FC = () => {
             alert(msg);
         } finally {
             setGeneratingColoringAi(false);
+        }
+    };
+
+    const handleGenerateGameIcon = async (idx: number) => {
+        if (isNew || !id) {
+            alert('Save the story pack first, then create a game icon.');
+            return;
+        }
+        const item = form.rewardsPool[idx];
+        if (!item || item.type !== 'game') return;
+        const title = String(item.title || '').trim();
+        if (!title || /^new game$/i.test(title)) {
+            alert('Enter a game title first so the icon can match the game.');
+            return;
+        }
+        setGeneratingGameIconFor(item.id);
+        try {
+            const res = await apiClient.post(
+                `/api/bible-map/stories/${id}/generate-game-icon`,
+                {
+                    title,
+                    extraPrompt: String(gameIconExtraById[item.id] || '').trim(),
+                },
+                { timeout: 300000 },
+            );
+            const imageUrl = String(res.data?.imageUrl || '').trim();
+            if (!imageUrl) throw new Error('No image URL returned');
+            const next = [...form.rewardsPool];
+            next[idx] = { ...next[idx], imageUrl };
+            update('rewardsPool', next);
+            alert('Game icon ready. Save the pack to keep it.');
+        } catch (err: unknown) {
+            console.error(err);
+            const msg =
+                (err as { response?: { data?: { message?: string; error?: string } } })?.response
+                    ?.data?.message ||
+                (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+                'Failed to generate game icon';
+            alert(msg);
+        } finally {
+            setGeneratingGameIconFor(null);
         }
     };
 
@@ -2448,9 +2491,59 @@ const BibleMapStoryForm: React.FC = () => {
                                                     <img
                                                         src={getMediaUrl(item.imageUrl)}
                                                         alt=""
-                                                        className="mt-2 w-16 h-16 object-cover rounded-lg border"
+                                                        className={
+                                                            item.type === 'game'
+                                                                ? 'mt-2 w-20 h-20 object-cover rounded-[22%] border shadow-sm'
+                                                                : 'mt-2 w-16 h-16 object-cover rounded-lg border'
+                                                        }
                                                     />
                                                 ) : null}
+                                                {item.type === 'game' && (
+                                                    <div className="mt-3 space-y-2">
+                                                        <label className="block text-xs font-medium text-gray-600">
+                                                            Extra prompt (optional)
+                                                        </label>
+                                                        <textarea
+                                                            value={gameIconExtraById[item.id] || ''}
+                                                            onChange={(e) =>
+                                                                setGameIconExtraById((prev) => ({
+                                                                    ...prev,
+                                                                    [item.id]: e.target.value,
+                                                                }))
+                                                            }
+                                                            rows={2}
+                                                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                                            placeholder="e.g. ark on stormy water, gold glow, cartoon animals…"
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                void handleGenerateGameIcon(idx)
+                                                            }
+                                                            disabled={
+                                                                generatingGameIconFor === item.id ||
+                                                                isNew
+                                                            }
+                                                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-indigo-300 text-indigo-700 text-xs font-medium hover:bg-indigo-50 disabled:opacity-50"
+                                                        >
+                                                            {generatingGameIconFor === item.id ? (
+                                                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                            ) : (
+                                                                <Sparkles className="w-3.5 h-3.5" />
+                                                            )}
+                                                            {generatingGameIconFor === item.id
+                                                                ? 'Creating icon…'
+                                                                : 'Create game icon'}
+                                                        </button>
+                                                        <p className="text-[11px] text-gray-500">
+                                                            ChatGPT gpt-image-2 · 1024×1024 app icon
+                                                            from the game title
+                                                            {isNew
+                                                                ? ' — save the pack first.'
+                                                                : '.'}
+                                                        </p>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
 
