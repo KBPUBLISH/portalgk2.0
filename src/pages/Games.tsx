@@ -12,7 +12,7 @@ interface Game {
     coverImage?: string;
     logo?: string;
     showInDailyTasks?: boolean;
-    gameType?: 'modal' | 'webview';
+    gameType?: 'modal' | 'webview' | 'arcade';
     settings?: any;
     rewards?: {
         threeStars: number;
@@ -26,31 +26,37 @@ interface Game {
 
 const AGE_OPTIONS = ['All Ages', '3+', '4+', '5+', '6+', '7+', '8+', '9+', '10+'];
 
+type GameType = 'modal' | 'webview' | 'arcade';
+
+const needsGameUrl = (type: GameType | undefined) => type === 'webview' || type === 'arcade';
+
+const EMPTY_NEW_GAME = {
+    gameId: '',
+    name: '',
+    description: '',
+    url: '',
+    coverImage: '',
+    logo: '',
+    gameType: 'webview' as GameType,
+    enabled: true,
+    showInDailyTasks: true,
+    rewards: {
+        threeStars: 50,
+        twoStars: 25,
+        oneStar: 10,
+    },
+    isPurchasable: false,
+    goldCoinPrice: 0,
+    ageRating: 'All Ages',
+};
+
 const Games: React.FC = () => {
     const [games, setGames] = useState<Game[]>([]);
     const [loading, setLoading] = useState(true);
     const [editingGame, setEditingGame] = useState<Game | null>(null);
     const [formData, setFormData] = useState<any>(null);
     const [showCreateModal, setShowCreateModal] = useState(false);
-    const [newGame, setNewGame] = useState({
-        gameId: '',
-        name: '',
-        description: '',
-        url: '',
-        coverImage: '',
-        logo: '',
-        gameType: 'webview' as 'modal' | 'webview',
-        enabled: true,
-        showInDailyTasks: true,
-        rewards: {
-            threeStars: 50,
-            twoStars: 25,
-            oneStar: 10,
-        },
-        isPurchasable: false,
-        goldCoinPrice: 0,
-        ageRating: 'All Ages',
-    });
+    const [newGame, setNewGame] = useState({ ...EMPTY_NEW_GAME });
     const [uploadingCover, setUploadingCover] = useState(false);
     const [uploadingEditCover, setUploadingEditCover] = useState(false);
     const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -151,7 +157,15 @@ const Games: React.FC = () => {
         if (!editingGame) return;
 
         try {
-            await apiClient.put(`/api/games/${editingGame.gameId}`, formData);
+            const payload = {
+                ...formData,
+                showInDailyTasks: formData.gameType === 'arcade' ? false : formData.showInDailyTasks,
+                isPurchasable:
+                    formData.gameType === 'arcade'
+                        ? (formData.goldCoinPrice || 0) > 0
+                        : formData.isPurchasable,
+            };
+            await apiClient.put(`/api/games/${editingGame.gameId}`, payload);
             await fetchGames();
             setEditingGame(null);
             setFormData(null);
@@ -172,34 +186,24 @@ const Games: React.FC = () => {
             return;
         }
 
-        if (newGame.gameType === 'webview' && !newGame.url) {
-            alert('Please provide a URL for webview games');
+        if (needsGameUrl(newGame.gameType) && !newGame.url) {
+            alert('Please provide a URL for this game');
             return;
         }
 
         try {
-            await apiClient.post('/api/games', newGame);
+            const payload = {
+                ...newGame,
+                showInDailyTasks: newGame.gameType === 'arcade' ? false : newGame.showInDailyTasks,
+                isPurchasable:
+                    newGame.gameType === 'arcade'
+                        ? newGame.goldCoinPrice > 0
+                        : newGame.isPurchasable,
+            };
+            await apiClient.post('/api/games', payload);
             await fetchGames();
             setShowCreateModal(false);
-            setNewGame({
-                gameId: '',
-                name: '',
-                description: '',
-                url: '',
-                coverImage: '',
-                logo: '',
-                gameType: 'webview',
-                enabled: true,
-                showInDailyTasks: true,
-                rewards: {
-                    threeStars: 50,
-                    twoStars: 25,
-                    oneStar: 10,
-                },
-                isPurchasable: false,
-                goldCoinPrice: 0,
-                ageRating: 'All Ages',
-            });
+            setNewGame({ ...EMPTY_NEW_GAME });
         } catch (error: any) {
             console.error('Error creating game:', error);
             alert(error.response?.data?.message || 'Failed to create game');
@@ -209,6 +213,120 @@ const Games: React.FC = () => {
     if (loading) {
         return <div className="p-6 text-center">Loading games...</div>;
     }
+
+    const arcadeGames = games.filter((g) => g.gameType === 'arcade');
+    const otherGames = games.filter((g) => g.gameType !== 'arcade');
+
+    const renderGameCard = (game: Game) => (
+                    <div
+                        key={game._id || game.gameId}
+                        className={`bg-white rounded-lg shadow-md p-6 border-2 transition-all ${
+                            game.enabled
+                                ? game.gameType === 'arcade'
+                                    ? 'border-purple-500'
+                                    : 'border-green-500'
+                                : 'border-gray-300'
+                        }`}
+                    >
+                        <div className="flex justify-between items-start mb-4">
+                            <div className="flex items-center gap-3">
+                                {game.logo || game.coverImage ? (
+                                    <img src={game.logo || game.coverImage} alt={`${game.name} logo`} className="w-12 h-12 object-cover rounded-xl border border-gray-200 flex-shrink-0" />
+                                ) : (
+                                    <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0">
+                                        <Gamepad2 className="w-6 h-6 text-gray-400" />
+                                    </div>
+                                )}
+                                <div>
+                                    <h3 className="text-xl font-bold text-gray-800">{game.name}</h3>
+                                    <p className="text-sm text-gray-500 mt-1">ID: {game.gameId}</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => handleToggleEnabled(game)}
+                                className={`p-2 rounded-full transition ${
+                                    game.enabled
+                                        ? 'bg-green-100 text-green-600 hover:bg-green-200'
+                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                }`}
+                                title={game.enabled ? 'Disable game' : 'Enable game'}
+                            >
+                                {game.enabled ? <Play className="w-5 h-5" /> : <Pause className="w-5 h-5" />}
+                            </button>
+                        </div>
+
+                        {game.description && (
+                            <p className="text-gray-600 text-sm mb-2">{game.description}</p>
+                        )}
+
+                        {game.gameType === 'arcade' && (
+                            <div className="mb-2 inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+                                <Gamepad2 className="w-3 h-3" />
+                                <span>Ship Arcade</span>
+                            </div>
+                        )}
+
+                        {game.showInDailyTasks !== false && game.gameType !== 'arcade' && (
+                            <div className="mb-2 inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                                <span>✅</span>
+                                <span>Daily Tasks & IQ Games</span>
+                            </div>
+                        )}
+                        
+                        {(game.isPurchasable || ((game.goldCoinPrice || 0) > 0)) && (
+                            <div className="mb-2 ml-2 inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">
+                                <Coins className="w-3 h-3" />
+                                <span>{game.goldCoinPrice} Gold Coins to unlock</span>
+                            </div>
+                        )}
+                        
+                        {needsGameUrl(game.gameType) && game.url && (
+                            <div className={`mb-4 p-2 rounded-lg border ${
+                                game.gameType === 'arcade'
+                                    ? 'bg-purple-50 border-purple-200'
+                                    : 'bg-blue-50 border-blue-200'
+                            }`}>
+                                <div className="flex items-center gap-2 text-sm">
+                                    <Globe className={`w-4 h-4 ${game.gameType === 'arcade' ? 'text-purple-600' : 'text-blue-600'}`} />
+                                    <span className={`font-medium ${game.gameType === 'arcade' ? 'text-purple-800' : 'text-blue-800'}`}>
+                                        {game.gameType === 'arcade' ? 'Arcade Game' : 'Webview Game'}
+                                    </span>
+                                </div>
+                                <p className={`text-xs mt-1 truncate ${game.gameType === 'arcade' ? 'text-purple-600' : 'text-blue-600'}`}>{game.url}</p>
+                            </div>
+                        )}
+
+                        {game.rewards && game.gameType !== 'arcade' && (
+                            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Coin Rewards</p>
+                                <div className="space-y-1 text-sm">
+                                    <div className="flex justify-between">
+                                        <span>3 Stars:</span>
+                                        <span className="font-bold text-yellow-600">{game.rewards.threeStars} coins</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span>2 Stars:</span>
+                                        <span className="font-bold text-yellow-600">{game.rewards.twoStars} coins</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span>1 Star:</span>
+                                        <span className="font-bold text-yellow-600">{game.rewards.oneStar} coins</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => handleEdit(game)}
+                                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center justify-center gap-2"
+                            >
+                                <Edit2 className="w-4 h-4" />
+                                Edit
+                            </button>
+                        </div>
+                    </div>
+    );
 
     return (
         <div className="space-y-6">
@@ -254,102 +372,37 @@ const Games: React.FC = () => {
                     </button>
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {games.map((game) => (
-                    <div
-                        key={game._id || game.gameId}
-                        className={`bg-white rounded-lg shadow-md p-6 border-2 transition-all ${
-                            game.enabled ? 'border-green-500' : 'border-gray-300'
-                        }`}
-                    >
-                        <div className="flex justify-between items-start mb-4">
-                            <div className="flex items-center gap-3">
-                                {game.logo ? (
-                                    <img src={game.logo} alt={`${game.name} logo`} className="w-12 h-12 object-cover rounded-xl border border-gray-200 flex-shrink-0" />
-                                ) : (
-                                    <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0">
-                                        <Gamepad2 className="w-6 h-6 text-gray-400" />
-                                    </div>
-                                )}
-                                <div>
-                                    <h3 className="text-xl font-bold text-gray-800">{game.name}</h3>
-                                    <p className="text-sm text-gray-500 mt-1">ID: {game.gameId}</p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => handleToggleEnabled(game)}
-                                className={`p-2 rounded-full transition ${
-                                    game.enabled
-                                        ? 'bg-green-100 text-green-600 hover:bg-green-200'
-                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                }`}
-                                title={game.enabled ? 'Disable game' : 'Enable game'}
-                            >
-                                {game.enabled ? <Play className="w-5 h-5" /> : <Pause className="w-5 h-5" />}
-                            </button>
+                <div className="space-y-8">
+                    <section>
+                        <div className="mb-3">
+                            <h2 className="text-xl font-bold text-gray-800">Arcade Cabinet</h2>
+                            <p className="text-sm text-gray-500">
+                                Set game type to Arcade. These appear as 1:1 tiles in a 3×3 grid on the ship basement arcade. Gold coins can lock a title until the kid spends them.
+                            </p>
                         </div>
-
-                        {game.description && (
-                            <p className="text-gray-600 text-sm mb-2">{game.description}</p>
-                        )}
-
-                        {/* Show Daily Tasks indicator */}
-                        {game.showInDailyTasks !== false && (
-                            <div className="mb-2 inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-                                <span>✅</span>
-                                <span>Daily Tasks & IQ Games</span>
+                        {arcadeGames.length === 0 ? (
+                            <div className="bg-purple-50 rounded-lg border-2 border-dashed border-purple-200 p-8 text-center">
+                                <Gamepad2 className="w-10 h-10 text-purple-300 mx-auto mb-2" />
+                                <p className="text-sm text-purple-800 font-medium">No arcade games yet</p>
+                                <p className="text-xs text-purple-600 mt-1">
+                                    Create a game and choose type “Arcade” to add it to the ship cabinet.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {arcadeGames.map(renderGameCard)}
                             </div>
                         )}
-                        
-                        {/* Show Purchasable indicator */}
-                        {game.isPurchasable && (
-                            <div className="mb-2 ml-2 inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">
-                                <Coins className="w-3 h-3" />
-                                <span>{game.goldCoinPrice} Gold Coins</span>
-                            </div>
-                        )}
-                        
-                        {game.gameType === 'webview' && game.url && (
-                            <div className="mb-4 p-2 bg-blue-50 rounded-lg border border-blue-200">
-                                <div className="flex items-center gap-2 text-sm">
-                                    <Globe className="w-4 h-4 text-blue-600" />
-                                    <span className="text-blue-800 font-medium">Webview Game</span>
-                                </div>
-                                <p className="text-xs text-blue-600 mt-1 truncate">{game.url}</p>
-                            </div>
-                        )}
+                    </section>
 
-                        {game.rewards && (
-                            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Coin Rewards</p>
-                                <div className="space-y-1 text-sm">
-                                    <div className="flex justify-between">
-                                        <span>3 Stars:</span>
-                                        <span className="font-bold text-yellow-600">{game.rewards.threeStars} coins</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>2 Stars:</span>
-                                        <span className="font-bold text-yellow-600">{game.rewards.twoStars} coins</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>1 Star:</span>
-                                        <span className="font-bold text-yellow-600">{game.rewards.oneStar} coins</span>
-                                    </div>
-                                </div>
+                    {otherGames.length > 0 && (
+                        <section>
+                            <h2 className="text-xl font-bold text-gray-800 mb-3">App Games</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {otherGames.map(renderGameCard)}
                             </div>
-                        )}
-
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => handleEdit(game)}
-                                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center justify-center gap-2"
-                            >
-                                <Edit2 className="w-4 h-4" />
-                                Edit
-                            </button>
-                        </div>
-                    </div>
-                ))}
+                        </section>
+                    )}
                 </div>
             )}
 
@@ -368,6 +421,33 @@ const Games: React.FC = () => {
                         </div>
 
                         <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    Game Type
+                                </label>
+                                <select
+                                    value={formData.gameType || 'modal'}
+                                    onChange={(e) => {
+                                        const gameType = e.target.value as GameType;
+                                        setFormData({
+                                            ...formData,
+                                            gameType,
+                                            showInDailyTasks: gameType === 'arcade' ? false : formData.showInDailyTasks,
+                                        });
+                                    }}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                >
+                                    <option value="webview">Webview (External URL)</option>
+                                    <option value="arcade">Arcade (Ship basement cabinet)</option>
+                                    <option value="modal">Modal (Built-in)</option>
+                                </select>
+                                {formData.gameType === 'arcade' && (
+                                    <p className="text-xs text-purple-600 mt-1">
+                                        Shows as a square 1:1 tile on the ship arcade 3×3 menu. Not listed in Daily Tasks.
+                                    </p>
+                                )}
+                            </div>
+
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                                     Game Name
@@ -392,7 +472,7 @@ const Games: React.FC = () => {
                                 />
                             </div>
 
-                            {formData.gameType === 'webview' && (
+                            {needsGameUrl(formData.gameType) && (
                                 <>
                                     <div>
                                         <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -571,6 +651,7 @@ const Games: React.FC = () => {
                                 </label>
                             </div>
 
+                            {formData.gameType !== 'arcade' && (
                             <div className="flex items-center gap-2">
                                 <input
                                     type="checkbox"
@@ -583,6 +664,7 @@ const Games: React.FC = () => {
                                     Show in "Daily Tasks & IQ Games" category
                                 </label>
                             </div>
+                            )}
 
                             {/* Age Rating */}
                             <div>
@@ -605,9 +687,10 @@ const Games: React.FC = () => {
                             <div className="border-t border-gray-200 pt-4">
                                 <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
                                     <Coins className="w-5 h-5 text-yellow-500" />
-                                    Purchase with Gold Coins
+                                    {formData.gameType === 'arcade' ? 'Gold Coins to Unlock' : 'Purchase with Gold Coins'}
                                 </h3>
                                 
+                                {formData.gameType !== 'arcade' && (
                                 <div className="flex items-center gap-2 mb-4">
                                     <input
                                         type="checkbox"
@@ -620,8 +703,9 @@ const Games: React.FC = () => {
                                         User can purchase this game with gold coins
                                     </label>
                                 </div>
+                                )}
                                 
-                                {formData.isPurchasable && (
+                                {(formData.gameType === 'arcade' || formData.isPurchasable) && (
                                     <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
                                         <label className="block text-sm font-semibold text-gray-700 mb-2">
                                             Gold Coin Price
@@ -640,12 +724,15 @@ const Games: React.FC = () => {
                                             </span>
                                         </div>
                                         <p className="text-xs text-gray-500 mt-2">
-                                            Users will need to spend this amount of gold coins to unlock and play this game.
+                                            {formData.gameType === 'arcade'
+                                                ? '0 = free on the arcade. Any amount above 0 must be spent once to unlock the game.'
+                                                : 'Users will need to spend this amount of gold coins to unlock and play this game.'}
                                         </p>
                                     </div>
                                 )}
                             </div>
 
+                            {formData.gameType !== 'arcade' && (
                             <div className="border-t border-gray-200 pt-4">
                                 <h3 className="text-lg font-bold text-gray-800 mb-4">Coin Rewards</h3>
                                 <div className="grid grid-cols-3 gap-4">
@@ -693,6 +780,7 @@ const Games: React.FC = () => {
                                     </div>
                                 </div>
                             </div>
+                            )}
                         </div>
 
                         <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
@@ -723,25 +811,7 @@ const Games: React.FC = () => {
                             <button
                                 onClick={() => {
                                     setShowCreateModal(false);
-                                    setNewGame({
-                                        gameId: '',
-                                        name: '',
-                                        description: '',
-                                        url: '',
-                                        coverImage: '',
-                                        logo: '',
-                                        gameType: 'webview',
-                                        enabled: true,
-                                        showInDailyTasks: true,
-                                        rewards: {
-                                            threeStars: 50,
-                                            twoStars: 25,
-                                            oneStar: 10,
-                                        },
-                                        isPurchasable: false,
-                                        goldCoinPrice: 0,
-                                        ageRating: 'All Ages',
-                                    });
+                                    setNewGame({ ...EMPTY_NEW_GAME });
                                 }}
                                 className="text-gray-500 hover:text-gray-700"
                             >
@@ -756,12 +826,25 @@ const Games: React.FC = () => {
                                 </label>
                                 <select
                                     value={newGame.gameType}
-                                    onChange={(e) => setNewGame({ ...newGame, gameType: e.target.value as 'modal' | 'webview' })}
+                                    onChange={(e) => {
+                                        const gameType = e.target.value as GameType;
+                                        setNewGame({
+                                            ...newGame,
+                                            gameType,
+                                            showInDailyTasks: gameType === 'arcade' ? false : newGame.showInDailyTasks,
+                                        });
+                                    }}
                                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                                 >
                                     <option value="webview">Webview (External URL)</option>
+                                    <option value="arcade">Arcade (Ship basement cabinet)</option>
                                     <option value="modal">Modal (Built-in)</option>
                                 </select>
+                                {newGame.gameType === 'arcade' && (
+                                    <p className="text-xs text-purple-600 mt-1">
+                                        Shows as a square 1:1 tile on the ship arcade 3×3 menu. Not listed in Daily Tasks.
+                                    </p>
+                                )}
                             </div>
 
                             <div>
@@ -803,7 +886,7 @@ const Games: React.FC = () => {
                                 />
                             </div>
 
-                            {newGame.gameType === 'webview' && (
+                            {needsGameUrl(newGame.gameType) && (
                                 <>
                                     <div>
                                         <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -983,6 +1066,7 @@ const Games: React.FC = () => {
                                 </label>
                             </div>
 
+                            {newGame.gameType !== 'arcade' && (
                             <div className="flex items-center gap-2">
                                 <input
                                     type="checkbox"
@@ -995,6 +1079,7 @@ const Games: React.FC = () => {
                                     Show in "Daily Tasks & IQ Games" category
                                 </label>
                             </div>
+                            )}
 
                             {/* Age Rating */}
                             <div>
@@ -1017,9 +1102,10 @@ const Games: React.FC = () => {
                             <div className="border-t border-gray-200 pt-4">
                                 <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
                                     <Coins className="w-5 h-5 text-yellow-500" />
-                                    Purchase with Gold Coins
+                                    {newGame.gameType === 'arcade' ? 'Gold Coins to Unlock' : 'Purchase with Gold Coins'}
                                 </h3>
                                 
+                                {newGame.gameType !== 'arcade' && (
                                 <div className="flex items-center gap-2 mb-4">
                                     <input
                                         type="checkbox"
@@ -1032,8 +1118,9 @@ const Games: React.FC = () => {
                                         User can purchase this game with gold coins
                                     </label>
                                 </div>
+                                )}
                                 
-                                {newGame.isPurchasable && (
+                                {(newGame.gameType === 'arcade' || newGame.isPurchasable) && (
                                     <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
                                         <label className="block text-sm font-semibold text-gray-700 mb-2">
                                             Gold Coin Price
@@ -1052,12 +1139,15 @@ const Games: React.FC = () => {
                                             </span>
                                         </div>
                                         <p className="text-xs text-gray-500 mt-2">
-                                            Users will need to spend this amount of gold coins to unlock and play this game.
+                                            {newGame.gameType === 'arcade'
+                                                ? '0 = free on the arcade. Any amount above 0 must be spent once to unlock the game.'
+                                                : 'Users will need to spend this amount of gold coins to unlock and play this game.'}
                                         </p>
                                     </div>
                                 )}
                             </div>
 
+                            {newGame.gameType !== 'arcade' && (
                             <div className="border-t border-gray-200 pt-4">
                                 <h3 className="text-lg font-bold text-gray-800 mb-4">Coin Rewards</h3>
                                 <div className="grid grid-cols-3 gap-4">
@@ -1105,31 +1195,14 @@ const Games: React.FC = () => {
                                     </div>
                                 </div>
                             </div>
+                            )}
                         </div>
 
                         <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
                             <button
                                 onClick={() => {
                                     setShowCreateModal(false);
-                                    setNewGame({
-                                        gameId: '',
-                                        name: '',
-                                        description: '',
-                                        url: '',
-                                        coverImage: '',
-                                        logo: '',
-                                        gameType: 'webview',
-                                        enabled: true,
-                                        showInDailyTasks: true,
-                                        rewards: {
-                                            threeStars: 50,
-                                            twoStars: 25,
-                                            oneStar: 10,
-                                        },
-                                        isPurchasable: false,
-                                        goldCoinPrice: 0,
-                                        ageRating: 'All Ages',
-                                    });
+                                    setNewGame({ ...EMPTY_NEW_GAME });
                                 }}
                                 className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
                             >
