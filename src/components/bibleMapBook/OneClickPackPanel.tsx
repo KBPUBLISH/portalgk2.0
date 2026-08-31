@@ -12,10 +12,15 @@ const STEPS = [
     { id: 'coloring', label: 'Coloring' },
 ] as const;
 
+const SELECTABLE_STEPS = STEPS.filter((s) => s.id !== 'source');
+
 type StepId = (typeof STEPS)[number]['id'];
+type SelectableStepId = (typeof SELECTABLE_STEPS)[number]['id'];
+
+const ALL_SELECTABLE_IDS = SELECTABLE_STEPS.map((s) => s.id);
 
 interface StepState {
-    status: 'pending' | 'running' | 'done' | 'error';
+    status: 'pending' | 'running' | 'done' | 'error' | 'skipped';
     message?: string;
 }
 
@@ -69,6 +74,9 @@ const OneClickPackPanel: React.FC<OneClickPackPanelProps> = ({
     const [characters, setCharacters] = useState<CharacterOption[]>([]);
     const [selectedCharacterIds, setSelectedCharacterIds] = useState<string[]>([]);
     const [uploadingStyleRef, setUploadingStyleRef] = useState(false);
+    const [selectedSteps, setSelectedSteps] = useState<SelectableStepId[]>(() => [
+        ...ALL_SELECTABLE_IDS,
+    ]);
     const [busy, setBusy] = useState(false);
     const [job, setJob] = useState<JobStatus | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -151,6 +159,24 @@ const OneClickPackPanel: React.FC<OneClickPackPanelProps> = ({
         );
     };
 
+    const toggleStep = (id: SelectableStepId) => {
+        setSelectedSteps((prev) =>
+            prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+        );
+    };
+
+    const selectAllSteps = () => setSelectedSteps([...ALL_SELECTABLE_IDS]);
+
+    const selectedStepSet = new Set(selectedSteps);
+    const allStepsSelected = selectedSteps.length === ALL_SELECTABLE_IDS.length;
+    const needsScriptsHint =
+        mode === 'new' &&
+        !selectedStepSet.has('scripts') &&
+        (selectedStepSet.has('puzzle') ||
+            selectedStepSet.has('coloring') ||
+            selectedStepSet.has('images') ||
+            selectedStepSet.has('quiz'));
+
     const uploadStyleReference = async (file: File) => {
         setUploadingStyleRef(true);
         setError(null);
@@ -175,6 +201,10 @@ const OneClickPackPanel: React.FC<OneClickPackPanelProps> = ({
     };
 
     const validateArtSettings = (): boolean => {
+        if (selectedSteps.length === 0) {
+            setError('Select at least one step to generate.');
+            return false;
+        }
         if (!pageCount || pageCount < 3 || pageCount > 12) {
             setError('Choose number of pages (3–12) before running one-click.');
             return false;
@@ -192,7 +222,18 @@ const OneClickPackPanel: React.FC<OneClickPackPanelProps> = ({
         referenceCharacterIds: selectedCharacterIds,
         // Backend maps openai → ChatGPT gpt-image-2
         imageProvider: imageProvider === 'openai' ? 'openai' : 'gemini',
+        includeSteps: selectedSteps,
     });
+
+    const initialJobSteps = (): Record<string, StepState> =>
+        Object.fromEntries(
+            STEPS.map((s) => [
+                s.id,
+                s.id === 'source' || selectedStepSet.has(s.id as SelectableStepId)
+                    ? { status: 'pending' as const }
+                    : { status: 'skipped' as const, message: 'Not selected' },
+            ]),
+        );
 
     const pollJob = (jobId: string) => {
         stopPolling();
@@ -254,9 +295,7 @@ const OneClickPackPanel: React.FC<OneClickPackPanelProps> = ({
                 storyId: res.data.storyId || null,
                 status: 'queued',
                 step: 'source',
-                steps: Object.fromEntries(
-                    STEPS.map((s) => [s.id, { status: 'pending' as const }]),
-                ),
+                steps: initialJobSteps(),
                 percent: 0,
                 error: null,
             });
@@ -281,8 +320,11 @@ const OneClickPackPanel: React.FC<OneClickPackPanelProps> = ({
         if (!validateArtSettings()) return;
         const modelLabel =
             imageProvider === 'openai' ? 'ChatGPT (gpt-image-2)' : 'Gemini';
+        const stepLabels = SELECTABLE_STEPS.filter((s) => selectedStepSet.has(s.id))
+            .map((s) => s.label.toLowerCase())
+            .join(', ');
         const confirmed = window.confirm(
-            `This will regenerate ${pageCount} script pages, images, map icon, quiz, puzzle, and coloring with ${modelLabel} using your style reference${
+            `This will generate ${stepLabels || 'the selected steps'} (${pageCount} pages) with ${modelLabel} using your style reference${
                 selectedCharacterIds.length
                     ? ` and ${selectedCharacterIds.length} character(s)`
                     : ''
@@ -305,9 +347,7 @@ const OneClickPackPanel: React.FC<OneClickPackPanelProps> = ({
                 storyId: String(storyId),
                 status: 'queued',
                 step: 'source',
-                steps: Object.fromEntries(
-                    STEPS.map((s) => [s.id, { status: 'pending' as const }]),
-                ),
+                steps: initialJobSteps(),
                 percent: 0,
                 error: null,
             });
@@ -323,7 +363,11 @@ const OneClickPackPanel: React.FC<OneClickPackPanelProps> = ({
         }
     };
 
-    const readyToRun = !!styleReferenceImageUrl.trim() && pageCount >= 3 && pageCount <= 12;
+    const readyToRun =
+        selectedSteps.length > 0 &&
+        !!styleReferenceImageUrl.trim() &&
+        pageCount >= 3 &&
+        pageCount <= 12;
 
     const renderStep = (stepId: StepId, label: string) => {
         const st = job?.steps?.[stepId];
@@ -337,6 +381,8 @@ const OneClickPackPanel: React.FC<OneClickPackPanelProps> = ({
                         <Loader2 className="w-4 h-4 text-amber-600 animate-spin" />
                     ) : status === 'error' ? (
                         <X className="w-4 h-4 text-red-600" />
+                    ) : status === 'skipped' ? (
+                        <span className="inline-block w-4 h-4 rounded-full border border-dashed border-gray-300 bg-gray-50" />
                     ) : (
                         <span className="inline-block w-4 h-4 rounded-full border border-gray-300" />
                     )}
@@ -350,12 +396,16 @@ const OneClickPackPanel: React.FC<OneClickPackPanelProps> = ({
                                   ? 'text-red-700 font-medium'
                                   : status === 'running'
                                     ? 'text-amber-800 font-medium'
-                                    : 'text-gray-600'
+                                    : status === 'skipped'
+                                      ? 'text-gray-400 line-through'
+                                      : 'text-gray-600'
                         }
                     >
                         {label}
                     </span>
-                    {st?.message ? (
+                    {status === 'skipped' && !st?.message ? (
+                        <span className="block text-xs text-gray-400 mt-0.5">Skipped</span>
+                    ) : st?.message ? (
                         <span className="block text-xs text-gray-500 mt-0.5">{st.message}</span>
                     ) : null}
                 </span>
@@ -366,7 +416,7 @@ const OneClickPackPanel: React.FC<OneClickPackPanelProps> = ({
     const artSettings = (
         <div className="rounded-lg border border-amber-300 bg-white/90 p-4 space-y-4">
             <p className="text-xs font-semibold text-amber-950 uppercase tracking-wide">
-                Required before create all
+                Required before generate
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -479,7 +529,7 @@ const OneClickPackPanel: React.FC<OneClickPackPanelProps> = ({
                     </div>
                 ) : (
                     <p className="text-[11px] text-amber-900/80">
-                        Required — upload one reference illustration before running create all.
+                        Required — upload one reference illustration before generating.
                     </p>
                 )}
             </div>
@@ -535,13 +585,67 @@ const OneClickPackPanel: React.FC<OneClickPackPanelProps> = ({
                 </div>
                 <div className="min-w-0">
                     <h3 className="text-base font-semibold text-gray-900">
-                        One-click create all
+                        One-click create
                     </h3>
                     <p className="text-sm text-gray-600 mt-0.5">
-                        Set page count + style reference first, then builds scripts → images → map
-                        icon → quiz → puzzle → coloring. Scene video and game stay manual.
+                        Choose which steps to generate. Set page count + style reference first.
+                        Scene video and game stay manual.
                     </p>
                 </div>
+            </div>
+
+            <div className="rounded-lg border border-amber-200 bg-white/80 p-3 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-amber-950 uppercase tracking-wide">
+                        Steps to create
+                    </p>
+                    <button
+                        type="button"
+                        disabled={busy || allStepsSelected}
+                        onClick={selectAllSteps}
+                        className="text-[11px] font-medium text-amber-800 hover:text-amber-950 disabled:opacity-40"
+                    >
+                        Select all
+                    </button>
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-2">
+                    {SELECTABLE_STEPS.map((s) => {
+                        const checked = selectedStepSet.has(s.id);
+                        return (
+                            <label
+                                key={s.id}
+                                className={`inline-flex items-center gap-1.5 text-sm ${
+                                    busy ? 'opacity-60' : 'text-gray-800'
+                                }`}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    disabled={busy}
+                                    onChange={() => toggleStep(s.id)}
+                                    className="rounded border-amber-300 text-amber-700 focus:ring-amber-500"
+                                />
+                                {s.label}
+                            </label>
+                        );
+                    })}
+                </div>
+                {!selectedStepSet.has('images') && selectedSteps.length > 0 ? (
+                    <p className="text-[11px] text-amber-900/80">
+                        Page illustrations will be skipped. Map icon, puzzle, and coloring still
+                        generate their own art if selected.
+                    </p>
+                ) : null}
+                {needsScriptsHint ? (
+                    <p className="text-[11px] text-amber-900/80">
+                        Puzzle, coloring, and page images need a book. Keep Scripts checked on a
+                        new pack, or run this later on a pack that already has pages. Quiz uses
+                        scripts when they exist.
+                    </p>
+                ) : null}
+                {selectedSteps.length === 0 ? (
+                    <p className="text-[11px] text-red-700">Select at least one step to generate.</p>
+                ) : null}
             </div>
 
             {artSettings}
@@ -570,13 +674,17 @@ const OneClickPackPanel: React.FC<OneClickPackPanelProps> = ({
                         ) : (
                             <Sparkles className="w-4 h-4" />
                         )}
-                        {busy ? 'Creating…' : 'One-click create'}
+                        {busy
+                            ? 'Creating…'
+                            : allStepsSelected
+                              ? 'One-click create'
+                              : 'Create selected'}
                     </button>
                     {!islandId ? (
                         <p className="text-xs text-amber-800">Select an island on Overview first.</p>
                     ) : !readyToRun ? (
                         <p className="text-xs text-amber-800">
-                            Upload a style image and choose page count to enable create all.
+                            Upload a style image and choose page count to enable generate.
                         </p>
                     ) : null}
                 </div>
@@ -604,11 +712,15 @@ const OneClickPackPanel: React.FC<OneClickPackPanelProps> = ({
                         ) : (
                             <Sparkles className="w-4 h-4" />
                         )}
-                        {busy ? 'Generating…' : 'One-click generate pack'}
+                        {busy
+                            ? 'Generating…'
+                            : allStepsSelected
+                              ? 'One-click generate pack'
+                              : 'Generate selected'}
                     </button>
                     {!readyToRun ? (
                         <p className="text-xs text-amber-800">
-                            Upload a style image and choose page count to enable create all.
+                            Upload a style image and choose page count to enable generate.
                         </p>
                     ) : null}
                 </div>
