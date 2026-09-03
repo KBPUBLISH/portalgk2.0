@@ -65,6 +65,7 @@ import CreatorContent from './pages/creator/CreatorContent';
 import CreatorContentForm from './pages/creator/CreatorContentForm';
 import CreatorEarnings from './pages/creator/CreatorEarnings';
 import CreatorProfile from './pages/creator/CreatorProfile';
+import CreatorPosts from './pages/creator/CreatorPosts';
 
 // Godly Hub - Admin
 import HubCreators from './pages/admin/HubCreators';
@@ -109,6 +110,7 @@ function App() {
             <Route path="content" element={<CreatorContent />} />
             <Route path="content/new" element={<CreatorContentForm />} />
             <Route path="content/edit/:id" element={<CreatorContentForm />} />
+            <Route path="posts" element={<CreatorPosts />} />
             <Route path="earnings" element={<CreatorEarnings />} />
             <Route path="profile" element={<CreatorProfile />} />
           </Route>

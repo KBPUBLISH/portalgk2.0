@@ -6,7 +6,8 @@ import {
   DollarSign, 
   User, 
   LogOut,
-  Store
+  Store,
+  MessageSquare
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -23,6 +24,7 @@ const CreatorLayout: React.FC = () => {
   const navItems = [
     { path: '/creator', icon: LayoutDashboard, label: 'Dashboard', exact: true },
     { path: '/creator/content', icon: Music2, label: 'My Content' },
+    { path: '/creator/posts', icon: MessageSquare, label: 'Posts' },
     { path: '/creator/earnings', icon: DollarSign, label: 'Earnings' },
     { path: '/creator/profile', icon: User, label: 'Profile' },
   ];
