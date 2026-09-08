@@ -21,6 +21,7 @@ interface TriggerBoardProps {
 const asActivityId = (id: string): SceneActivityId | '' =>
     id === 'read' ||
     id === 'quiz' ||
+    id === 'try_it' ||
     id === 'puzzle' ||
     id === 'coloring' ||
     id === 'rewards' ||

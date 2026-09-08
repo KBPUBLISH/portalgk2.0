@@ -6,6 +6,7 @@ import {
     Palette,
     Gamepad2,
     Lock,
+    PenLine,
 } from 'lucide-react';
 import type { SceneButton, SceneActivityId } from './types';
 import { SCENE_ACTIVITY_DEFS } from './types';
@@ -14,6 +15,7 @@ import { getMediaUrl } from '../../services/apiClient';
 const ICONS: Record<SceneActivityId, React.ElementType> = {
     read: BookOpen,
     quiz: HelpCircle,
+    try_it: PenLine,
     puzzle: Puzzle,
     coloring: Palette,
     rewards: Gamepad2,

@@ -47,6 +47,7 @@ interface MapStory {
     game?: { enabled?: boolean; kind?: string };
     rewards?: { enabled?: boolean; pool?: unknown[] };
     quizMode?: string;
+    tryIt?: { videoUrl?: string; prompts?: unknown[] };
     coloringPageIds?: string[];
     mapIconUrl?: string;
     mainMapPosition?: {
@@ -404,6 +405,11 @@ const BibleMapHub: React.FC = () => {
                                     {filteredStories.map((story) => {
                                         const hasBook = !!story.bookId;
                                         const hasQuiz = story.quizMode !== 'none';
+                                        const hasTryIt = !!(
+                                            story.tryIt?.videoUrl &&
+                                            Array.isArray(story.tryIt.prompts) &&
+                                            story.tryIt.prompts.length > 0
+                                        );
                                         const hasPuzzle = !!story.puzzle?.enabled;
                                         const hasColoring = (story.coloringPageIds?.length ?? 0) > 0;
                                         const hasRewards =
@@ -439,6 +445,7 @@ const BibleMapHub: React.FC = () => {
                                                     <div className="flex flex-wrap gap-1">
                                                         {activityDot(hasBook, 'Read')}
                                                         {activityDot(hasQuiz, 'Quiz')}
+                                                        {activityDot(hasTryIt, 'Try It')}
                                                         {activityDot(hasPuzzle, 'Puzzle')}
                                                         {activityDot(hasColoring, 'Color')}
                                                         {activityDot(hasRewards, 'Rewards')}

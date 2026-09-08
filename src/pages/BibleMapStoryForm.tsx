@@ -21,6 +21,7 @@ import {
     X,
     Play,
     Map as MapIcon,
+    PenLine,
 } from 'lucide-react';
 import apiClient, { getMediaUrl } from '../services/apiClient';
 import {
@@ -38,6 +39,10 @@ import SlidingPuzzlePreview from '../components/SlidingPuzzlePreview';
 import TapFillColoringPreview from '../components/TapFillColoringPreview';
 import BibleMapQuizPanel, { emptyQuizLevels } from '../components/BibleMapQuizPanel';
 import type { QuizLevel, QuizLevelsState, QuizQuestion } from '../components/BibleMapQuizPanel';
+import BibleMapTryItPanel, {
+    emptyTryIt,
+    type TryItState,
+} from '../components/BibleMapTryItPanel';
 import SceneStudio from '../components/sceneStudio/SceneStudio';
 import {
     emptySceneLayout,
@@ -50,7 +55,7 @@ import BibleMapBookBuilder from '../components/bibleMapBook/BibleMapBookBuilder'
 import OneClickPackPanel from '../components/bibleMapBook/OneClickPackPanel';
 import TextQuizAiPanel from '../components/bibleMapBook/TextQuizAiPanel';
 
-type PackTab = 'overview' | 'scene' | 'book' | 'puzzle' | 'coloring' | 'quiz' | 'rewards';
+type PackTab = 'overview' | 'scene' | 'book' | 'puzzle' | 'coloring' | 'quiz' | 'try_it' | 'rewards';
 
 interface IslandOption {
     _id: string;
@@ -140,6 +145,7 @@ interface StoryFormState {
     quizMode: 'book_quiz' | 'custom' | 'none';
     quizLevels: QuizLevelsState;
     quizDefaultLevel: QuizLevel;
+    tryIt: TryItState;
     coloringPageIds: string[];
     puzzleEnabled: boolean;
     puzzleType: 'sliding_image' | 'scripture_words' | 'none';
@@ -220,6 +226,7 @@ const TABS: { id: PackTab; label: string; icon: React.ElementType }[] = [
     { id: 'puzzle', label: 'Puzzle', icon: Puzzle },
     { id: 'coloring', label: 'Coloring', icon: Palette },
     { id: 'quiz', label: 'Quiz', icon: HelpCircle },
+    { id: 'try_it', label: 'Try It', icon: PenLine },
     { id: 'rewards', label: 'Rewards', icon: Gift },
 ];
 
@@ -242,6 +249,7 @@ const emptyForm = (islandId = ''): StoryFormState => ({
     quizMode: 'book_quiz',
     quizLevels: emptyQuizLevels(),
     quizDefaultLevel: 'easy',
+    tryIt: emptyTryIt(),
     coloringPageIds: [],
     puzzleEnabled: false,
     puzzleType: 'sliding_image',
@@ -563,7 +571,7 @@ const BibleMapStoryForm: React.FC = () => {
 
     const uploadSceneVideo = async (
         file: File,
-        kind: 'scene-bg' | 'scene-anim',
+        kind: 'scene-bg' | 'scene-anim' | 'try-it',
     ): Promise<string> => {
         const island = islands.find((i) => i._id === form.islandId);
         const islandKey = island?.slug || form.islandId || id || 'temp';
@@ -784,6 +792,39 @@ const BibleMapStoryForm: React.FC = () => {
                         story.quiz?.defaultLevel === 'hard'
                             ? story.quiz.defaultLevel
                             : 'easy',
+                    tryIt: {
+                        videoUrl: String(story.tryIt?.videoUrl || ''),
+                        prompts: Array.isArray(story.tryIt?.prompts)
+                            ? story.tryIt.prompts
+                                  .filter(
+                                      (p: { type?: string; text?: string }) =>
+                                          p &&
+                                          typeof p === 'object' &&
+                                          (p.type === 'statement' ||
+                                              p.type === 'fill_blank' ||
+                                              p.type === 'practice_write') &&
+                                          String(p.text || '').trim(),
+                                  )
+                                  .map(
+                                      (p: {
+                                          type: 'statement' | 'fill_blank' | 'practice_write';
+                                          text?: string;
+                                          blanks?: number;
+                                      }) => ({
+                                          type: p.type,
+                                          text: String(p.text || ''),
+                                          blanks:
+                                              p.type === 'fill_blank' &&
+                                              typeof p.blanks === 'number' &&
+                                              p.blanks >= 1
+                                                  ? p.blanks
+                                                  : p.type === 'fill_blank'
+                                                    ? 1
+                                                    : undefined,
+                                      }),
+                                  )
+                            : [],
+                    },
                     coloringPageIds: (story.coloringPageIds || []).map((p: { _id?: string } | string) =>
                         typeof p === 'object' && p?._id ? p._id : String(p),
                     ),
@@ -864,7 +905,8 @@ const BibleMapStoryForm: React.FC = () => {
                                       t.navigateTo === 'puzzle' ||
                                       t.navigateTo === 'coloring' ||
                                       t.navigateTo === 'rewards' ||
-                                      t.navigateTo === 'game'
+                                      t.navigateTo === 'game' ||
+                                      t.navigateTo === 'try_it'
                                           ? t.navigateTo
                                           : '',
                               }))
@@ -970,6 +1012,9 @@ const BibleMapStoryForm: React.FC = () => {
                         )
                       : false,
             rewards: form.rewardsEnabled && form.rewardsPool.length > 0,
+            tryIt:
+                !!form.tryIt.videoUrl.trim() &&
+                form.tryIt.prompts.some((p) => p.text.trim()),
         }),
         [form],
     );
@@ -1007,6 +1052,23 @@ const BibleMapStoryForm: React.FC = () => {
             form.quizMode === 'custom'
                 ? form.quizLevels.easy.filter((q) => q.question.trim())
                 : [],
+        tryIt: {
+            videoUrl: form.tryIt.videoUrl.trim(),
+            prompts: form.tryIt.prompts
+                .filter((p) => p.text.trim())
+                .map((p) => ({
+                    type: p.type,
+                    text: p.text.trim(),
+                    ...(p.type === 'fill_blank'
+                        ? {
+                              blanks:
+                                  typeof p.blanks === 'number' && p.blanks >= 1
+                                      ? p.blanks
+                                      : undefined,
+                          }
+                        : {}),
+                })),
+        },
         coloringPageIds: form.coloringPageIds,
         puzzle: {
             enabled: form.puzzleEnabled,
@@ -1065,6 +1127,14 @@ const BibleMapStoryForm: React.FC = () => {
         if (!form.islandId || !form.title.trim()) {
             alert('Island and title are required');
             setTab('overview');
+            return;
+        }
+        if (
+            form.tryIt.videoUrl.trim() &&
+            !form.tryIt.prompts.some((p) => p.text.trim())
+        ) {
+            alert('Try It needs at least one prompt when a video is set');
+            setTab('try_it');
             return;
         }
         setSaving(true);
@@ -1323,7 +1393,7 @@ const BibleMapStoryForm: React.FC = () => {
                                 : form.displayTitle || form.title || 'Edit Story Pack'}
                         </h1>
                         <p className="text-sm text-gray-500 mt-1">
-                            Bundle Read + Puzzle + Coloring + Quiz + Rewards for one map adventure.
+                            Bundle Read + Puzzle + Coloring + Quiz + Try It + Rewards for one map adventure.
                         </p>
                     </div>
                     <button
@@ -1380,6 +1450,7 @@ const BibleMapStoryForm: React.FC = () => {
                         ['puzzle', 'Puzzle'],
                         ['coloring', 'Coloring'],
                         ['quiz', 'Quiz'],
+                        ['tryIt', 'Try It'],
                         ['rewards', 'Rewards'],
                     ] as const
                 ).map(([key, label]) => (
@@ -2334,6 +2405,14 @@ const BibleMapStoryForm: React.FC = () => {
                         packTitle={form.displayTitle || form.title}
                         scriptureRef={form.scriptureRef}
                         verse={form.verse}
+                    />
+                )}
+
+                {tab === 'try_it' && (
+                    <BibleMapTryItPanel
+                        value={form.tryIt}
+                        onChange={(next) => update('tryIt', next)}
+                        onUploadVideo={(file) => uploadSceneVideo(file, 'try-it')}
                     />
                 )}
 

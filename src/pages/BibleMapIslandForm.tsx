@@ -47,6 +47,7 @@ interface LaunchReadiness {
         puzzle: boolean;
         coloring: boolean;
         quiz: boolean;
+        tryIt?: boolean;
         game: boolean;
     }>;
 }
@@ -897,6 +898,9 @@ const BibleMapIslandForm: React.FC = () => {
                                             </span>
                                             <span className={s.quiz ? 'text-emerald-700' : 'text-amber-600'}>
                                                 Quiz
+                                            </span>
+                                            <span className={s.tryIt ? 'text-emerald-700' : 'text-gray-400'}>
+                                                Try It
                                             </span>
                                             <span className={s.game ? 'text-emerald-700' : 'text-amber-600'}>
                                                 Rewards
