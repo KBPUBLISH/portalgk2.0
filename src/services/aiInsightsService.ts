@@ -77,7 +77,8 @@ async function safeGet(url: string): Promise<any | null> {
 export async function gatherAnalyticsSummary(timeRange: InsightTimeRange): Promise<Record<string, unknown>> {
   const contentRange = timeRange; // content endpoint accepts day|week|month|all
 
-  const [booksData, playlistsData, games, onboarding, paywall, retention, lessonRetention] =
+  const journeyDays = timeRange === 'day' ? 1 : timeRange === 'week' ? 7 : timeRange === 'all' ? 180 : 30;
+  const [booksData, playlistsData, games, onboarding, paywall, retention, lessonRetention, journey] =
     await Promise.all([
       safeGet(`/api/analytics/content?type=book&timeRange=${contentRange}`),
       safeGet(`/api/analytics/content?type=playlist&timeRange=${contentRange}`),
@@ -86,6 +87,7 @@ export async function gatherAnalyticsSummary(timeRange: InsightTimeRange): Promi
       safeGet('/api/analytics/paywall'),
       safeGet('/api/analytics/retention'),
       safeGet('/api/analytics/lesson-retention'),
+      safeGet(`/api/analytics/journey?days=${journeyDays}`),
     ]);
 
   const summary: Record<string, unknown> = {};
@@ -97,6 +99,16 @@ export async function gatherAnalyticsSummary(timeRange: InsightTimeRange): Promi
   if (paywall) summary.paywall = paywall;
   if (retention) summary.retention = retention;
   if (lessonRetention) summary.lessonRetention = lessonRetention;
+  if (journey?.success) {
+    summary.newTutorial = {
+      narrative: journey.narrative,
+      summary: journey.summary,
+      dropoffs: journey.dropoffs,
+      suggestions: journey.suggestions,
+      funnel: journey.funnel,
+      offerScreens: journey.offerScreens,
+    };
+  }
 
   return summary;
 }

@@ -33,6 +33,7 @@ import NewUserWelcome from './pages/NewUserWelcome';
 import AnalyticsDashboard from './pages/AnalyticsDashboard';
 import AiInsights from './pages/AiInsights';
 import OnboardingAnalytics from './pages/OnboardingAnalytics';
+import NewTutorialAnalytics from './pages/NewTutorialAnalytics';
 import KidsMonthlyCharactersPage from './pages/KidsMonthlyCharactersPage';
 import Radio from './pages/Radio';
 import RadioHosts from './pages/RadioHosts';
@@ -149,6 +150,7 @@ function App() {
             <Route path="analytics" element={<AnalyticsDashboard />} />
             <Route path="ai-insights" element={<AiInsights />} />
             <Route path="onboarding-analytics" element={<OnboardingAnalytics />} />
+            <Route path="new-tutorial" element={<NewTutorialAnalytics />} />
             <Route path="onboarding-analytics/kids-characters" element={<KidsMonthlyCharactersPage />} />
             <Route path="radio" element={<Radio />} />
             <Route path="radio/hosts" element={<RadioHosts />} />
