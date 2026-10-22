@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Compass, Users, Clock, Gift, MousePointerClick, Crown, RefreshCw, AlertTriangle, Lightbulb, CheckCircle } from 'lucide-react';
+import { Compass, Users, Clock, Gift, MousePointerClick, Crown, RefreshCw, AlertTriangle, Lightbulb, CheckCircle, Ship, MessageCircle, Library, CalendarDays } from 'lucide-react';
 import apiClient from '../services/apiClient';
 
 interface FunnelStep {
@@ -28,6 +28,52 @@ interface Suggestion {
     detail: string;
 }
 
+interface RetentionSlot {
+    eligible: number;
+    retained: number;
+    rate: number | null;
+}
+
+interface PersonRow {
+    id: string;
+    name: string;
+    kids: string[];
+    plan: string;
+    lastActiveAt: string | null;
+    cameBack: boolean;
+    daysRetained: number | null;
+    sessions: number;
+    packsCompleted: number;
+    packsStarted: number;
+    boatSessions: number;
+    characterTalks: number;
+    booksRead: number;
+    lessonsCompleted: number;
+    quizzesCompleted: number;
+    tutorial: string | null;
+}
+
+interface Life {
+    familiesActive: number;
+    scanned: number;
+    packsCompleted: number;
+    familiesWithPack: number;
+    boatSessions: number;
+    boatFamilies: number;
+    characterTalks: number;
+    characterMessages: number;
+    characterFamilies: number;
+    appSessions: number;
+    topCharacters: { name: string; talks: number; messages: number }[];
+    retention: {
+        cameBack: RetentionSlot;
+        day1: RetentionSlot;
+        day7: RetentionSlot;
+        day30: RetentionSlot;
+    };
+    people: PersonRow[];
+}
+
 interface Study {
     success: boolean;
     narrative: string;
@@ -54,7 +100,17 @@ interface Study {
     paywallSources: { source: string; count: number }[];
     suggestions: Suggestion[];
     dailyTrends: { date: string; started: number; trials: number }[];
+    life?: Life;
 }
+
+const PLAN_LABELS: Record<string, string> = {
+    free: 'Free',
+    trial: 'Trial',
+    active: 'Member',
+    cancelled: 'Cancelled',
+    expired: 'Expired',
+    reverse_trial: 'Reverse trial',
+};
 
 const SOURCE_LABELS: Record<string, string> = {
     'adam-offer': 'End of Adam’s tour',
@@ -74,6 +130,13 @@ function formatDuration(ms: number | null | undefined): string {
     if (minutes < 60) return rem ? `${minutes}m ${rem}s` : `${minutes}m`;
     const hours = Math.floor(minutes / 60);
     return `${hours}h ${minutes % 60}m`;
+}
+
+function formatWhen(iso: string | null): string {
+    if (!iso) return '—';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 function formatDay(iso: string): string {
@@ -132,7 +195,7 @@ const NewTutorialAnalytics: React.FC = () => {
                         New Tutorial
                     </h1>
                     <p className="text-gray-600 mt-1 max-w-2xl">
-                        Perry’s first voyage, from the ocean map through the first story pack, Adam’s tour, the free-book offer, and the trial.
+                        Perry’s first voyage, then what families do afterward: who comes back, which story packs they finish, time on the boat, and talks with the crew.
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -182,6 +245,14 @@ const NewTutorialAnalytics: React.FC = () => {
                         <Stat icon={MousePointerClick} label="Tapped trial" value={summary.paywallClicked.toLocaleString()} hint={`${summary.clickRate}% of paywall views`} />
                         <Stat icon={Crown} label="Trials started" value={summary.trialsStarted.toLocaleString()} hint={`${summary.trialOfStartersRate}% of starters`} />
                     </div>
+
+                    {study.life ? (
+                        <LifeSection life={study.life} />
+                    ) : (
+                        <p className="text-sm text-gray-500">
+                            Retention, story packs, boat sessions, and each family’s progress appear after this backend update is deployed.
+                        </p>
+                    )}
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 text-sm">
                         <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
@@ -320,6 +391,134 @@ function Stat({ icon: Icon, label, value, hint }: { icon: React.ComponentType<{ 
             </div>
             <p className="text-2xl font-bold text-gray-900">{value}</p>
             {hint && <p className="text-xs text-gray-500 mt-1">{hint}</p>}
+        </div>
+    );
+}
+
+function LifeSection({ life }: { life: Life }) {
+    const packHint = life.scanned < life.familiesActive
+        ? `Among the ${life.scanned.toLocaleString()} most recently active`
+        : `${life.familiesWithPack.toLocaleString()} families finished at least one`;
+    return (
+        <div className="space-y-4">
+            <section className="space-y-3">
+                <div>
+                    <h2 className="text-lg font-semibold text-gray-900">Who comes back</h2>
+                    <p className="text-sm text-gray-500">
+                        Families who signed up in this range. A day counts when they were still active that many days after they joined.
+                    </p>
+                </div>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <RetentionCard label="Came back" slot={life.retention.cameBack} hint="Active on a later day" />
+                    <RetentionCard label="Next day" slot={life.retention.day1} hint="Still active after 1 day" />
+                    <RetentionCard label="Day 7" slot={life.retention.day7} hint="Still active after 7 days" />
+                    <RetentionCard label="Day 30" slot={life.retention.day30} hint="Still active after 30 days" />
+                </div>
+            </section>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <Stat icon={Library} label="Story packs finished" value={life.packsCompleted.toLocaleString()} hint={packHint} />
+                <Stat icon={Ship} label="Boat sessions" value={life.boatSessions.toLocaleString()} hint={life.boatFamilies ? `${life.boatFamilies.toLocaleString()} families` : 'Recorded as families open the boat'} />
+                <Stat icon={MessageCircle} label="Character talks" value={life.characterTalks.toLocaleString()} hint={life.characterMessages ? `${life.characterMessages.toLocaleString()} were messages from a child` : 'Opens and messages with the crew'} />
+                <Stat icon={CalendarDays} label="App sessions" value={life.appSessions.toLocaleString()} hint={`Lifetime sessions for the ${life.familiesActive.toLocaleString()} families active in this range`} />
+            </div>
+
+            <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="px-6 pt-6 pb-3">
+                    <h2 className="text-lg font-semibold text-gray-900">Each family</h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                        The {life.people.length.toLocaleString()} most recently active families. Packs, books, and sessions are already saved on the account. Boat visits and character talks fill in from the current app.
+                    </p>
+                </div>
+                {life.people.length === 0 ? (
+                    <p className="px-6 pb-6 text-sm text-gray-500">No families were active in this range.</p>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="min-w-[860px] w-full text-sm">
+                            <thead>
+                                <tr className="text-left text-gray-500 border-y border-gray-100">
+                                    <th className="px-6 py-2 font-medium">Family</th>
+                                    <th className="px-3 py-2 font-medium">Last active</th>
+                                    <th className="px-3 py-2 font-medium">Came back</th>
+                                    <th className="px-3 py-2 font-medium text-right">Sessions</th>
+                                    <th className="px-3 py-2 font-medium text-right">Packs</th>
+                                    <th className="px-3 py-2 font-medium text-right">Boat</th>
+                                    <th className="px-3 py-2 font-medium text-right">Talks</th>
+                                    <th className="px-3 py-2 font-medium">Tutorial</th>
+                                    <th className="px-6 py-2 font-medium">Plan</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {life.people.map((person) => (
+                                    <tr key={person.id} className="border-b border-gray-50 align-top">
+                                        <td className="px-6 py-3">
+                                            <p className="font-medium text-gray-900">{person.name}</p>
+                                            <p className="text-xs text-gray-500 mt-0.5">
+                                                {[
+                                                    person.kids.length ? person.kids.join(', ') : '',
+                                                    `${person.booksRead} books`,
+                                                    `${person.lessonsCompleted} lessons`,
+                                                    `${person.quizzesCompleted} quizzes`,
+                                                ].filter(Boolean).join(' · ')}
+                                            </p>
+                                        </td>
+                                        <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{formatWhen(person.lastActiveAt)}</td>
+                                        <td className="px-3 py-3 text-gray-700 whitespace-nowrap">
+                                            {person.cameBack
+                                                ? `${person.daysRetained ?? 0}d`
+                                                : 'Same day'}
+                                        </td>
+                                        <td className="px-3 py-3 text-right text-gray-900">{person.sessions.toLocaleString()}</td>
+                                        <td className="px-3 py-3 text-right text-gray-900" title={`${person.packsStarted} started`}>
+                                            {person.packsCompleted.toLocaleString()}
+                                        </td>
+                                        <td className="px-3 py-3 text-right text-gray-900">{person.boatSessions.toLocaleString()}</td>
+                                        <td className="px-3 py-3 text-right text-gray-900">{person.characterTalks.toLocaleString()}</td>
+                                        <td className="px-3 py-3 text-gray-700">{person.tutorial || '—'}</td>
+                                        <td className="px-6 py-3 text-gray-700 whitespace-nowrap">{PLAN_LABELS[person.plan] || person.plan}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </section>
+
+            <section className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
+                <h2 className="text-lg font-semibold text-gray-900 mb-1">Who they talk to</h2>
+                <p className="text-sm text-gray-500 mb-4">
+                    {life.characterFamilies
+                        ? `${life.characterFamilies.toLocaleString()} families opened a character in this range.`
+                        : 'Character talks show up when a child opens someone on the crew.'}
+                </p>
+                {life.topCharacters.length === 0 ? (
+                    <p className="text-sm text-gray-400">No character talks in this range yet.</p>
+                ) : (
+                    <div className="space-y-2">
+                        {life.topCharacters.map((row) => (
+                            <div key={row.name} className="flex items-center justify-between gap-3 text-sm">
+                                <span className="font-medium text-gray-800">{row.name}</span>
+                                <span className="text-gray-500">
+                                    {row.talks.toLocaleString()} talks{row.messages ? ` · ${row.messages.toLocaleString()} messages` : ''}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </section>
+        </div>
+    );
+}
+
+function RetentionCard({ label, slot, hint }: { label: string; slot: RetentionSlot; hint: string }) {
+    return (
+        <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+            <p className="text-gray-500 text-sm">{label}</p>
+            <p className="text-2xl font-bold text-gray-900 mt-1">{slot.rate == null ? '—' : `${slot.rate}%`}</p>
+            <p className="text-xs text-gray-500 mt-1">
+                {slot.eligible ? `${slot.retained.toLocaleString()} of ${slot.eligible.toLocaleString()} families` : 'Not enough time yet'}
+            </p>
+            <p className="text-xs text-gray-400 mt-0.5">{hint}</p>
         </div>
     );
 }
