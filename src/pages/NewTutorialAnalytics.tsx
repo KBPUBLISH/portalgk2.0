@@ -40,9 +40,11 @@ interface PersonRow {
     kids: string[];
     plan: string;
     lastActiveAt: string | null;
+    createdAt: string | null;
     cameBack: boolean;
     daysRetained: number | null;
     sessions: number;
+    timeSpentSeconds: number;
     packsCompleted: number;
     packsStarted: number;
     boatSessions: number;
@@ -132,11 +134,22 @@ function formatDuration(ms: number | null | undefined): string {
     return `${hours}h ${minutes % 60}m`;
 }
 
-function formatWhen(iso: string | null): string {
+function formatWhen(iso: string | null, withYear = false): string {
     if (!iso) return '—';
     const date = new Date(iso);
     if (Number.isNaN(date.getTime())) return '—';
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return date.toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        ...(withYear ? { year: 'numeric' } : {}),
+    });
+}
+
+function formatSessionTime(seconds: number, sessions: number): { total: string; average: string | null } {
+    if (!Number.isFinite(seconds) || seconds <= 0) return { total: '—', average: null };
+    const total = formatDuration(seconds * 1000);
+    if (!sessions) return { total, average: null };
+    return { total, average: `avg ${formatDuration((seconds / sessions) * 1000)}` };
 }
 
 function formatDay(iso: string): string {
@@ -434,11 +447,13 @@ function LifeSection({ life }: { life: Life }) {
                     <p className="px-6 pb-6 text-sm text-gray-500">No families were active in this range.</p>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="min-w-[860px] w-full text-sm">
+                        <table className="min-w-[1040px] w-full text-sm">
                             <thead>
                                 <tr className="text-left text-gray-500 border-y border-gray-100">
                                     <th className="px-6 py-2 font-medium">Family</th>
+                                    <th className="px-3 py-2 font-medium">Signed up</th>
                                     <th className="px-3 py-2 font-medium">Last active</th>
+                                    <th className="px-3 py-2 font-medium">Session time</th>
                                     <th className="px-3 py-2 font-medium">Came back</th>
                                     <th className="px-3 py-2 font-medium text-right">Sessions</th>
                                     <th className="px-3 py-2 font-medium text-right">Packs</th>
@@ -449,7 +464,9 @@ function LifeSection({ life }: { life: Life }) {
                                 </tr>
                             </thead>
                             <tbody>
-                                {life.people.map((person) => (
+                                {life.people.map((person) => {
+                                    const time = formatSessionTime(person.timeSpentSeconds || 0, person.sessions);
+                                    return (
                                     <tr key={person.id} className="border-b border-gray-50 align-top">
                                         <td className="px-6 py-3">
                                             <p className="font-medium text-gray-900">{person.name}</p>
@@ -462,7 +479,12 @@ function LifeSection({ life }: { life: Life }) {
                                                 ].filter(Boolean).join(' · ')}
                                             </p>
                                         </td>
+                                        <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{formatWhen(person.createdAt, true)}</td>
                                         <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{formatWhen(person.lastActiveAt)}</td>
+                                        <td className="px-3 py-3 text-gray-900 whitespace-nowrap">
+                                            <p>{time.total}</p>
+                                            {time.average && <p className="text-xs text-gray-500">{time.average}</p>}
+                                        </td>
                                         <td className="px-3 py-3 text-gray-700 whitespace-nowrap">
                                             {person.cameBack
                                                 ? `${person.daysRetained ?? 0}d`
@@ -477,7 +499,8 @@ function LifeSection({ life }: { life: Life }) {
                                         <td className="px-3 py-3 text-gray-700">{person.tutorial || '—'}</td>
                                         <td className="px-6 py-3 text-gray-700 whitespace-nowrap">{PLAN_LABELS[person.plan] || person.plan}</td>
                                     </tr>
-                                ))}
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
