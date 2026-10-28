@@ -89,11 +89,15 @@ const BibleMapTryItPanel: React.FC<BibleMapTryItPanelProps> = ({
             onChange({ ...value, videoUrl: url });
         } catch (err: unknown) {
             console.error(err);
+            const ax = err as {
+                message?: string;
+                response?: { data?: { message?: string; error?: string } };
+            };
             const msg =
-                (err as { response?: { data?: { message?: string; error?: string } } })?.response
-                    ?.data?.message ||
-                (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-                'Failed to upload Try It video';
+                ax.response?.data?.message ||
+                ax.response?.data?.error ||
+                (ax.message && ax.message !== 'Network Error' ? ax.message : '') ||
+                'The upload connection dropped before the video finished sending. Try again.';
             alert(msg);
         } finally {
             setUploading(false);

@@ -32,7 +32,7 @@ function clamp(n: number, min: number, max: number) {
 }
 
 /**
- * Drag story icons as % of the device frame.
+ * Drag story icons as % of this canvas (the fitted map image).
  * (x,y) is the center of the circular badge; the label hangs below and does not shift the center.
  */
 const MainMapIconCanvas: React.FC<MainMapIconCanvasProps> = ({

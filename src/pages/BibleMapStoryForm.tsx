@@ -54,6 +54,7 @@ import {
 import BibleMapBookBuilder from '../components/bibleMapBook/BibleMapBookBuilder';
 import OneClickPackPanel from '../components/bibleMapBook/OneClickPackPanel';
 import TextQuizAiPanel from '../components/bibleMapBook/TextQuizAiPanel';
+import { gcsBrowserPutUrl, uploadFileDirect } from '../utils/gcsUpload';
 
 type PackTab = 'overview' | 'scene' | 'book' | 'puzzle' | 'coloring' | 'quiz' | 'try_it' | 'rewards';
 
@@ -173,6 +174,10 @@ interface CatalogGame {
     gameId: string;
     name: string;
     enabled?: boolean;
+    url?: string;
+    coverImage?: string;
+    logo?: string;
+    gameType?: 'modal' | 'webview' | 'arcade';
 }
 
 type RewardPoolType = 'character' | 'game' | 'coins' | 'book_template';
@@ -190,6 +195,8 @@ interface RewardPoolItem {
     /** Optional freeform description of how this Bible character speaks/acts */
     persona: string;
     gameUrl: string;
+    /** Portal Games catalog id. Earning this reward puts that game on the ship arcade. */
+    catalogGameId: string;
     bookId: string;
     bookCoverUrl: string;
     coinMin: number;
@@ -203,6 +210,20 @@ interface TtsVoiceOption {
     previewUrl?: string;
 }
 
+const applyCatalogGame = (item: RewardPoolItem, game: CatalogGame | undefined): RewardPoolItem => {
+    if (!game) {
+        return { ...item, catalogGameId: '', gameUrl: '' };
+    }
+    const art = (game.coverImage || game.logo || '').trim();
+    return {
+        ...item,
+        catalogGameId: game.gameId,
+        title: game.name || item.title,
+        gameUrl: (game.url || '').trim(),
+        imageUrl: art || item.imageUrl,
+    };
+};
+
 const emptyRewardItem = (type: RewardPoolType = 'coins'): RewardPoolItem => ({
     id: `reward-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
     type,
@@ -213,6 +234,7 @@ const emptyRewardItem = (type: RewardPoolType = 'coins'): RewardPoolItem => ({
     voiceId: '',
     persona: '',
     gameUrl: '',
+    catalogGameId: '',
     bookId: '',
     bookCoverUrl: '',
     coinMin: 100,
@@ -429,14 +451,17 @@ const BibleMapStoryForm: React.FC = () => {
         try {
             const island = islands.find((i) => i._id === form.islandId);
             const islandKey = island?.slug || form.islandId || id || 'temp';
-            const fd = new FormData();
-            // Field name must be `file` — the upload endpoint reads upload.single('file')
-            fd.append('file', uploadFile);
-            const res = await apiClient.post(
-                `/api/upload/image?bookId=bible-map&type=character-model&islandId=${encodeURIComponent(islandKey)}`,
-                fd,
-            );
-            const url = String(res.data?.url || '');
+            const contentType =
+                uploadFile.type && uploadFile.type !== 'application/octet-stream'
+                    ? uploadFile.type
+                    : 'model/gltf-binary';
+            const url = await uploadFileDirect({
+                bookId: `bible-map/${islandKey}`,
+                filename: uploadFile.name,
+                contentType,
+                file: uploadFile,
+                type: 'character-model',
+            });
             if (!url) throw new Error('No URL returned');
             setForm((prev) => ({
                 ...prev,
@@ -575,13 +600,72 @@ const BibleMapStoryForm: React.FC = () => {
     ): Promise<string> => {
         const island = islands.find((i) => i._id === form.islandId);
         const islandKey = island?.slug || form.islandId || id || 'temp';
-        const formData = new FormData();
-        formData.append('file', file);
-        const res = await apiClient.post(
-            `/api/upload/video?bookId=bible-map&type=${kind}&islandId=${encodeURIComponent(islandKey)}`,
-            formData,
-        );
-        return res.data.url as string;
+        const bookId = `bible-map/${islandKey}`;
+        const contentType = file.type || 'video/mp4';
+
+        // Send the file straight to storage in chunks. Posting the whole video
+        // through the API drops the TLS connection on larger files
+        // (ERR_SSL_BAD_RECORD_MAC_ALERT / Network Error).
+        const uploadDirect = async (): Promise<string> => {
+            const MAX_CHUNKS = 32;
+            const MIN_CHUNK = 8 * 1024 * 1024;
+            const chunkSize = Math.max(MIN_CHUNK, Math.ceil(file.size / MAX_CHUNKS));
+            const totalChunks = Math.max(1, Math.ceil(file.size / chunkSize));
+            const sessionId = `bm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            const tempObjectNames: string[] = [];
+
+            for (let i = 0; i < totalChunks; i++) {
+                const start = i * chunkSize;
+                const blob = file.slice(start, Math.min(file.size, start + chunkSize));
+                const { data } = await apiClient.post('/api/upload/signed-url-chunk', {
+                    bookId,
+                    type: 'video',
+                    contentType,
+                    filename: file.name,
+                    chunkIdx: i,
+                    totalChunks,
+                    sessionId,
+                });
+                const putRes = await fetch(gcsBrowserPutUrl(data.uploadUrl), {
+                    method: 'PUT',
+                    headers: { 'Content-Type': contentType },
+                    body: blob,
+                });
+                if (!putRes.ok) {
+                    throw new Error(
+                        `Chunk ${i + 1}/${totalChunks} upload failed (HTTP ${putRes.status})`,
+                    );
+                }
+                tempObjectNames.push(data.tempObjectName);
+            }
+
+            const { data: composed } = await apiClient.post('/api/upload/compose-chunks', {
+                bookId,
+                type: 'video',
+                filename: file.name,
+                tempObjectNames,
+                sessionId,
+            });
+            return composed.url as string;
+        };
+
+        try {
+            return await uploadDirect();
+        } catch (signedErr: unknown) {
+            const status = (signedErr as { response?: { status?: number } })?.response?.status;
+            // Only the "storage isn't configured" response should retry through the API.
+            // A dropped browser PUT has no status; sending the whole file through the
+            // API then hits the same TLS failure this path was meant to avoid.
+            if (status !== 503) throw signedErr;
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await apiClient.post(
+                `/api/upload/video?bookId=bible-map&type=${kind}&islandId=${encodeURIComponent(islandKey)}`,
+                formData,
+                { timeout: 600000 },
+            );
+            return res.data.url as string;
+        }
     };
 
     const uploadSceneMusic = async (file: File): Promise<string> => {
@@ -865,6 +949,7 @@ const BibleMapStoryForm: React.FC = () => {
                               voiceId: String(r.voiceId || ''),
                               persona: String(r.persona || ''),
                               gameUrl: String(r.gameUrl || ''),
+                              catalogGameId: String(r.catalogGameId || ''),
                               bookId: r.bookId
                                   ? String(typeof r.bookId === 'object' && r.bookId && '_id' in (r.bookId as object)
                                       ? (r.bookId as { _id: string })._id
@@ -1114,6 +1199,7 @@ const BibleMapStoryForm: React.FC = () => {
                     voiceId: r.voiceId || undefined,
                     persona: r.persona || undefined,
                     gameUrl: r.gameUrl || undefined,
+                    catalogGameId: r.type === 'game' ? r.catalogGameId || undefined : undefined,
                     bookId: r.bookId || undefined,
                     bookCoverUrl: r.bookCoverUrl || undefined,
                     coinMin: r.type === 'coins' ? r.coinMin : undefined,
@@ -2845,21 +2931,60 @@ const BibleMapStoryForm: React.FC = () => {
 
                                         {item.type === 'game' && (
                                             <div className="space-y-1">
-                                                <input
-                                                    value={item.gameUrl}
+                                                <label className="block text-xs font-medium text-gray-600">
+                                                    Game from the Games section
+                                                </label>
+                                                <select
+                                                    value={
+                                                        item.catalogGameId ||
+                                                        games.find(
+                                                            (g) =>
+                                                                !!g.url &&
+                                                                g.url.trim() === item.gameUrl.trim(),
+                                                        )?.gameId ||
+                                                        ''
+                                                    }
                                                     onChange={(e) => {
+                                                        const gameId = e.target.value;
+                                                        const game = games.find((g) => g.gameId === gameId);
                                                         const next = [...form.rewardsPool];
-                                                        next[idx] = {
-                                                            ...item,
-                                                            gameUrl: e.target.value,
-                                                        };
+                                                        next[idx] = applyCatalogGame(item, game);
                                                         update('rewardsPool', next);
                                                     }}
-                                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                                                    placeholder="https://game-url…"
-                                                />
+                                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-sm"
+                                                >
+                                                    <option value="">— Choose a game —</option>
+                                                    {item.catalogGameId &&
+                                                        !games.some((g) => g.gameId === item.catalogGameId) && (
+                                                            <option value={item.catalogGameId}>
+                                                                {item.title || item.catalogGameId} (not in list)
+                                                            </option>
+                                                        )}
+                                                    {games
+                                                        .filter((g) => g.enabled !== false)
+                                                        .map((g) => (
+                                                            <option key={g._id || g.gameId} value={g.gameId}>
+                                                                {g.name}
+                                                                {g.gameType === 'arcade'
+                                                                    ? ' · Arcade'
+                                                                    : g.gameType === 'webview'
+                                                                      ? ' · Web'
+                                                                      : ''}
+                                                                {!g.url ? ' · no link' : ''}
+                                                            </option>
+                                                        ))}
+                                                </select>
+                                                {item.gameUrl ? (
+                                                    <p className="text-[11px] text-gray-500 break-all">
+                                                        {item.gameUrl}
+                                                    </p>
+                                                ) : item.catalogGameId ? (
+                                                    <p className="text-[11px] text-amber-600">
+                                                        This game has no link. Add a URL on the Games page so kids can open it in the arcade.
+                                                    </p>
+                                                ) : null}
                                                 <p className="text-[11px] text-gray-500">
-                                                    Appears in the app Games Library when kids collect this reward.
+                                                    When a kid earns this reward, the game shows up in the ship arcade. A game that costs gold coins is unlocked for free.
                                                 </p>
                                             </div>
                                         )}

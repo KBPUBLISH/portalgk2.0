@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { Image as ImageIcon, Map as MapIcon, Smartphone, Tablet } from 'lucide-react';
 import { getMediaUrl } from '../../services/apiClient';
 import MainMapIconCanvas, { type PlacedMarker } from './MainMapIconCanvas';
@@ -32,6 +32,87 @@ export interface MainMapDevicePreviewProps {
     className?: string;
 }
 
+type MediaBox = { w: number; h: number };
+type StageBox = { left: number; top: number; width: number; height: number };
+
+/** Same phone fit as the kid app: grow a wide map toward full-bleed. */
+function fitMediaStage(view: { w: number; h: number }, media: MediaBox): StageBox {
+    const widthFit = view.w / media.w;
+    const heightFit = view.h / media.h;
+    const contain = Math.min(widthFit, heightFit);
+    const tallPhone = widthFit < heightFit;
+    const scale = tallPhone ? contain + (heightFit - contain) * 0.78 : contain;
+    const width = media.w * scale;
+    const height = media.h * scale;
+    return {
+        left: (view.w - width) / 2,
+        top: view.h - height,
+        width,
+        height,
+    };
+}
+
+function coverBox(view: { w: number; h: number }, media: MediaBox) {
+    const s = Math.max(view.w / media.w, view.h / media.h);
+    const coverW = media.w * s;
+    const coverH = media.h * s;
+    return {
+        coverW,
+        coverH,
+        coverX: (view.w - coverW) / 2,
+        coverY: view.h - coverH,
+    };
+}
+
+/** Stored % is the old object-cover frame. Show it on the fitted image. */
+function coverPointToImagePercent(
+    point: MainMapPoint,
+    view: { w: number; h: number },
+    media: MediaBox,
+): MainMapPoint {
+    const { coverW, coverH, coverX, coverY } = coverBox(view, media);
+    return {
+        x: (((point.x / 100) * view.w - coverX) / coverW) * 100,
+        y: (((point.y / 100) * view.h - coverY) / coverH) * 100,
+    };
+}
+
+function imagePercentToCoverPoint(
+    point: MainMapPoint,
+    view: { w: number; h: number },
+    media: MediaBox,
+): MainMapPoint {
+    const { coverW, coverH, coverX, coverY } = coverBox(view, media);
+    return {
+        x: ((coverX + (point.x / 100) * coverW) / view.w) * 100,
+        y: ((coverY + (point.y / 100) * coverH) / view.h) * 100,
+    };
+}
+
+function coverSizeToImagePercent(
+    size: MainMapSize,
+    view: { w: number; h: number },
+    media: MediaBox,
+): MainMapSize {
+    const { coverW, coverH } = coverBox(view, media);
+    return {
+        w: ((size.w / 100) * view.w / coverW) * 100,
+        h: ((size.h / 100) * view.h / coverH) * 100,
+    };
+}
+
+function imageSizeToCoverPercent(
+    size: MainMapSize,
+    view: { w: number; h: number },
+    media: MediaBox,
+): MainMapSize {
+    const { coverW, coverH } = coverBox(view, media);
+    return {
+        w: ((size.w / 100) * coverW / view.w) * 100,
+        h: ((size.h / 100) * coverH / view.h) * 100,
+    };
+}
+
 const DEVICE_TOGGLE: {
     id: MainMapLayoutKey;
     label: string;
@@ -47,9 +128,9 @@ const DEVICE_TOGGLE: {
  * Form-factor chrome preview of the island main map screen
  * (background video or PNG + story icons) as kids see it in the app.
  *
- * Icon % coords are relative to the full device frame (same box as object-cover BG).
- * (x,y) = center of the circular badge. The kid app must overlay icons on that same
- * full-viewport space — not the area below the wood header — or pads and icons drift.
+ * Icon % coords are saved against the device frame. The preview draws the same
+ * enlarged map as the kid app and places badges on that image, so a pad you
+ * drag here is the pad kids see.
  */
 const MainMapDevicePreview: React.FC<MainMapDevicePreviewProps> = ({
     device,
@@ -74,6 +155,31 @@ const MainMapDevicePreview: React.FC<MainMapDevicePreviewProps> = ({
     const hasMap = hasVideo || Boolean(mapSrc);
     const storyCount = markers.length;
     const isPhoneChrome = device !== 'tablet';
+    const activeSrc = hasVideo ? videoSrc : mapSrc;
+    const [mediaSize, setMediaSize] = useState<{ src: string; box: MediaBox } | null>(null);
+    const sized = mediaSize && mediaSize.src === activeSrc ? mediaSize.box : null;
+    const view = { w: frame.width, h: frame.height };
+    const stage = useMemo(
+        () => (sized ? fitMediaStage(view, sized) : null),
+        [sized, view.w, view.h],
+    );
+    const displayMarkers = useMemo(() => {
+        if (!stage || !sized) return markers;
+        return markers.map((marker) => ({
+            ...marker,
+            position: coverPointToImagePercent(marker.position, view, sized),
+            size: coverSizeToImagePercent(marker.size, view, sized),
+        }));
+    }, [markers, stage, sized, view.w, view.h]);
+    const noteMediaSize = (w: number, h: number) => {
+        if (w > 0 && h > 0) {
+            setMediaSize((prev) =>
+                prev && prev.src === activeSrc && prev.box.w === w && prev.box.h === h
+                    ? prev
+                    : { src: activeSrc, box: { w, h } },
+            );
+        }
+    };
 
     return (
         <div className={`space-y-3 ${className}`}>
@@ -120,6 +226,7 @@ const MainMapDevicePreview: React.FC<MainMapDevicePreviewProps> = ({
                     style={{
                         width: frame.width,
                         height: frame.height,
+                        boxSizing: 'content-box',
                         borderRadius: frame.borderRadius,
                         border: '10px solid #1f2937',
                         boxShadow:
@@ -148,20 +255,62 @@ const MainMapDevicePreview: React.FC<MainMapDevicePreviewProps> = ({
                         <video
                             key={videoSrc}
                             src={videoSrc}
-                            className="absolute inset-0 w-full h-full object-cover object-bottom"
+                            className="absolute select-none"
+                            style={
+                                stage
+                                    ? {
+                                          left: stage.left,
+                                          top: stage.top,
+                                          width: stage.width,
+                                          height: stage.height,
+                                          maxWidth: 'none',
+                                          maxHeight: 'none',
+                                      }
+                                    : {
+                                          inset: 0,
+                                          width: '100%',
+                                          height: '100%',
+                                          objectFit: 'cover',
+                                          objectPosition: 'center bottom',
+                                      }
+                            }
                             muted
                             loop
                             playsInline
                             autoPlay
                             preload="auto"
                             poster={mapSrc || undefined}
+                            onLoadedMetadata={(e) =>
+                                noteMediaSize(e.currentTarget.videoWidth, e.currentTarget.videoHeight)
+                            }
                         />
                     ) : mapSrc ? (
                         <img
                             src={mapSrc}
                             alt="Main map"
-                            className="absolute inset-0 w-full h-full object-cover object-bottom"
+                            className="absolute select-none"
+                            style={
+                                stage
+                                    ? {
+                                          left: stage.left,
+                                          top: stage.top,
+                                          width: stage.width,
+                                          height: stage.height,
+                                          maxWidth: 'none',
+                                          maxHeight: 'none',
+                                      }
+                                    : {
+                                          inset: 0,
+                                          width: '100%',
+                                          height: '100%',
+                                          objectFit: 'cover',
+                                          objectPosition: 'center bottom',
+                                      }
+                            }
                             draggable={false}
+                            onLoad={(e) =>
+                                noteMediaSize(e.currentTarget.naturalWidth, e.currentTarget.naturalHeight)
+                            }
                         />
                     ) : (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-sky-900/90 text-white/80 px-5 text-center text-xs">
@@ -187,14 +336,48 @@ const MainMapDevicePreview: React.FC<MainMapDevicePreviewProps> = ({
                     )}
 
                     {!loading && hasMap && storyCount > 0 && (
-                        <MainMapIconCanvas
-                            markers={markers}
-                            selectedId={interactive ? selectedId : null}
-                            onSelect={interactive ? onSelect || (() => undefined) : () => undefined}
-                            onMove={interactive && onMove ? onMove : () => undefined}
-                            onResize={interactive && onResize ? onResize : undefined}
-                            readOnly={!interactive}
-                        />
+                        <div
+                            className="absolute"
+                            style={
+                                stage
+                                    ? {
+                                          left: stage.left,
+                                          top: stage.top,
+                                          width: stage.width,
+                                          height: stage.height,
+                                      }
+                                    : { inset: 0 }
+                            }
+                        >
+                            <MainMapIconCanvas
+                                markers={displayMarkers}
+                                selectedId={interactive ? selectedId : null}
+                                onSelect={interactive ? onSelect || (() => undefined) : () => undefined}
+                                onMove={
+                                    interactive && onMove
+                                        ? (id, next) =>
+                                              onMove(
+                                                  id,
+                                                  sized
+                                                      ? imagePercentToCoverPoint(next, view, sized)
+                                                      : next,
+                                              )
+                                        : () => undefined
+                                }
+                                onResize={
+                                    interactive && onResize
+                                        ? (id, next) =>
+                                              onResize(
+                                                  id,
+                                                  sized
+                                                      ? imageSizeToCoverPercent(next, view, sized)
+                                                      : next,
+                                              )
+                                        : undefined
+                                }
+                                readOnly={!interactive}
+                            />
+                        </div>
                     )}
 
                     {loading && (

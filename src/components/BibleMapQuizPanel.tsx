@@ -166,7 +166,7 @@ const BibleMapQuizPanel: React.FC<BibleMapQuizPanelProps> = ({
             const res = await apiClient.post('/api/bible-map/quiz-assist', {
                 messages: nextChat,
                 level: activeLevel,
-                count: 7,
+                count: 5,
                 title: packTitle,
                 scriptureRef,
                 verse,
@@ -237,7 +237,7 @@ const BibleMapQuizPanel: React.FC<BibleMapQuizPanelProps> = ({
             return;
         }
         void sendPrompt(
-            `Generate exactly 7 ${LEVEL_META[activeLevel].label.toLowerCase()} multiple-choice questions based on this story’s ${SCRIPT_BAND[activeLevel]} age-leveled reading scripts. Cover key moments across the pages. Answers must be findable in those scripts.`,
+            `Generate exactly 5 ${LEVEL_META[activeLevel].label.toLowerCase()} multiple-choice questions based on this story’s ${SCRIPT_BAND[activeLevel]} age-leveled reading scripts. Cover key moments across the pages. Answers must be findable in those scripts.`,
         );
     };
 
@@ -385,7 +385,7 @@ const BibleMapQuizPanel: React.FC<BibleMapQuizPanelProps> = ({
                                 </h3>
                                 <p className="text-xs text-indigo-800/80 mt-0.5">
                                     Uses the Book tab’s {SCRIPT_BAND[activeLevel]} script (and the
-                                    other age scripts for context) to propose 7 questions.
+                                    other age scripts for context) to propose 5 questions.
                                 </p>
                             </div>
                         </div>

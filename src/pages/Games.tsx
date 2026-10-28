@@ -30,6 +30,25 @@ type GameType = 'modal' | 'webview' | 'arcade';
 
 const needsGameUrl = (type: GameType | undefined) => type === 'webview' || type === 'arcade';
 
+const goldCost = (game: Pick<Game, 'goldCoinPrice'>) => {
+    const price = Number(game.goldCoinPrice);
+    return Number.isFinite(price) && price > 0 ? Math.floor(price) : 0;
+};
+
+const sameGameName = (a?: string, b?: string) =>
+    String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+
+const findPaidSibling = (game: Game, all: Game[]): Game | undefined => {
+    if (goldCost(game) > 0) return undefined;
+    return all.find(
+        (other) =>
+            other.gameId !== game.gameId &&
+            goldCost(other) > 0 &&
+            (sameGameName(other.name, game.name) ||
+                (!!game.url && !!other.url && other.url === game.url)),
+    );
+};
+
 const EMPTY_NEW_GAME = {
     gameId: '',
     name: '',
@@ -273,12 +292,24 @@ const Games: React.FC = () => {
                             </div>
                         )}
                         
-                        {(game.isPurchasable || ((game.goldCoinPrice || 0) > 0)) && (
+                        {(game.isPurchasable || goldCost(game) > 0) && (
                             <div className="mb-2 ml-2 inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">
                                 <Coins className="w-3 h-3" />
-                                <span>{game.goldCoinPrice} Gold Coins to unlock</span>
+                                <span>{goldCost(game)} Gold Coins to unlock</span>
                             </div>
                         )}
+                        {game.gameType === 'arcade' && goldCost(game) === 0 && (() => {
+                            const sibling = findPaidSibling(game, games);
+                            return sibling ? (
+                                <div className="mb-2 p-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                                    This arcade copy is free. Matching game <span className="font-semibold">{sibling.gameId}</span> is {goldCost(sibling)} gold — the ship arcade will use that price.
+                                </div>
+                            ) : (
+                                <div className="mb-2 inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-medium">
+                                    Free on arcade
+                                </div>
+                            );
+                        })()}
                         
                         {needsGameUrl(game.gameType) && game.url && (
                             <div className={`mb-4 p-2 rounded-lg border ${
@@ -728,6 +759,14 @@ const Games: React.FC = () => {
                                                 ? '0 = free on the arcade. Any amount above 0 must be spent once to unlock the game.'
                                                 : 'Users will need to spend this amount of gold coins to unlock and play this game.'}
                                         </p>
+                                        {formData.gameType === 'arcade' && goldCost(formData) === 0 && editingGame && (() => {
+                                            const sibling = findPaidSibling(editingGame, games);
+                                            return sibling ? (
+                                                <p className="text-xs text-amber-800 mt-2">
+                                                    Matching game <span className="font-semibold">{sibling.gameId}</span> is already {goldCost(sibling)} gold. The ship arcade will charge that until you set a price here.
+                                                </p>
+                                            ) : null;
+                                        })()}
                                     </div>
                                 )}
                             </div>

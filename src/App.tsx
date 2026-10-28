@@ -57,6 +57,8 @@ import BibleMapIslandForm from './pages/BibleMapIslandForm';
 import BibleMapStoryForm from './pages/BibleMapStoryForm';
 import MusicVideoManagement from './pages/MusicVideoManagement';
 import MusicVideoForm from './pages/MusicVideoForm';
+import AudioStudio from './pages/AudioStudio';
+import OfferClaims from './pages/OfferClaims';
 
 // Godly Hub - Creator Portal
 import CreatorLogin from './pages/CreatorLogin';
@@ -158,6 +160,7 @@ function App() {
             <Route path="radio/show-builder" element={<RadioShowBuilder />} />
             <Route path="radio/preview" element={<RadioPreviewPage />} />
             <Route path="email-subscribers" element={<EmailSubscribers />} />
+            <Route path="offer-claims" element={<OfferClaims />} />
             <Route path="campaigns" element={<Campaigns />} />
             <Route path="campaigns/new" element={<CampaignForm />} />
             <Route path="campaigns/:id/edit" element={<CampaignForm />} />
@@ -170,6 +173,8 @@ function App() {
             <Route path="monthly-books" element={<MonthlyBookTemplates />} />
             <Route path="monthly-books/new" element={<MonthlyBookTemplateForm />} />
             <Route path="monthly-books/edit/:id" element={<MonthlyBookTemplateForm />} />
+            <Route path="audio-studio" element={<AudioStudio />} />
+            <Route path="audio-studio/:scriptId" element={<AudioStudio />} />
             <Route path="karaoke" element={<KaraokeManagement />} />
             <Route path="karaoke/new" element={<KaraokeForm />} />
             <Route path="karaoke/edit/:id" element={<KaraokeForm />} />

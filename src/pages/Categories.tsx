@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Edit, Trash2, Tag, BookOpen, Headphones, Upload } from 'lucide-react';
-import apiClient from '../services/apiClient';
+import apiClient, { getMediaUrl } from '../services/apiClient';
 
 interface Category {
     _id: string;
@@ -207,7 +207,13 @@ const Categories: React.FC = () => {
                                 <h3 className="text-xl font-bold text-white drop-shadow-md z-10">{category.name}</h3>
                                 
                                 {/* Category Image or Icon */}
-                                {category.image ? (
+                                {category.iconImage ? (
+                                    <img
+                                        src={getMediaUrl(category.iconImage)}
+                                        alt=""
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 w-14 h-14 object-contain z-10 drop-shadow"
+                                    />
+                                ) : category.image ? (
                                     <img 
                                         src={category.image} 
                                         alt={category.name}
@@ -434,45 +440,40 @@ const Categories: React.FC = () => {
                                 </div>
                             </div>
                             
-                            {/* APP PREVIEW - Full width card preview */}
+                            {/* APP PREVIEW - matches Listen library category tile */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    📱 App Preview
+                                    App Preview
                                 </label>
-                                <div className="bg-gradient-to-b from-blue-900 to-blue-800 p-4 rounded-xl">
-                                    {/* Category Card Preview */}
-                                    <div 
-                                        className="relative overflow-hidden rounded-2xl h-20"
-                                        style={{ background: `linear-gradient(to right, ${formData.gradientFrom}, ${formData.gradientTo})` }}
+                                <div className="bg-gradient-to-b from-blue-900 to-blue-800 p-4 rounded-xl flex flex-col items-center">
+                                    <div
+                                        className="relative w-28 aspect-[3/4] rounded-3xl overflow-hidden ring-[3px] ring-white shadow-lg"
+                                        style={{ backgroundColor: formData.iconImage ? '#ffffff' : '#EDF9EE' }}
                                     >
-                                        {/* Image on right side */}
-                                        {formData.image && (
-                                            <>
-                                                <img 
-                                                    src={formData.image} 
-                                                    alt="" 
-                                                    className="absolute right-0 top-0 h-full w-2/3 object-cover object-center"
-                                                />
-                                                {/* Gradient overlay - solid on left, transparent on right */}
-                                                <div 
-                                                    className="absolute inset-0"
-                                                    style={{ background: `linear-gradient(to right, ${formData.gradientFrom} 0%, ${formData.gradientFrom} 30%, transparent 70%)` }}
-                                                />
-                                            </>
-                                        )}
-                                        
-                                        {/* Category name */}
-                                        <div className="relative z-10 h-full flex items-center px-4">
-                                            <h3 className="text-white text-xl font-bold drop-shadow-lg">
-                                                {formData.name || 'Category Name'}
-                                            </h3>
-                                        </div>
-                                        
-                                        {/* Fallback icon if no image */}
-                                        {!formData.image && (
-                                            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20 text-5xl">
+                                        {formData.iconImage ? (
+                                            <img
+                                                src={getMediaUrl(formData.iconImage)}
+                                                alt=""
+                                                className="absolute left-1/2 top-[50%] -translate-x-1/2 -translate-y-1/2 w-[5.75rem] h-[5.75rem] object-contain"
+                                            />
+                                        ) : formData.image ? (
+                                            <img
+                                                src={getMediaUrl(formData.image)}
+                                                alt=""
+                                                className="absolute inset-x-0 bottom-0 h-[72%] w-full object-cover"
+                                            />
+                                        ) : (
+                                            <span className="absolute left-1/2 top-[52%] -translate-x-1/2 -translate-y-1/2 text-4xl opacity-80">
                                                 {formData.icon || '📚'}
-                                            </div>
+                                            </span>
+                                        )}
+                                        <span className="absolute top-2 inset-x-1.5 text-center font-bold text-[13px] leading-tight text-[#173a5e]">
+                                            {formData.name || 'Category Name'}
+                                        </span>
+                                        {formData.contentType === 'Audio' && (
+                                            <span className="absolute bottom-2 left-1/2 -translate-x-1/2 w-9 h-9 rounded-full bg-white flex items-center justify-center shadow">
+                                                <Headphones size={17} className="text-[#2563eb]" />
+                                            </span>
                                         )}
                                     </div>
                                     <p className="text-white/50 text-xs text-center mt-2">This is how it will appear in the app</p>
@@ -485,13 +486,13 @@ const Categories: React.FC = () => {
                                     Icon Image <span className="text-gray-400 font-normal">(square, shown as the category icon in the app)</span>
                                 </label>
                                 <div className="flex gap-4 items-center">
-                                    {formData.iconImage && (
-                                        <img
-                                            src={formData.iconImage}
-                                            alt="Icon preview"
-                                            className="w-16 h-16 rounded-xl object-cover border border-gray-200"
-                                        />
-                                    )}
+                                        {formData.iconImage && (
+                                            <img
+                                                src={getMediaUrl(formData.iconImage)}
+                                                alt="Icon preview"
+                                                className="w-16 h-16 rounded-xl object-contain border border-gray-200 bg-white"
+                                            />
+                                        )}
                                     <label className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-4 cursor-pointer hover:border-indigo-500 transition-colors ${uploading === 'iconImage' ? 'opacity-50' : ''}`}>
                                         {uploading === 'iconImage' ? (
                                             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600" />

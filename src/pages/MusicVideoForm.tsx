@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Upload, Save, Video, Image as ImageIcon, Star, Lock, Unlock } from 'lucide-react';
 import apiClient, { getMediaUrl } from '../services/apiClient';
+import { gcsBrowserPutUrl } from '../utils/gcsUpload';
 
 interface MusicVideoFormData {
     title: string;
@@ -118,7 +119,7 @@ const MusicVideoForm: React.FC = () => {
             });
 
             // PUT the chunk directly to GCS. Content-Type MUST match the signed value.
-            const putRes = await fetch(data.uploadUrl, {
+            const putRes = await fetch(gcsBrowserPutUrl(data.uploadUrl), {
                 method: 'PUT',
                 headers: { 'Content-Type': contentType },
                 body: blob,
@@ -155,7 +156,7 @@ const MusicVideoForm: React.FC = () => {
             } catch (signedErr: any) {
                 // Fallback (e.g. local dev without GCS configured): route through the backend.
                 const status = signedErr?.response?.status;
-                if (status && status !== 503) throw signedErr;
+                if (status !== 503) throw signedErr;
                 console.warn('Signed-URL upload unavailable, falling back to backend upload:', signedErr?.message);
                 const fd = new FormData();
                 fd.append('file', file);
