@@ -3,7 +3,13 @@ import { DEVICE_FRAME } from '../sceneStudio/types';
 export { DEVICE_FRAME };
 
 /** Form-factor layout keys for the island main map. */
-export const MAIN_MAP_LAYOUT_KEYS = ['phone_se', 'phone', 'phone_max', 'tablet'] as const;
+export const MAIN_MAP_LAYOUT_KEYS = [
+    'phone_se',
+    'phone',
+    'phone_max',
+    'tablet',
+    'tablet_landscape',
+] as const;
 export type MainMapLayoutKey = (typeof MAIN_MAP_LAYOUT_KEYS)[number];
 
 /** @deprecated Prefer MainMapLayoutKey — kept for older SceneDevice imports. */
@@ -52,6 +58,8 @@ export const DEFAULT_MAIN_MAP_SIZE: MainMapSizeLayout = {
     phone: { w: 16, h: 12 },
     phone_max: { w: 15, h: 11 },
     tablet: { w: 14, h: 11 },
+    /** Wider, shorter frame — keep the badge close to square on iPad landscape. */
+    tablet_landscape: { w: 10, h: 14 },
 };
 
 /** Sensible clamp for main-map icon size (% of device frame). */
@@ -60,16 +68,18 @@ export const MAIN_MAP_SIZE_MAX = 32;
 
 /**
  * Fallback chain when a layout key is unset.
- * phone_max → phone → phone_se → tablet (and adjacent-first for others).
+ * phone_max → phone → phone_se → tablet, then iPad landscape.
+ * Landscape falls back to the portrait tablet placement until it is dragged.
  */
 export const MAIN_MAP_FALLBACK_CHAIN: Record<MainMapLayoutKey, MainMapLayoutKey[]> = {
-    phone_se: ['phone_se', 'phone', 'phone_max', 'tablet'],
-    phone: ['phone', 'phone_se', 'phone_max', 'tablet'],
-    phone_max: ['phone_max', 'phone', 'phone_se', 'tablet'],
-    tablet: ['tablet', 'phone_max', 'phone', 'phone_se'],
+    phone_se: ['phone_se', 'phone', 'phone_max', 'tablet', 'tablet_landscape'],
+    phone: ['phone', 'phone_se', 'phone_max', 'tablet', 'tablet_landscape'],
+    phone_max: ['phone_max', 'phone', 'phone_se', 'tablet', 'tablet_landscape'],
+    tablet: ['tablet', 'phone_max', 'phone', 'phone_se', 'tablet_landscape'],
+    tablet_landscape: ['tablet_landscape', 'tablet', 'phone_max', 'phone', 'phone_se'],
 };
 
-/** Preview chrome sizes — match ~375×667 / 390×844 / 430×932 / iPad-ish crops. */
+/** Preview chrome sizes — match ~375×667 / 390×844 / 430×932 / iPad portrait / iPad landscape. */
 export const MAIN_MAP_DEVICE_FRAME: Record<
     MainMapLayoutKey,
     { width: number; height: number; label: string; shortLabel: string; borderRadius: number }
@@ -98,9 +108,17 @@ export const MAIN_MAP_DEVICE_FRAME: Record<
     tablet: {
         width: 360,
         height: 480,
-        label: 'Tablet / iPad',
-        shortLabel: 'Tablet',
+        label: 'iPad portrait',
+        shortLabel: 'iPad portrait',
         borderRadius: 22,
+    },
+    /** iPad Air landscape logical points 1180×820, scaled to fit the editor. */
+    tablet_landscape: {
+        width: 492,
+        height: 342,
+        label: 'iPad landscape (~1180×820)',
+        shortLabel: 'iPad landscape',
+        borderRadius: 18,
     },
 };
 
@@ -108,7 +126,8 @@ export const MAIN_MAP_LAYOUT_LABELS: Record<MainMapLayoutKey, string> = {
     phone_se: 'Phone SE',
     phone: 'Phone',
     phone_max: 'Phone Max',
-    tablet: 'Tablet',
+    tablet: 'iPad portrait',
+    tablet_landscape: 'iPad landscape',
 };
 
 /** Approx. label height as % of frame (legacy chip had label inside the box). */
@@ -278,6 +297,7 @@ export function emptyMainMapPosition(): MainMapPosition {
         phone: { x: 50, y: 50 },
         phone_max: { x: 50, y: 50 },
         tablet: { x: 50, y: 50 },
+        tablet_landscape: { x: 50, y: 50 },
     };
 }
 
@@ -292,6 +312,7 @@ export function resolveAllMainMapPositions(
         phone: resolveMainMapPoint(story, 'phone', orderIndex, total),
         phone_max: resolveMainMapPoint(story, 'phone_max', orderIndex, total),
         tablet: resolveMainMapPoint(story, 'tablet', orderIndex, total),
+        tablet_landscape: resolveMainMapPoint(story, 'tablet_landscape', orderIndex, total),
     };
 }
 
@@ -301,6 +322,7 @@ export function resolveAllMainMapSizes(story: MainMapStoryMarker): MainMapSizeLa
         phone: resolveMainMapSize(story, 'phone'),
         phone_max: resolveMainMapSize(story, 'phone_max'),
         tablet: resolveMainMapSize(story, 'tablet'),
+        tablet_landscape: resolveMainMapSize(story, 'tablet_landscape'),
     };
 }
 
@@ -313,6 +335,7 @@ export function explicitPositionKeys(
         phone: hasExplicitPoint(story.mainMapPosition?.phone),
         phone_max: hasExplicitPoint(story.mainMapPosition?.phone_max),
         tablet: hasExplicitPoint(story.mainMapPosition?.tablet),
+        tablet_landscape: hasExplicitPoint(story.mainMapPosition?.tablet_landscape),
     };
 }
 
@@ -324,6 +347,7 @@ export function explicitSizeKeys(
         phone: hasExplicitSize(story.mainMapSize?.phone),
         phone_max: hasExplicitSize(story.mainMapSize?.phone_max),
         tablet: hasExplicitSize(story.mainMapSize?.tablet),
+        tablet_landscape: hasExplicitSize(story.mainMapSize?.tablet_landscape),
     };
 }
 
@@ -376,6 +400,7 @@ export function normalizeMainMapPosition(
             phone: { ...def },
             phone_max: { ...def },
             tablet: { ...def },
+            tablet_landscape: { ...def },
         };
     }
     const obj = raw as Partial<MainMapPosition>;
@@ -391,6 +416,7 @@ export function normalizeMainMapPosition(
         phone: pick('phone'),
         phone_max: pick('phone_max'),
         tablet: pick('tablet'),
+        tablet_landscape: pick('tablet_landscape'),
     };
 }
 

@@ -69,7 +69,8 @@ const DEVICE_TOGGLE: {
     { id: 'phone_se', label: 'Phone SE', Icon: Smartphone },
     { id: 'phone', label: 'Phone', Icon: Smartphone },
     { id: 'phone_max', label: 'Phone Max', Icon: Smartphone },
-    { id: 'tablet', label: 'Tablet', Icon: Tablet },
+    { id: 'tablet', label: 'iPad portrait', Icon: Tablet },
+    { id: 'tablet_landscape', label: 'iPad landscape', Icon: Tablet },
 ];
 
 function toLocalStory(
@@ -363,6 +364,7 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                             phone: resolveMainMapPoint(merged, 'phone', 0, 1),
                             phone_max: resolveMainMapPoint(merged, 'phone_max', 0, 1),
                             tablet: resolveMainMapPoint(merged, 'tablet', 0, 1),
+                            tablet_landscape: resolveMainMapPoint(merged, 'tablet_landscape', 0, 1),
                         },
                         positionExplicit: explicitPositionKeys(merged),
                         dirty: false,
@@ -626,12 +628,13 @@ const MainMapLayoutEditor: React.FC<MainMapLayoutEditorProps> = ({
                 role="note"
             >
                 <p className="font-semibold text-amber-900">
-                    Place icons for Phone SE, Phone, Phone Max, and Tablet as needed. Save. The app
-                    picks the closest layout for each device.
+                    Place icons for Phone SE, Phone, Phone Max, iPad portrait, and iPad landscape.
+                    Save. The app picks the closest layout for each screen.
                 </p>
                 <p className="text-xs text-amber-900/85 leading-relaxed">
                     Drag the crosshair (badge center) onto each green pad. Labels stay under the
-                    icon. Unset sizes fall back (Phone Max → Phone → Phone SE → Tablet). API:{' '}
+                    icon. iPad landscape uses its own placement and falls back to the portrait iPad
+                    spots until you drag them. Unset sizes fall back across the other screens. API:{' '}
                     <code className="rounded bg-amber-100/80 px-1 py-0.5 text-[11px] break-all">
                         {API_BASE_URL}
                     </code>

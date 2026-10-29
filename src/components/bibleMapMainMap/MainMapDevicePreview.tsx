@@ -121,7 +121,8 @@ const DEVICE_TOGGLE: {
     { id: 'phone_se', label: 'Phone SE', Icon: Smartphone },
     { id: 'phone', label: 'Phone', Icon: Smartphone },
     { id: 'phone_max', label: 'Phone Max', Icon: Smartphone },
-    { id: 'tablet', label: 'Tablet', Icon: Tablet },
+    { id: 'tablet', label: 'iPad portrait', Icon: Tablet },
+    { id: 'tablet_landscape', label: 'iPad landscape', Icon: Tablet },
 ];
 
 /**
@@ -154,7 +155,7 @@ const MainMapDevicePreview: React.FC<MainMapDevicePreviewProps> = ({
     const hasVideo = Boolean(videoSrc);
     const hasMap = hasVideo || Boolean(mapSrc);
     const storyCount = markers.length;
-    const isPhoneChrome = device !== 'tablet';
+    const isPhoneChrome = device !== 'tablet' && device !== 'tablet_landscape';
     const activeSrc = hasVideo ? videoSrc : mapSrc;
     const [mediaSize, setMediaSize] = useState<{ src: string; box: MediaBox } | null>(null);
     const sized = mediaSize && mediaSize.src === activeSrc ? mediaSize.box : null;

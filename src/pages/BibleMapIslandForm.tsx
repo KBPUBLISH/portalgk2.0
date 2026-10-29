@@ -972,7 +972,7 @@ const BibleMapIslandForm: React.FC = () => {
                             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-indigo-200 text-indigo-800 hover:bg-indigo-50 text-sm"
                         >
                             <MapIcon className="w-4 h-4" />
-                            Phone · tablet preview
+                            Phone · iPad preview
                         </button>
                     </div>
                 </div>

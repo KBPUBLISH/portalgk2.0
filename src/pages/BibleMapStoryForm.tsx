@@ -839,6 +839,14 @@ const BibleMapStoryForm: React.FC = () => {
                             w: story.mainMapSize?.tablet?.w ?? DEFAULT_MAIN_MAP_SIZE.tablet.w,
                             h: story.mainMapSize?.tablet?.h ?? DEFAULT_MAIN_MAP_SIZE.tablet.h,
                         },
+                        tablet_landscape: {
+                            w:
+                                story.mainMapSize?.tablet_landscape?.w ??
+                                DEFAULT_MAIN_MAP_SIZE.tablet_landscape.w,
+                            h:
+                                story.mainMapSize?.tablet_landscape?.h ??
+                                DEFAULT_MAIN_MAP_SIZE.tablet_landscape.h,
+                        },
                     },
                     sceneBgVideoUrl: story.sceneBgVideoUrl || '',
                     sceneMusicUrl: story.sceneMusicUrl || '',
