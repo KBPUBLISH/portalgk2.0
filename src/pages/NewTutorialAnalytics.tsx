@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Compass, Users, Clock, Gift, MousePointerClick, Crown, RefreshCw, AlertTriangle, Lightbulb, CheckCircle, Ship, MessageCircle, Library, CalendarDays } from 'lucide-react';
+import { Compass, Users, Clock, Gift, MousePointerClick, Crown, RefreshCw, AlertTriangle, Lightbulb, CheckCircle, Ship, MessageCircle, Library, CalendarDays, TreePalm, Repeat } from 'lucide-react';
 import apiClient from '../services/apiClient';
 
 interface FunnelStep {
@@ -49,6 +49,8 @@ interface PersonRow {
     packsStarted: number;
     boatSessions: number;
     characterTalks: number;
+    friendsVisits?: number;
+    friendsTimeMs?: number;
     booksRead: number;
     lessonsCompleted: number;
     quizzesCompleted: number;
@@ -73,7 +75,30 @@ interface Life {
         day7: RetentionSlot;
         day30: RetentionSlot;
     };
+    friends?: Friends;
     people: PersonRow[];
+}
+
+interface FriendsGroup {
+    size: number;
+    cameBack: RetentionSlot;
+    day1: RetentionSlot;
+    day7: RetentionSlot;
+}
+
+/** Friends World — the island game opened from the ship. */
+interface Friends {
+    visits: number;
+    families: number;
+    returningFamilies: number;
+    timedVisits: number;
+    totalTimeMs: number;
+    medianVisitMs: number | null;
+    longVisits: number;
+    actions: number;
+    actionMix: { source: string; label: string; count: number; families: number; top: { name: string; count: number }[] }[];
+    retention: { players: FriendsGroup; others: FriendsGroup };
+    byDay: { day: string; visits: number; families: number }[];
 }
 
 interface Study {
@@ -436,11 +461,13 @@ function LifeSection({ life }: { life: Life }) {
                 <Stat icon={CalendarDays} label="App sessions" value={life.appSessions.toLocaleString()} hint={`Lifetime sessions for the ${life.familiesActive.toLocaleString()} families active in this range`} />
             </div>
 
+            {life.friends && <FriendsWorldSection friends={life.friends} />}
+
             <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="px-6 pt-6 pb-3">
                     <h2 className="text-lg font-semibold text-gray-900">Each family</h2>
                     <p className="text-sm text-gray-500 mt-1">
-                        The {life.people.length.toLocaleString()} most recently active families. Packs, books, and sessions are already saved on the account. Boat visits and character talks fill in from the current app.
+                        The {life.people.length.toLocaleString()} most recently active families. Packs, books, and sessions are already saved on the account. Boat visits, character talks, and Friends World fill in from the current app.
                     </p>
                 </div>
                 {life.people.length === 0 ? (
@@ -459,6 +486,7 @@ function LifeSection({ life }: { life: Life }) {
                                     <th className="px-3 py-2 font-medium text-right">Packs</th>
                                     <th className="px-3 py-2 font-medium text-right">Boat</th>
                                     <th className="px-3 py-2 font-medium text-right">Talks</th>
+                                    <th className="px-3 py-2 font-medium text-right">Friends World</th>
                                     <th className="px-3 py-2 font-medium">Tutorial</th>
                                     <th className="px-6 py-2 font-medium">Plan</th>
                                 </tr>
@@ -496,6 +524,10 @@ function LifeSection({ life }: { life: Life }) {
                                         </td>
                                         <td className="px-3 py-3 text-right text-gray-900">{person.boatSessions.toLocaleString()}</td>
                                         <td className="px-3 py-3 text-right text-gray-900">{person.characterTalks.toLocaleString()}</td>
+                                        <td className="px-3 py-3 text-right text-gray-900 whitespace-nowrap">
+                                            {(person.friendsVisits || 0).toLocaleString()}
+                                            {person.friendsTimeMs ? <span className="text-xs text-gray-500"> · {formatDuration(person.friendsTimeMs)}</span> : null}
+                                        </td>
                                         <td className="px-3 py-3 text-gray-700">{person.tutorial || '—'}</td>
                                         <td className="px-6 py-3 text-gray-700 whitespace-nowrap">{PLAN_LABELS[person.plan] || person.plan}</td>
                                     </tr>
@@ -530,6 +562,115 @@ function LifeSection({ life }: { life: Life }) {
                 )}
             </section>
         </div>
+    );
+}
+
+function FriendsWorldSection({ friends }: { friends: Friends }) {
+    const { players, others } = friends.retention;
+    const peak = Math.max(1, ...friends.byDay.map((row) => row.visits));
+    const lift = (a: RetentionSlot, b: RetentionSlot) => (a.rate == null || b.rate == null ? null : a.rate - b.rate);
+    const rows: { label: string; players: RetentionSlot; others: RetentionSlot }[] = [
+        { label: 'Came back', players: players.cameBack, others: others.cameBack },
+        { label: 'Next day', players: players.day1, others: others.day1 },
+        { label: 'Day 7', players: players.day7, others: others.day7 },
+    ];
+    return (
+        <section className="space-y-4">
+            <div>
+                <h2 className="text-lg font-semibold text-gray-900">Friends World</h2>
+                <p className="text-sm text-gray-500">
+                    The island game opened from the ship. A visit starts when the island is ready and ends when the family leaves the page.
+                </p>
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <Stat icon={TreePalm} label="Visits" value={friends.visits.toLocaleString()} hint={friends.families ? `${friends.families.toLocaleString()} families` : 'Counted as families open the island'} />
+                <Stat icon={Clock} label="Typical visit" value={formatDuration(friends.medianVisitMs)} hint={friends.timedVisits ? `${friends.longVisits.toLocaleString()} of ${friends.timedVisits.toLocaleString()} visits lasted 5 min or more` : 'Time shows once a visit has ended'} />
+                <Stat icon={Repeat} label="Came back to the island" value={friends.returningFamilies.toLocaleString()} hint={friends.families ? `${Math.round((friends.returningFamilies / friends.families) * 100)}% of families visited more than once` : 'Families with two or more visits'} />
+                <Stat icon={MousePointerClick} label="Things they did" value={friends.actions.toLocaleString()} hint={`${formatDuration(friends.totalTimeMs)} on the island in total`} />
+            </div>
+
+            <div className="grid lg:grid-cols-2 gap-4">
+                <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
+                    <h3 className="font-semibold text-gray-900 mb-1">Is it working for retention?</h3>
+                    <p className="text-sm text-gray-500 mb-4">
+                        New families in this range, split by whether they played Friends World ({players.size.toLocaleString()} played · {others.size.toLocaleString()} did not).
+                    </p>
+                    {players.size === 0 && others.size === 0 ? (
+                        <p className="text-sm text-gray-400">No new families in this range yet.</p>
+                    ) : (
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="text-left text-gray-500 border-b border-gray-100">
+                                    <th className="py-2 font-medium">Still active</th>
+                                    <th className="py-2 font-medium text-right">Played</th>
+                                    <th className="py-2 font-medium text-right">Did not</th>
+                                    <th className="py-2 font-medium text-right">Lift</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {rows.map((row) => {
+                                    const delta = lift(row.players, row.others);
+                                    return (
+                                        <tr key={row.label} className="border-b border-gray-50">
+                                            <td className="py-2 text-gray-700">{row.label}</td>
+                                            <td className="py-2 text-right text-gray-900" title={`${row.players.retained} of ${row.players.eligible}`}>{row.players.rate == null ? '—' : `${row.players.rate}%`}</td>
+                                            <td className="py-2 text-right text-gray-900" title={`${row.others.retained} of ${row.others.eligible}`}>{row.others.rate == null ? '—' : `${row.others.rate}%`}</td>
+                                            <td className={`py-2 text-right font-semibold ${delta == null ? 'text-gray-400' : delta > 0 ? 'text-emerald-600' : delta < 0 ? 'text-rose-600' : 'text-gray-500'}`}>
+                                                {delta == null ? '—' : `${delta > 0 ? '+' : ''}${delta} pts`}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    )}
+                    {players.size > 0 && players.size < 20 && (
+                        <p className="text-xs text-gray-400 mt-3">Fewer than 20 players so far; treat the lift as a hint, not a result.</p>
+                    )}
+                </div>
+
+                <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
+                    <h3 className="font-semibold text-gray-900 mb-1">What they do there</h3>
+                    <p className="text-sm text-gray-500 mb-4">Each action once, with the friends it involved most.</p>
+                    {friends.actionMix.every((row) => row.count === 0) ? (
+                        <p className="text-sm text-gray-400">Actions show up as children drop friends off, play as them, and talk to them.</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {friends.actionMix.filter((row) => row.count > 0).map((row) => (
+                                <div key={row.source} className="text-sm">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <span className="font-medium text-gray-800">{row.label}</span>
+                                        <span className="text-gray-500 whitespace-nowrap">{row.count.toLocaleString()} · {row.families.toLocaleString()} {row.families === 1 ? 'family' : 'families'}</span>
+                                    </div>
+                                    {row.top.length > 0 && (
+                                        <p className="text-xs text-gray-500 mt-0.5">
+                                            {row.top.map((item) => `${item.name} ${item.count}`).join(' · ')}
+                                        </p>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {friends.byDay.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
+                    <h3 className="font-semibold text-gray-900 mb-3">Visits by day</h3>
+                    <div className="flex items-end gap-1 h-24">
+                        {friends.byDay.map((row) => (
+                            <div key={row.day} className="flex-1 flex flex-col items-center justify-end h-full" title={`${row.day}: ${row.visits} visits from ${row.families} families`}>
+                                <div className="w-full rounded-t bg-gradient-to-t from-emerald-500 to-emerald-400" style={{ height: `${Math.max(4, (row.visits / peak) * 100)}%` }} />
+                            </div>
+                        ))}
+                    </div>
+                    <div className="flex justify-between text-xs text-gray-400 mt-2">
+                        <span>{friends.byDay[0].day}</span>
+                        <span>{friends.byDay[friends.byDay.length - 1].day}</span>
+                    </div>
+                </div>
+            )}
+        </section>
     );
 }
 
