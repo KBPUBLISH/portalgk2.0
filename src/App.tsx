@@ -41,6 +41,7 @@ import RadioLibrary from './pages/RadioLibrary';
 import RadioShowBuilder from './pages/RadioShowBuilder';
 import RadioPreviewPage from './pages/RadioPreviewPage';
 import EmailSubscribers from './pages/EmailSubscribers';
+import FamilyTest from './pages/FamilyTest';
 import Campaigns from './pages/Campaigns';
 import CampaignForm from './pages/CampaignForm';
 import CampaignUpdates from './pages/CampaignUpdates';
@@ -160,6 +161,7 @@ function App() {
             <Route path="radio/show-builder" element={<RadioShowBuilder />} />
             <Route path="radio/preview" element={<RadioPreviewPage />} />
             <Route path="email-subscribers" element={<EmailSubscribers />} />
+            <Route path="family-test" element={<FamilyTest />} />
             <Route path="offer-claims" element={<OfferClaims />} />
             <Route path="campaigns" element={<Campaigns />} />
             <Route path="campaigns/new" element={<CampaignForm />} />

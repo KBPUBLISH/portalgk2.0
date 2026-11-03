@@ -67,6 +67,7 @@ const navSections: NavSection[] = [
         items: [
             { path: '/notifications', icon: Bell, label: 'Notifications' },
             { path: '/email-subscribers', icon: Mail, label: 'Email Subscribers' },
+            { path: '/family-test', icon: Users, label: 'Family test' },
             { path: '/offer-claims', icon: Gift, label: 'Offer Claims' },
             { path: '/campaigns', icon: Heart, label: 'Giving Campaigns' },
         ],
