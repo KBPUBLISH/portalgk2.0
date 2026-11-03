@@ -177,7 +177,7 @@ const FamilyTest: React.FC = () => {
               <th className="px-4 py-3 font-medium">Sessions</th>
               <th className="px-4 py-3 font-medium">Time</th>
               <th className="px-4 py-3 font-medium">Last active</th>
-              <th className="px-4 py-3 font-medium">Lifetime access</th>
+              <th className="px-4 py-3 font-medium">Free until</th>
             </tr>
           </thead>
           <tbody>
@@ -200,7 +200,7 @@ const FamilyTest: React.FC = () => {
                     <td className="px-4 py-3 text-gray-700">{usage?.sessions || 0}</td>
                     <td className="px-4 py-3 text-gray-700">{formatDuration(usage?.timeSpentSeconds)}</td>
                     <td className="px-4 py-3 text-gray-600">{formatDate(usage?.lastActiveAt)}</td>
-                    <td className="px-4 py-3 text-gray-600">{family.grantedAt ? formatDate(family.grantedAt) : 'Not yet'}</td>
+                    <td className="px-4 py-3 text-gray-600">{family.grantedAt ? formatDate(new Date(new Date(family.grantedAt).getTime() + 365 * 24 * 60 * 60 * 1000).toISOString()) : 'Not yet'}</td>
                   </tr>
                   {open && (
                     <tr className="border-t border-gray-100 bg-gray-50">
