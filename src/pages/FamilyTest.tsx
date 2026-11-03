@@ -33,6 +33,15 @@ interface FamilyUsage {
   recent: RecentVisit[];
 }
 
+interface FeedbackResponse {
+  hiccups?: string;
+  favorites?: string;
+  dislikes?: string;
+  library?: string;
+  island?: string;
+  submittedAt?: string;
+}
+
 interface FamilySignup {
   _id: string;
   email: string;
@@ -42,6 +51,7 @@ interface FamilySignup {
   grantedAt?: string;
   revenueCatGranted?: boolean;
   usage?: FamilyUsage | null;
+  feedbackResponses?: FeedbackResponse[];
 }
 
 const FamilyTest: React.FC = () => {
@@ -178,17 +188,28 @@ const FamilyTest: React.FC = () => {
               <th className="px-4 py-3 font-medium">Time</th>
               <th className="px-4 py-3 font-medium">Last active</th>
               <th className="px-4 py-3 font-medium">Free until</th>
+              <th className="px-4 py-3 font-medium">Survey</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td className="px-4 py-8 text-gray-500" colSpan={6}>Loading…</td></tr>
+              <tr><td className="px-4 py-8 text-gray-500" colSpan={7}>Loading…</td></tr>
             ) : families.length === 0 ? (
-              <tr><td className="px-4 py-8 text-gray-500" colSpan={6}>No families yet.</td></tr>
+              <tr><td className="px-4 py-8 text-gray-500" colSpan={7}>No families yet.</td></tr>
             ) : families.map((family) => {
               const usage = family.usage;
               const open = openId === family._id;
               const longest = usage?.pages?.[0]?.seconds || 1;
+              const feedback = family.feedbackResponses?.length
+                ? family.feedbackResponses[family.feedbackResponses.length - 1]
+                : null;
+              const answers = feedback ? [
+                ['Signup hiccups', feedback.hiccups],
+                ['Favorite things', feedback.favorites],
+                ['Do not care for', feedback.dislikes],
+                ['Library', feedback.library],
+                ['Island builder', feedback.island],
+              ] : [];
               return (
                 <React.Fragment key={family._id}>
                   <tr
@@ -201,10 +222,11 @@ const FamilyTest: React.FC = () => {
                     <td className="px-4 py-3 text-gray-700">{formatDuration(usage?.timeSpentSeconds)}</td>
                     <td className="px-4 py-3 text-gray-600">{formatDate(usage?.lastActiveAt)}</td>
                     <td className="px-4 py-3 text-gray-600">{family.grantedAt ? formatDate(new Date(new Date(family.grantedAt).getTime() + 365 * 24 * 60 * 60 * 1000).toISOString()) : 'Not yet'}</td>
+                    <td className="px-4 py-3 text-gray-700">{feedback ? formatDate(feedback.submittedAt) : '—'}</td>
                   </tr>
                   {open && (
                     <tr className="border-t border-gray-100 bg-gray-50">
-                      <td className="px-4 py-4" colSpan={6}>
+                      <td className="px-4 py-4" colSpan={7}>
                         <div className="grid md:grid-cols-3 gap-4">
                           <div>
                             <p className="text-sm font-medium text-gray-900 mb-2">What they did</p>
@@ -249,6 +271,21 @@ const FamilyTest: React.FC = () => {
                               <p className="text-sm text-gray-500">Nothing recorded yet.</p>
                             )}
                           </div>
+                        </div>
+                        <div className="mt-5">
+                          <p className="text-sm font-medium text-gray-900 mb-2">Survey answers</p>
+                          {feedback ? (
+                            <div className="space-y-3">
+                              {answers.map(([label, value]) => (
+                                <div key={label}>
+                                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
+                                  <p className="text-sm text-gray-800 whitespace-pre-wrap">{value || '—'}</p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-gray-500">No survey yet.</p>
+                          )}
                         </div>
                       </td>
                     </tr>
