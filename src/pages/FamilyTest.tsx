@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Download, RefreshCw, Users } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'https://backendgk2-0.onrender.com';
+const API_URL = (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'https://backendgk2-0.onrender.com').replace(/\/+$/, '').replace(/\/api$/, '');
 
 interface PageTime {
   path: string;
@@ -19,6 +19,7 @@ interface RecentVisit {
 }
 
 interface FamilyUsage {
+  matchedAccount?: boolean;
   sessions: number;
   timeSpentSeconds: number;
   pageTimeSeconds: number;
@@ -60,6 +61,32 @@ const FamilyTest: React.FC = () => {
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [detailLoading, setDetailLoading] = useState<Record<string, boolean>>({});
+  const [detailErrors, setDetailErrors] = useState<Record<string, string>>({});
+
+  const fetchFamilyUsage = async (id: string) => {
+    setDetailLoading((current) => ({ ...current, [id]: true }));
+    setDetailErrors((current) => ({ ...current, [id]: '' }));
+    try {
+      const token = localStorage.getItem('portal_admin_token');
+      const response = await axios.get(`${API_URL}/api/beta-families/${encodeURIComponent(id)}/usage`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.data.usage) throw new Error('No analytics returned');
+      setFamilies((current) => current.map((family) => family._id === id
+        ? { ...family, usage: response.data.usage } : family));
+    } catch {
+      setDetailErrors((current) => ({ ...current, [id]: 'Could not refresh this family’s analytics. Any totals below are from the last successful load.' }));
+    } finally {
+      setDetailLoading((current) => ({ ...current, [id]: false }));
+    }
+  };
+
+  const toggleFamily = (id: string) => {
+    const opening = openId !== id;
+    setOpenId(opening ? id : null);
+    if (opening) void fetchFamilyUsage(id);
+  };
 
   const fetchFamilies = async () => {
     setLoading(true);
@@ -214,9 +241,15 @@ const FamilyTest: React.FC = () => {
                 <React.Fragment key={family._id}>
                   <tr
                     className="border-t border-gray-100 cursor-pointer hover:bg-gray-50"
-                    onClick={() => setOpenId(open ? null : family._id)}
+                    onClick={() => toggleFamily(family._id)}
                   >
-                    <td className="px-4 py-3 font-medium text-gray-900">{family.parentName}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900">
+                      <button type="button" className="text-left text-indigo-700 underline decoration-indigo-200 underline-offset-4"
+                        aria-expanded={open} aria-controls={`family-activity-${family._id}`}
+                        onClick={(event) => { event.stopPropagation(); toggleFamily(family._id); }}>
+                        {family.parentName} <span className="text-xs">{open ? '▾ Hide activity' : '▸ View activity'}</span>
+                      </button>
+                    </td>
                     <td className="px-4 py-3 text-gray-700">{family.email}</td>
                     <td className="px-4 py-3 text-gray-700">{usage?.sessions || 0}</td>
                     <td className="px-4 py-3 text-gray-700">{formatDuration(usage?.timeSpentSeconds)}</td>
@@ -226,16 +259,28 @@ const FamilyTest: React.FC = () => {
                   </tr>
                   {open && (
                     <tr className="border-t border-gray-100 bg-gray-50">
-                      <td className="px-4 py-4" colSpan={7}>
+                      <td className="px-4 py-4" colSpan={7} id={`family-activity-${family._id}`}>
+                        {detailLoading[family._id] && <p role="status" className="mb-3 text-sm text-indigo-700">Loading family analytics…</p>}
+                        {detailErrors[family._id] && <div role="alert" className="mb-3 text-sm text-red-700">
+                          {detailErrors[family._id]} <button type="button" className="underline" onClick={() => fetchFamilyUsage(family._id)}>Retry</button>
+                        </div>}
+                        {!usage && !detailLoading[family._id] && <p className="mb-3 text-sm text-amber-800">Analytics are unavailable for this family. Missing data does not mean they have not used the app.</p>}
+                        {usage?.matchedAccount === false && !usage.pages?.length && <p className="mb-3 text-sm text-amber-800">No app activity is linked to this invitation email yet. The family needs to sign in with this same email for their activity to appear here.</p>}
+                        <div className="mb-4 flex flex-wrap gap-4 text-sm text-gray-700">
+                          <span><strong>{usage ? usage.sessions : '—'}</strong> sessions</span>
+                          <span><strong>{formatDuration(usage?.timeSpentSeconds)}</strong> in app</span>
+                          <span>Last active: <strong>{formatDate(usage?.lastActiveAt)}</strong></span>
+                          {usage?.farthestPage && <span>Last reported page: <strong>{usage.farthestPage}</strong></span>}
+                        </div>
                         <div className="grid md:grid-cols-3 gap-4">
                           <div>
                             <p className="text-sm font-medium text-gray-900 mb-2">What they did</p>
                             <ul className="text-sm text-gray-700 space-y-1">
-                              <li>{usage?.booksRead || 0} books</li>
-                              <li>{usage?.pagesRead || 0} book pages</li>
-                              <li>{usage?.songsPlayed || 0} songs</li>
-                              <li>{usage?.gamesPlayed || 0} games</li>
-                              <li>{usage?.lessonsCompleted || 0} lessons</li>
+                              <li>{usage ? usage.booksRead : '—'} books</li>
+                              <li>{usage ? usage.pagesRead : '—'} book pages</li>
+                              <li>{usage ? usage.songsPlayed : '—'} songs</li>
+                              <li>{usage ? usage.gamesPlayed : '—'} games</li>
+                              <li>{usage ? usage.lessonsCompleted : '—'} lessons</li>
                             </ul>
                           </div>
                           <div>
@@ -254,7 +299,7 @@ const FamilyTest: React.FC = () => {
                                 </div>
                               </div>
                             )) : (
-                              <p className="text-sm text-gray-500">No page times yet. They appear after the family uses the updated app.</p>
+                              <p className="text-sm text-gray-500">No page timing has been recorded yet. Timing starts when the family opens the updated app while signed in; earlier page durations cannot be reconstructed.</p>
                             )}
                           </div>
                           <div>
