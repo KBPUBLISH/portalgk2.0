@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Compass, Users, Clock, Gift, MousePointerClick, Crown, RefreshCw, AlertTriangle, Lightbulb, CheckCircle, Ship, MessageCircle, Library, CalendarDays, TreePalm, Repeat } from 'lucide-react';
+import { Compass, Users, Clock, Gift, MousePointerClick, Crown, RefreshCw, ArrowRight, CheckCircle, Ship, MessageCircle, Library, CalendarDays, TreePalm, Repeat } from 'lucide-react';
 import apiClient from '../services/apiClient';
 
 interface FunnelStep {
@@ -13,19 +13,6 @@ interface FunnelStep {
     reachedPrevious: number;
     dropFromPrevious: number;
     dropRate: number;
-}
-
-interface Dropoff {
-    from: string;
-    to: string;
-    dropped: number;
-    dropRate: number;
-}
-
-interface Suggestion {
-    severity: 'high' | 'medium' | 'good' | 'info';
-    title: string;
-    detail: string;
 }
 
 interface RetentionSlot {
@@ -103,50 +90,24 @@ interface Friends {
 
 interface Study {
     success: boolean;
-    narrative: string;
+    flowVersion: string;
+    generatedAt: string;
     summary: {
-        started: number;
-        sessions: number;
-        medianEngagedMs: number | null;
-        avgEngagedMs: number | null;
-        reachedOffer: number;
-        offerRate: number;
-        paywallShown: number;
-        paywallClicked: number;
-        paywallDismissed: number;
-        trialsStarted: number;
-        clickRate: number;
-        trialOfClicksRate: number;
-        trialOfStartersRate: number;
-        paywallBeforeOffer: number;
-        challengeViews: number;
+        journeys: number; tutorialStarted: number; parentStarted: number; paywall: number;
+        accountCreated: number; checkout: number; confirmed: number; trials: number; paid: number;
+        converted: number; trialCancelled: number; completion: number; continued: number;
+        checkoutConversion: number; paywallConversion: number; sandboxJourneys: number;
+        sandboxConfirmed: number; resumed: number;
     };
-    funnel: FunnelStep[];
-    dropoffs: Dropoff[];
-    offerScreens: FunnelStep[];
-    paywallSources: { source: string; count: number }[];
-    suggestions: Suggestion[];
-    dailyTrends: { date: string; started: number; trials: number }[];
+    funnel: FunnelStep[]; childFunnel: FunnelStep[]; dropoffs: FunnelStep[];
+    screens: { screen: string; views: number; continues: number; backs: number; medianActiveMs: number | null }[];
+    plans: { plan: string; checkout: number; confirmed: number; rate: number }[];
+    diagnostics: { key: string; label: string; journeys: number; events: number }[];
+    dailyTrends: { date: string; started: number; trials: number; paid: number }[];
     life?: Life;
 }
-
-const PLAN_LABELS: Record<string, string> = {
-    free: 'Free',
-    trial: 'Trial',
-    active: 'Member',
-    cancelled: 'Cancelled',
-    expired: 'Expired',
-    reverse_trial: 'Reverse trial',
-};
-
-const SOURCE_LABELS: Record<string, string> = {
-    'adam-offer': 'End of Adam’s tour',
-    'skip-tour': 'Skipped the tour',
-    'continue-journey': 'Tapped something locked',
-    challenge: 'Challenge offer',
-    library: 'Library paywall',
-    paywall: 'Paywall',
-};
+const PLAN_LABELS: Record<string, string> = { free: 'Free', trial: 'Trial', active: 'Member', cancelled: 'Cancelled', expired: 'Expired', reverse_trial: 'Reverse trial' };
+const SCREEN_LABELS: Record<string, string> = { badge: 'Adventure badge', handoff: 'Hey, Parents', why: 'Why a Bible game?', stories: 'Bible stories', world: 'Build a community', library: 'Content library', family: 'Family membership', reminder: 'Trial reminder', account: 'Create account', paywall: 'Paywall' };
 
 function formatDuration(ms: number | null | undefined): string {
     if (ms == null || !Number.isFinite(ms)) return '—';
@@ -182,242 +143,72 @@ function formatDay(iso: string): string {
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
-const suggestionStyle: Record<Suggestion['severity'], string> = {
-    high: 'border-red-200 bg-red-50',
-    medium: 'border-amber-200 bg-amber-50',
-    good: 'border-green-200 bg-green-50',
-    info: 'border-sky-200 bg-sky-50',
-};
-
 const NewTutorialAnalytics: React.FC = () => {
     const [days, setDays] = useState(30);
+    const [platform, setPlatform] = useState('all');
+    const [entry, setEntry] = useState('all');
     const [study, setStudy] = useState<Study | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-
-    const load = async (windowDays: number) => {
-        setLoading(true);
-        setError(null);
-        try {
-            const res = await apiClient.get(`/api/analytics/journey?days=${windowDays}`);
-            if (!res.data?.success) {
-                setError(res.data?.message || 'The new tutorial study could not be loaded.');
-                setStudy(null);
-                return;
-            }
-            setStudy(res.data);
-        } catch (err: any) {
-            const status = err?.response?.status;
-            setError(status === 404
-                ? 'The server does not have this report yet. Deploy the backend, then this page fills in as families go through the new tutorial.'
-                : (err?.response?.data?.message || 'The new tutorial study could not be loaded.'));
-            setStudy(null);
-        } finally {
-            setLoading(false);
-        }
-    };
-
+    const [refresh, setRefresh] = useState(0);
     useEffect(() => {
-        load(days);
-    }, [days]);
-
+        const controller = new AbortController();
+        setLoading(true); setError(null); setStudy(null);
+        apiClient.get(`/api/analytics/journey?flow=parent_white_v1&days=${days}&platform=${platform}&entry=${entry}`, { signal: controller.signal })
+            .then(res => {
+                if (res.data?.flowVersion !== 'parent_white_v1') throw new Error('The updated tutorial report is not available yet.');
+                if (!controller.signal.aborted) setStudy(res.data);
+            }).catch(err => { if (!controller.signal.aborted) setError(err?.response?.data?.message || err.message || 'Could not load this report.'); })
+            .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+        return () => controller.abort();
+    }, [days, platform, entry, refresh]);
     const summary = study?.summary;
-    const maxDaily = study ? Math.max(...study.dailyTrends.map((day) => day.started), 1) : 1;
-
-    return (
-        <div className="space-y-6">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                        <Compass className="w-6 h-6 text-indigo-600" />
-                        New Tutorial
-                    </h1>
-                    <p className="text-gray-600 mt-1 max-w-2xl">
-                        Perry’s first voyage, then what families do afterward: who comes back, which story packs they finish, time on the boat, and talks with the crew.
-                    </p>
-                </div>
-                <div className="flex items-center gap-3">
-                    <select
-                        value={days}
-                        onChange={(event) => setDays(parseInt(event.target.value, 10))}
-                        className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    >
-                        <option value={7}>Last 7 days</option>
-                        <option value={14}>Last 14 days</option>
-                        <option value={30}>Last 30 days</option>
-                        <option value={90}>Last 90 days</option>
-                    </select>
-                    <button
-                        type="button"
-                        onClick={() => load(days)}
-                        className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
-                        aria-label="Refresh"
-                    >
-                        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                    </button>
-                </div>
+    return <div className="space-y-6 pb-8">
+        <header className="flex flex-wrap justify-between gap-5">
+            <div><p className="text-xs uppercase tracking-widest font-semibold text-indigo-600 mb-2">Tutorial → parent introduction → membership</p>
+                <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><Compass className="w-6 h-6 text-indigo-600" />New Tutorial</h1>
+                <p className="text-gray-600 mt-2 max-w-2xl">Follow the white parent flow from Adam’s arrival to a confirmed family membership. Find the step that needs attention.</p>
             </div>
-
-            {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
-                    {error}
-                </div>
-            )}
-
-            {loading && !study && (
-                <div className="bg-white rounded-xl border border-gray-100 p-10 text-center text-gray-500">
-                    Gathering the new tutorial…
-                </div>
-            )}
-
-            {study && summary && (
-                <>
-                    <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-5 py-4 text-indigo-950 leading-relaxed">
-                        {study.narrative}
-                    </div>
-
-                    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-                        <Stat icon={Users} label="Started" value={summary.started.toLocaleString()} />
-                        <Stat icon={Clock} label="Median time" value={formatDuration(summary.medianEngagedMs)} hint={summary.avgEngagedMs != null ? `Avg ${formatDuration(summary.avgEngagedMs)}` : undefined} />
-                        <Stat icon={Gift} label="Saw the offer" value={summary.reachedOffer.toLocaleString()} hint={`${summary.offerRate}% of starters`} />
-                        <Stat icon={MousePointerClick} label="Tapped trial" value={summary.paywallClicked.toLocaleString()} hint={`${summary.clickRate}% of paywall views`} />
-                        <Stat icon={Crown} label="Trials started" value={summary.trialsStarted.toLocaleString()} hint={`${summary.trialOfStartersRate}% of starters`} />
-                    </div>
-
-                    {study.life ? (
-                        <LifeSection life={study.life} />
-                    ) : (
-                        <p className="text-sm text-gray-500">
-                            Retention, story packs, boat sessions, and each family’s progress appear after this backend update is deployed.
-                        </p>
-                    )}
-
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 text-sm">
-                        <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-                            <p className="text-gray-500">Any paywall view</p>
-                            <p className="text-xl font-bold text-gray-900 mt-1">{summary.paywallShown.toLocaleString()}</p>
-                            <p className="text-gray-500 mt-1">{summary.paywallBeforeOffer.toLocaleString()} saw a paywall before the end-of-tour offer</p>
-                        </div>
-                        <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-                            <p className="text-gray-500">Left the offer</p>
-                            <p className="text-xl font-bold text-gray-900 mt-1">{summary.paywallDismissed.toLocaleString()}</p>
-                            <p className="text-gray-500 mt-1">{summary.trialOfClicksRate}% of trial taps became a trial</p>
-                        </div>
-                        <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-                            <p className="text-gray-500">Where the paywall first appeared</p>
-                            <div className="mt-2 space-y-1">
-                                {study.paywallSources.length === 0 && <p className="text-gray-400">No paywall views yet</p>}
-                                {study.paywallSources.map((row) => (
-                                    <div key={row.source} className="flex justify-between gap-3">
-                                        <span className="text-gray-700">{SOURCE_LABELS[row.source] || row.source}</span>
-                                        <span className="font-semibold text-gray-900">{row.count}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-
-                    <section className="space-y-3">
-                        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                            <Lightbulb className="w-5 h-5 text-amber-500" />
-                            What to improve
-                        </h2>
-                        <div className="space-y-3">
-                            {study.suggestions.map((item) => (
-                                <div key={item.title} className={`rounded-xl border px-4 py-3 ${suggestionStyle[item.severity] || suggestionStyle.info}`}>
-                                    <p className="font-semibold text-gray-900 flex items-center gap-2">
-                                        {item.severity === 'good' ? <CheckCircle className="w-4 h-4 text-green-600" /> : <AlertTriangle className="w-4 h-4 text-amber-600" />}
-                                        {item.title}
-                                    </p>
-                                    <p className="text-sm text-gray-700 mt-1 leading-relaxed">{item.detail}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </section>
-
-                    <section className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
-                        <h2 className="text-lg font-semibold text-gray-900 mb-1">Where they drop off</h2>
-                        <p className="text-sm text-gray-500 mb-4">
-                            Time is how long families who continued spent before the next beat. A dash means too few people moved on to time it.
-                        </p>
-                        <div className="space-y-3">
-                            {study.funnel.map((step, index) => (
-                                <div key={step.stepKey}>
-                                    {index > 0 && step.dropFromPrevious > 0 && (
-                                        <p className={`text-xs mb-1 ml-8 ${step.dropRate >= 25 ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
-                                            {step.dropFromPrevious.toLocaleString()} left here ({step.dropRate}%)
-                                        </p>
-                                    )}
-                                    <FunnelRow step={step} />
-                                </div>
-                            ))}
-                        </div>
-                    </section>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        <section className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
-                            <h2 className="text-lg font-semibold text-gray-900 mb-4">Biggest leaks</h2>
-                            {study.dropoffs.length === 0 ? (
-                                <p className="text-sm text-gray-500">No drop-off yet. Everyone who started is still inside the steps we can see, or nobody has started.</p>
-                            ) : (
-                                <div className="space-y-3">
-                                    {study.dropoffs.map((drop) => (
-                                        <div key={`${drop.from}-${drop.to}`} className="flex items-center justify-between gap-3 text-sm">
-                                            <div>
-                                                <p className="font-medium text-gray-800">{drop.from} → {drop.to}</p>
-                                                <p className="text-gray-500">{drop.dropped.toLocaleString()} families left</p>
-                                            </div>
-                                            <span className={`font-bold ${drop.dropRate >= 25 ? 'text-red-600' : 'text-gray-700'}`}>{drop.dropRate}%</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </section>
-
-                        <section className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
-                            <h2 className="text-lg font-semibold text-gray-900 mb-1">Inside the offer</h2>
-                            <p className="text-sm text-gray-500 mb-4">
-                                The four screens after Adam’s tour, plus anyone who opened that same offer by tapping a lock.
-                                {summary.challengeViews > 0 ? ` ${summary.challengeViews.toLocaleString()} families opened it.` : ''}
-                            </p>
-                            <div className="space-y-3">
-                                {study.offerScreens.map((step) => (
-                                    <FunnelRow key={step.stepKey} step={step} />
-                                ))}
-                            </div>
-                        </section>
-                    </div>
-
-                    <section className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
-                        <h2 className="text-lg font-semibold text-gray-900 mb-4">Starts and trials by day</h2>
-                        <div className="flex items-end gap-2 h-36">
-                            {study.dailyTrends.map((day) => (
-                                <div key={day.date} className="flex-1 flex flex-col items-center justify-end h-full gap-1">
-                                    <div className="w-full flex items-end justify-center gap-0.5 h-24">
-                                        <div
-                                            className="w-2 rounded-t bg-indigo-500"
-                                            style={{ height: `${Math.max(4, (day.started / maxDaily) * 100)}%` }}
-                                            title={`${day.started} started`}
-                                        />
-                                        <div
-                                            className="w-2 rounded-t bg-emerald-500"
-                                            style={{ height: `${Math.max(day.trials ? 4 : 0, (day.trials / maxDaily) * 100)}%` }}
-                                            title={`${day.trials} trials`}
-                                        />
-                                    </div>
-                                    <span className="text-[10px] text-gray-400">{formatDay(day.date)}</span>
-                                </div>
-                            ))}
-                        </div>
-                        <div className="flex gap-4 mt-3 text-xs text-gray-500">
-                            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-indigo-500" /> Started</span>
-                            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500" /> Trials</span>
-                        </div>
-                    </section>
-                </>
-            )}
+            <div className="flex flex-wrap items-start gap-2">
+                <label className="text-xs text-gray-500">Cohort window<select aria-label="Cohort window" className="block mt-1 border rounded-lg p-2 bg-white text-gray-800" value={days} onChange={e => setDays(Number(e.target.value))}>{[1, 7, 14, 30, 90].map(n => <option key={n} value={n}>Last {n} {n === 1 ? 'day' : 'days'}</option>)}</select></label>
+                <label className="text-xs text-gray-500">Platform<select aria-label="Platform" className="block mt-1 border rounded-lg p-2 bg-white text-gray-800" value={platform} onChange={e => setPlatform(e.target.value)}><option value="all">All platforms</option><option value="android">Android</option><option value="ios">iOS</option><option value="web">Web</option></select></label>
+                <label className="text-xs text-gray-500">Parent entry<select aria-label="Parent entry" className="block mt-1 border rounded-lg p-2 bg-white text-gray-800" value={entry} onChange={e => setEntry(e.target.value)}><option value="all">All entries</option><option value="tour">Badge / handoff</option><option value="resumed">Reopened / direct</option></select></label>
+                <button aria-label="Refresh report" onClick={() => setRefresh(n => n + 1)} disabled={loading} className="mt-5 p-2 border rounded-lg bg-white"><RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} /></button>
+            </div>
+        </header>
+        <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-5 py-4 text-sm text-indigo-950 leading-relaxed">
+            <strong>Current flow only.</strong> Old free-book and discount-offer events are excluded. Counts are unique device journeys, carried through sign-in and reopening. A checkout tap is not a trial: conversions require a verified billing webhook. Test purchases are separated below.
         </div>
-    );
+        {error && <div role="alert" className="p-5 border border-red-200 bg-red-50 rounded-xl text-red-800">{error}<button className="ml-4 underline" onClick={() => setRefresh(n => n + 1)}>Try again</button></div>}
+        {loading && <div role="status" className="p-10 text-center text-gray-500">Loading the current journey…</div>}
+        {study && summary && <>
+            {summary.journeys === 0 && <section className="p-6 border border-dashed border-indigo-200 bg-white rounded-xl"><h2 className="font-semibold text-gray-900">Ready for the first new journeys</h2><p className="mt-2 text-sm text-gray-600">Tracking starts with this release. Existing tutorial history is preserved, but it won’t be presented as data from this new flow.</p></section>}
+            <div className="grid grid-cols-2 xl:grid-cols-6 gap-3">
+                <Stat icon={Users} label="Parent entries" value={String(summary.parentStarted)} hint={`${summary.resumed} reopened / direct`} />
+                <Stat icon={Gift} label="Paywall reached" value={String(summary.paywall)} />
+                <Stat icon={MousePointerClick} label="Checkout requested" value={String(summary.checkout)} />
+                <Stat icon={Crown} label="Confirmed trials" value={String(summary.trials)} hint="Verified store receipt" />
+                <Stat icon={CheckCircle} label="Paid starts" value={String(summary.paid)} hint="Started without a trial" />
+                <Stat icon={ArrowRight} label="Paywall conversion" value={`${summary.paywallConversion}%`} hint={`${summary.confirmed} confirmed memberships`} />
+            </div>
+            <section className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm">
+                <div className="flex flex-wrap justify-between items-start gap-3 mb-5"><div><h2 className="text-lg font-semibold text-gray-900">The parent journey</h2><p className="text-sm text-gray-500 mt-1">Observed reach, as a percentage of parent entries. Reopened journeys may skip earlier screens.</p></div><span className="text-xs rounded-full bg-indigo-50 px-3 py-2 text-indigo-700">{summary.checkoutConversion}% of checkouts confirmed</span></div>
+                <div className="space-y-3">{study.funnel.map(step => <FunnelRow key={step.stepKey} step={step} />)}</div>
+                <p className="text-xs text-gray-500 mt-5">Right column: median elapsed time to the next observed step, among journeys reaching both. This includes time away from the app.</p>
+            </section>
+            <div className="grid lg:grid-cols-2 gap-5">
+                <section className="bg-white border rounded-xl p-5"><h2 className="text-lg font-semibold mb-2">Where to look next</h2><p className="text-sm text-gray-500 mb-4">Reached the earlier step but haven’t reached the next one. This is not a confirmed abandonment.</p>{study.dropoffs.length ? study.dropoffs.map(d => <div className="flex justify-between gap-4 py-3 border-b last:border-0 text-sm" key={d.stepKey}><span>{d.from} → {d.step}</span><strong className="shrink-0">{d.dropFromPrevious} · {d.dropRate}%</strong></div>) : <p className="text-gray-500 text-sm">No gaps recorded in this cohort yet.</p>}</section>
+                <section className="bg-white border rounded-xl p-5"><h2 className="text-lg font-semibold mb-2">Membership plans</h2><p className="text-sm text-gray-500 mb-4">A journey trying both plans appears in both checkout rows. A receipt is attributed to the latest eligible checkout.</p><table className="w-full text-sm"><thead><tr className="text-left text-gray-500 border-b"><th className="py-2">Plan</th><th>Checkouts</th><th>Confirmed</th><th>Rate</th></tr></thead><tbody>{study.plans.map(p => <tr key={p.plan} className="border-b last:border-0"><th className="text-left py-4 capitalize">{p.plan}</th><td>{p.checkout}</td><td>{p.confirmed}</td><td>{p.rate}%</td></tr>)}</tbody></table><div className="mt-5 text-sm text-gray-600">Trial → paid: <strong>{summary.converted}</strong><span className="mx-3">·</span>Trial cancellations: <strong>{summary.trialCancelled}</strong></div></section>
+            </div>
+            <section className="bg-white border rounded-xl p-5 overflow-x-auto"><h2 className="text-lg font-semibold mb-1">How parents use each screen</h2><p className="text-sm text-gray-500 mb-4">Views are unique journeys; Continue and Back are tap counts. Active time excludes background time and caps each recorded interval at five minutes.</p><table className="w-full text-sm text-left min-w-[520px]"><thead className="text-gray-500 border-b"><tr><th className="py-3">Screen</th><th>Views</th><th>Continue</th><th>Back</th><th>Median active time</th></tr></thead><tbody>{study.screens.map(row => <tr className="border-b last:border-0" key={row.screen}><th className="font-medium py-3">{SCREEN_LABELS[row.screen]}</th><td>{row.views}</td><td>{row.continues}</td><td>{row.backs}</td><td>{formatDuration(row.medianActiveMs)}</td></tr>)}</tbody></table></section>
+            <section className="bg-white border rounded-xl p-5"><h2 className="text-lg font-semibold mb-1">Checkout, return visits & completion</h2><p className="text-sm text-gray-500 mb-5">Completion-screen views show the user experience. Only the verified billing counts above measure new subscriptions.</p><div className="grid grid-cols-2 lg:grid-cols-5 gap-4">{study.diagnostics.map(d => <div className="rounded-lg bg-gray-50 p-3" key={d.key}><p className="text-xs text-gray-600">{d.label}</p><p className="text-xl font-semibold mt-1">{d.journeys}</p><p className="text-xs text-gray-500">journeys · {d.events} events</p></div>)}</div></section>
+            <details className="bg-white border rounded-xl p-5"><summary className="cursor-pointer font-semibold">Child tutorial · {summary.tutorialStarted} new starts</summary><p className="text-sm text-gray-500 my-4">The child’s route to Adam and the badge, for journeys started on this tracking version.</p><div className="space-y-3">{study.childFunnel.map(step => <FunnelRow key={step.stepKey} step={step} />)}</div></details>
+            <section className="bg-amber-50 border border-amber-200 rounded-xl p-5 flex flex-wrap justify-between gap-3"><div><h2 className="font-semibold text-amber-950">Sandbox / test purchases</h2><p className="text-sm text-amber-900 mt-1">Excluded from the conversion funnel and plan rates once a test receipt is identified.</p></div><p className="text-sm text-amber-950"><strong>{summary.sandboxJourneys}</strong> test journeys · <strong>{summary.sandboxConfirmed}</strong> confirmed test memberships</p></section>
+            <details className="bg-white border rounded-xl p-5"><summary className="cursor-pointer font-semibold">Daily parent cohorts</summary><p className="text-sm text-gray-500 my-4">UTC entry date. Later conversions remain with the original entry cohort.</p><table className="w-full text-sm text-left"><thead className="text-gray-500"><tr><th>Date</th><th>Parent entries</th><th>Trials</th><th>Paid starts</th></tr></thead><tbody>{study.dailyTrends.map(d => <tr key={d.date} className="border-t"><td className="py-3">{formatDay(d.date)}</td><td>{d.started}</td><td>{d.trials}</td><td>{d.paid}</td></tr>)}</tbody></table></details>
+            <details className="bg-gray-50 border rounded-xl p-5"><summary className="cursor-pointer font-semibold text-gray-800">Gameplay & retention · all families in the date range</summary><p className="text-sm text-gray-500 my-4">Existing activity reports are preserved. They use the date range, not the parent-flow platform or entry filters.</p>{study.life && <LifeSection life={study.life} />}</details>
+            <p className="text-xs text-gray-400">Updated {new Date(study.generatedAt).toLocaleString()} · Flow: {study.flowVersion}</p>
+        </>}
+    </div>;
 };
 
 function Stat({ icon: Icon, label, value, hint }: { icon: React.ComponentType<{ className?: string }>; label: string; value: string; hint?: string }) {
@@ -690,11 +481,11 @@ function RetentionCard({ label, slot, hint }: { label: string; slot: RetentionSl
 function FunnelRow({ step }: { step: FunnelStep }) {
     return (
         <div className="flex items-center gap-3">
-            <div className="w-44 shrink-0 text-sm font-medium text-gray-700 truncate" title={step.step}>{step.step}</div>
+            <div className="w-40 sm:w-56 shrink-0 text-xs sm:text-sm font-medium text-gray-700" title={step.step}>{step.step}</div>
             <div className="flex-1 bg-gray-100 rounded-full h-7 overflow-hidden relative">
                 <div
-                    className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-indigo-600"
-                    style={{ width: `${Math.max(step.count > 0 ? 2 : 0, step.rate)}%` }}
+                    className="h-full rounded-full bg-gradient-to-r from-indigo-200 to-indigo-300"
+                    style={{ width: `${Math.min(100, Math.max(step.count > 0 ? 2 : 0, step.rate))}%` }}
                 />
                 <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-gray-800">
                     {step.count.toLocaleString()} ({step.rate}%)
