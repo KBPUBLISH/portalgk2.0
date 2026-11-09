@@ -177,7 +177,7 @@ const NewTutorialAnalytics: React.FC = () => {
     const summary = study?.summary;
     return <div className="space-y-6 pb-8">
         <header className="flex flex-wrap justify-between gap-5">
-            <div><p className="text-xs uppercase tracking-widest font-semibold text-indigo-600 mb-2">Splash → Bible story → Adam → island → membership</p>
+            <div><p className="text-xs uppercase tracking-widest font-semibold text-indigo-600 mb-2">Splash → Perry → ship → Bible story → island → membership</p>
                 <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><Compass className="w-6 h-6 text-indigo-600" />New Tutorial</h1>
                 <p className="text-gray-600 mt-2 max-w-2xl">See how many families start the experience, finish the tutorial, and reach the new paywall. Then follow the parent flow to a confirmed membership.</p>
             </div>
