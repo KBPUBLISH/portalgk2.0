@@ -257,7 +257,7 @@ function ExperienceSection({ data }: { data: Experience }) {
             <div className="space-y-5 min-w-0">
                 <section className="bg-white border rounded-xl p-5 overflow-x-auto">
                     <h3 className="text-lg font-semibold">Maybe later vs Start Trial</h3>
-                    <p className="text-sm text-gray-500 mt-1 mb-4">First choice among {data.offerViews} early-offer viewers. The trial button says “Try 3 Days Free.”</p>
+                    <p className="text-sm text-gray-500 mt-1 mb-4">First choice among {data.offerViews} initial paywall viewers. Store checkout confirms trial eligibility.</p>
                     <table className="w-full text-sm text-left min-w-[340px]"><thead className="text-gray-500 border-b"><tr><th className="pb-2">Choice</th><th>Journeys</th><th>Island</th><th>Paywall</th></tr></thead><tbody>{data.branches.map(b => <tr className="border-b last:border-0" key={b.key}><th className="font-medium py-3">{b.label}</th><td>{b.count} <span className="text-xs text-gray-500">({b.rate}%)</span></td><td>{b.island}</td><td>{b.paywall}</td></tr>)}</tbody></table>
                     <p className="text-xs text-gray-500 mt-4">{data.trialTaps} tapped trial · {data.trialCheckouts} requested checkout · {data.changedChoice} tried both choices. These are actions, not verified subscriptions.</p>
                 </section>
