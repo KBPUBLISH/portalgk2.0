@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Book, BookOpen, Music, Layout as LayoutIcon, Home, Tag, Volume2, Gamepad2, Video, LogOut, Bell, Music2, Star, CalendarDays, BarChart3, Library, Sparkles, TrendingUp, Radio, Mail, Heart, Users, ClipboardCheck, ShoppingCart, BookHeart, Disc, Image, Mic, Map, Film, Church, AudioLines, Gift, Compass, type LucideIcon } from 'lucide-react';
+import { Book, BookOpen, Music, Layout as LayoutIcon, Home, Tag, Volume2, Gamepad2, Video, LogOut, Bell, Music2, Star, CalendarDays, BarChart3, Library, Sparkles, TrendingUp, Radio, Mail, Heart, Users, ClipboardCheck, ShoppingCart, BookHeart, Disc, Image, Mic, Map, Film, Church, AudioLines, Gift, Compass, Headphones, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 type NavItem = {
@@ -23,6 +23,7 @@ const navSections: NavSection[] = [
             { path: '/analytics', icon: BarChart3, label: 'Content Analytics' },
             { path: '/onboarding-analytics', icon: TrendingUp, label: 'Onboarding' },
             { path: '/new-tutorial', icon: Compass, label: 'New Tutorial' },
+            { path: '/series-ratings', icon: Headphones, label: 'Audio Drama Ratings' },
             { path: '/ai-insights', icon: Sparkles, label: 'AI Insights' },
         ],
     },
