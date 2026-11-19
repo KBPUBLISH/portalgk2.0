@@ -90,6 +90,7 @@ interface Friends {
 
 interface Experience {
     version: string; started: number; firstTrackedAt: string | null;
+    islandRate: number; firstHomeCompleted: number; splashNotContinued: number; splashNotContinuedRate: number;
     avatarCompleted: number; island: number; islandCompleted: number; tourCompleted: number; storyPackCompleted: number;
     parentIntro: number; parentIntroRate: number; paywall: number; paywallRate: number;
     paywallAfterExperience: number; paywallAfterExperienceRate: number;
@@ -99,13 +100,14 @@ interface Experience {
     tasks: {key: string; label: string; count: number; rate: number; remaining: number}[];
 }
 interface Study {
+    playFirstExperience?: Experience;
     experience?: Experience;
     previousExperience?: Experience;
     success: boolean;
     flowVersion: string;
     generatedAt: string;
     summary: {
-        journeys: number; tutorialStarted: number; parentStarted: number; paywall: number;
+        journeys: number; tutorialStarted: number; parentStarted: number; paywall: number; paywallOpens: number;
         accountCreated: number; checkout: number; confirmed: number; trials: number; paid: number;
         converted: number; trialCancelled: number; completion: number; continued: number;
         checkoutConversion: number; paywallConversion: number; paywallConfirmed: number; sandboxJourneys: number;
@@ -159,6 +161,7 @@ const NewTutorialAnalytics: React.FC = () => {
     const [days, setDays] = useState(30);
     const [platform, setPlatform] = useState('all');
     const [entry, setEntry] = useState('all');
+    const [experienceVersion, setExperienceVersion] = useState('play_first_v1');
     const [study, setStudy] = useState<Study | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -166,22 +169,23 @@ const NewTutorialAnalytics: React.FC = () => {
     useEffect(() => {
         const controller = new AbortController();
         setLoading(true); setError(null); setStudy(null);
-        apiClient.get(`/api/analytics/journey?flow=parent_white_v1&days=${days}&platform=${platform}&entry=${entry}`, { signal: controller.signal })
+        apiClient.get(`/api/analytics/journey?flow=parent_white_v1&days=${days}&platform=${platform}&entry=${entry}&experienceVersion=${experienceVersion}`, { signal: controller.signal })
             .then(res => {
                 if (res.data?.flowVersion !== 'parent_white_v1') throw new Error('The updated tutorial report is not available yet.');
                 if (!controller.signal.aborted) setStudy(res.data);
             }).catch(err => { if (!controller.signal.aborted) setError(err?.response?.data?.message || err.message || 'Could not load this report.'); })
             .finally(() => { if (!controller.signal.aborted) setLoading(false); });
         return () => controller.abort();
-    }, [days, platform, entry, refresh]);
+    }, [days, platform, entry, experienceVersion, refresh]);
     const summary = study?.summary;
     return <div className="space-y-6 pb-8">
         <header className="flex flex-wrap justify-between gap-5">
-            <div><p className="text-xs uppercase tracking-widest font-semibold text-indigo-600 mb-2">Splash → Perry → ship → Bible story → island → membership</p>
+            <div><p className="text-xs uppercase tracking-widest font-semibold text-indigo-600 mb-2">Splash → family setup → Bible story → build with Adam → membership</p>
                 <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><Compass className="w-6 h-6 text-indigo-600" />New Tutorial</h1>
                 <p className="text-gray-600 mt-2 max-w-2xl">See how many families start the experience, finish the tutorial, and reach the new paywall. Then follow the parent flow to a confirmed membership.</p>
             </div>
             <div className="flex flex-wrap items-start gap-2">
+                <label className="text-xs text-gray-500">Experience<select aria-label="Experience" className="block mt-1 border rounded-lg p-2 bg-white text-gray-800" value={experienceVersion} onChange={e => setExperienceVersion(e.target.value)}><option value="play_first_v1">Play first · new</option><option value="story_first_v1">Previous · story first</option><option value="island_intro_v2">Previous · island first</option><option value="all">All experiences</option></select></label>
                 <label className="text-xs text-gray-500">Cohort window<select aria-label="Cohort window" className="block mt-1 border rounded-lg p-2 bg-white text-gray-800" value={days} onChange={e => setDays(Number(e.target.value))}>{[1, 7, 14, 30, 90].map(n => <option key={n} value={n}>Last {n} {n === 1 ? 'day' : 'days'}</option>)}</select></label>
                 <label className="text-xs text-gray-500">Platform<select aria-label="Platform" className="block mt-1 border rounded-lg p-2 bg-white text-gray-800" value={platform} onChange={e => setPlatform(e.target.value)}><option value="all">All platforms</option><option value="android">Android</option><option value="ios">iOS</option><option value="web">Web</option></select></label>
                 <label className="text-xs text-gray-500">Parent entry<select aria-label="Parent entry" className="block mt-1 border rounded-lg p-2 bg-white text-gray-800" value={entry} onChange={e => setEntry(e.target.value)}><option value="all">All entries</option><option value="tour">Badge / handoff</option><option value="resumed">Reopened / direct</option></select></label>
@@ -189,18 +193,19 @@ const NewTutorialAnalytics: React.FC = () => {
             </div>
         </header>
         <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-5 py-4 text-sm text-indigo-950 leading-relaxed">
-            <strong>Current flow only.</strong> Old free-book and discount-offer events are excluded. Counts are unique device journeys, carried through sign-in and reopening. A checkout tap is not a trial: conversions require a verified billing webhook. Test purchases are separated below.
+            <strong>Selected experience only.</strong> Switch experiences to compare previous onboarding cohorts. Counts are unique device journeys, carried through sign-in and reopening. A checkout tap is not a trial: conversions require a verified billing webhook linked to the checkout. Test purchases are separated below.
         </div>
         {error && <div role="alert" className="p-5 border border-red-200 bg-red-50 rounded-xl text-red-800">{error}<button className="ml-4 underline" onClick={() => setRefresh(n => n + 1)}>Try again</button></div>}
         {loading && <div role="status" className="p-10 text-center text-gray-500">Loading the current journey…</div>}
         {study && summary && <>
             {summary.journeys === 0 && <section className="p-6 border border-dashed border-indigo-200 bg-white rounded-xl"><h2 className="font-semibold text-gray-900">Ready for the first new journeys</h2><p className="mt-2 text-sm text-gray-600">Tracking starts with this release. Existing tutorial history is preserved, but it won’t be presented as data from this new flow.</p></section>}
-            {study.experience && <ExperienceSection data={study.experience} />}
-            {study.previousExperience && <details className="bg-white border rounded-xl p-5"><summary className="cursor-pointer font-semibold">Previous island-first flow · {study.previousExperience.started} starters</summary><ExperienceSection data={study.previousExperience} /></details>}
+            {study.playFirstExperience && ['play_first_v1','all'].includes(experienceVersion) && <ExperienceSection data={study.playFirstExperience} />}
+            {study.experience && ['story_first_v1','all'].includes(experienceVersion) && <ExperienceSection data={study.experience} />}
+            {study.previousExperience && ['island_intro_v2','all'].includes(experienceVersion) && <details className="bg-white border rounded-xl p-5"><summary className="cursor-pointer font-semibold">Previous island-first flow · {study.previousExperience.started} starters</summary><ExperienceSection data={study.previousExperience} /></details>}
             <h2 className="text-xl font-semibold text-gray-900 pt-3">After the experience · parent flow</h2>
             <div className="grid grid-cols-2 xl:grid-cols-6 gap-3">
                 <Stat icon={Users} label="Parent entries" value={String(summary.parentStarted)} hint={`${summary.resumed} reopened / direct`} />
-                <Stat icon={Gift} label="Paywall reached" value={String(summary.paywall)} />
+                <Stat icon={Gift} label="Paywall reached" value={String(summary.paywall)} hint={`${summary.paywallOpens ?? 0} recorded opens, including returns`} />
                 <Stat icon={MousePointerClick} label="Checkout requested" value={String(summary.checkout)} />
                 <Stat icon={Crown} label="Confirmed trials" value={String(summary.trials)} hint="Verified store receipt" />
                 <Stat icon={CheckCircle} label="Paid starts" value={String(summary.paid)} hint="Started without a trial" />
@@ -227,26 +232,27 @@ const NewTutorialAnalytics: React.FC = () => {
 };
 
 function ExperienceSection({ data }: { data: Experience }) {
+    const playFirst=data.version==='play_first_v1';
     const storyFirst=data.version==='story_first_v1';
     return <section aria-label="Full experience funnel" className="space-y-5">
         <div className="rounded-2xl bg-slate-900 p-6 text-white">
-            <p className="text-xs uppercase tracking-widest text-sky-200 font-semibold">{storyFirst ? 'Story-first journey' : 'Previous island-first journey'}</p>
+            <p className="text-xs uppercase tracking-widest text-sky-200 font-semibold">{playFirst ? 'Play-first journey' : storyFirst ? 'Story-first journey' : 'Previous island-first journey'}</p>
             <div className="flex flex-wrap justify-between gap-6 mt-3">
                 <div><h2 className="text-2xl font-bold">How many make it to the paywall?</h2>
-                    <p className="text-slate-300 text-sm mt-2 max-w-xl">{data.paywallAfterExperience} of {data.started} starters reached the new paywall after welcoming Adam to their island.</p></div>
+                    <p className="text-slate-300 text-sm mt-2 max-w-xl">{data.paywallAfterExperience} of {data.started} starters reached the paywall {playFirst ? 'after completing their first home and returning to the ship.' : 'after welcoming Adam to their island.'}</p></div>
                 <div><strong className="text-4xl">{data.started ? `${data.paywallAfterExperienceRate}%` : '—'}</strong><p className="text-xs text-sky-200 mt-1">Splash → finished experience → paywall</p></div>
             </div>
             <p className="text-xs text-slate-300 mt-5">All paywall arrivals from this cohort: {data.paywall} ({data.paywallRate}%), including reopen shortcuts. The Parent entry filter applies to the parent report only; the platform and date filters apply here.</p>
         </div>
         <div className="grid grid-cols-2 xl:grid-cols-6 gap-3">
             <Stat icon={Users} label="Splash starters" value={String(data.started)} hint="Unique device journeys" />
-            <Stat icon={CheckCircle} label="Avatars created" value={String(data.avatarCompleted)} />
-            <Stat icon={TreePalm} label={storyFirst?"Island reached":"Island tasks done"} value={String(storyFirst?data.island:data.islandCompleted)} hint={storyFirst?"Ready-made home for Adam":`${data.island} loaded the island`} />
-            <Stat icon={Ship} label={storyFirst?"Adam welcomed":"Ship tours done"} value={String(storyFirst?data.funnel.find(s=>s.stepKey==='exp_adam_home')?.count||0:data.tourCompleted)} />
+            <Stat icon={CheckCircle} label={playFirst?"Splash not continued":"Avatars created"} value={String(playFirst?data.splashNotContinued:data.avatarCompleted)} hint={playFirst?`${data.splashNotContinuedRate}% · not reached yet`:undefined} />
+            <Stat icon={TreePalm} label={playFirst||storyFirst?"Island reached":"Island tasks done"} value={String(playFirst||storyFirst?data.island:data.islandCompleted)} hint={playFirst?`${data.islandRate}% of starters · goal 50%`:storyFirst?"Ready-made home for Adam":`${data.island} loaded the island`} />
+            <Stat icon={Ship} label={playFirst?"First homes built":storyFirst?"Adam welcomed":"Ship tours done"} value={String(playFirst?data.firstHomeCompleted:storyFirst?data.funnel.find(s=>s.stepKey==='exp_adam_home')?.count||0:data.tourCompleted)} />
             <Stat icon={Library} label="Story packs done" value={String(data.storyPackCompleted)} />
             <Stat icon={ArrowRight} label="Parent intro reached" value={String(data.parentIntro)} hint={`${data.parentIntroRate}% of splash starters`} />
         </div>
-        {!data.started && <p className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">Ready to measure new starters. Story-first tracking begins with this update. Earlier island-first results are preserved in the section below. Existing parent-flow history remains below.</p>}
+        {!data.started && <p className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">No starters recorded for this experience in the selected window. Previous experience cohorts are available in the selector above.</p>}
         <div className="grid xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] gap-5">
             <section className="bg-white border rounded-xl p-5 overflow-x-auto">
                 <h3 className="text-lg font-semibold">From first splash to the new paywall</h3>
@@ -255,14 +261,14 @@ function ExperienceSection({ data }: { data: Experience }) {
                 <p className="text-xs text-gray-500 mt-5">Right: median time to the next observed step, including time away. A missing step means “not reached yet,” not confirmed abandonment.</p>
             </section>
             <div className="space-y-5 min-w-0">
-                <section className="bg-white border rounded-xl p-5 overflow-x-auto">
+                {!playFirst && <section className="bg-white border rounded-xl p-5 overflow-x-auto">
                     <h3 className="text-lg font-semibold">Maybe later vs Start Trial</h3>
                     <p className="text-sm text-gray-500 mt-1 mb-4">First choice among {data.offerViews} initial paywall viewers. Store checkout confirms trial eligibility.</p>
                     <table className="w-full text-sm text-left min-w-[340px]"><thead className="text-gray-500 border-b"><tr><th className="pb-2">Choice</th><th>Journeys</th><th>Island</th><th>Paywall</th></tr></thead><tbody>{data.branches.map(b => <tr className="border-b last:border-0" key={b.key}><th className="font-medium py-3">{b.label}</th><td>{b.count} <span className="text-xs text-gray-500">({b.rate}%)</span></td><td>{b.island}</td><td>{b.paywall}</td></tr>)}</tbody></table>
                     <p className="text-xs text-gray-500 mt-4">{data.trialTaps} tapped trial · {data.trialCheckouts} requested checkout · {data.changedChoice} tried both choices. These are actions, not verified subscriptions.</p>
-                </section>
+                </section>}
                 <section className="bg-white border rounded-xl p-5">
-                    <h3 className="text-lg font-semibold">{storyFirst?"Optional island activities":"Island tasks"}</h3><p className="text-sm text-gray-500 mt-1 mb-4">{storyFirst?"Available after Adam arrives; these do not block the parent flow.":"Tasks can be finished in a different order."}</p>
+                    <h3 className="text-lg font-semibold">{playFirst?"Build with Adam":storyFirst?"Optional island activities":"Island tasks"}</h3><p className="text-sm text-gray-500 mt-1 mb-4">{playFirst?"The first home takes 30 seconds, with supplies included. Membership is presented on the return to the ship.":storyFirst?"Available after Adam arrives; these do not block the parent flow.":"Tasks can be finished in a different order."}</p>
                     {data.tasks.map(t => <div className="py-3 border-b last:border-0" key={t.key}><div className="flex justify-between text-sm gap-2"><span className="font-medium">{t.label}</span><strong>{t.count} / {data.island}</strong></div><div className="h-1.5 rounded-full bg-gray-100 mt-2"><div className="h-full rounded-full bg-emerald-500" style={{width:`${t.rate}%`}} /></div><p className="text-xs text-gray-500 mt-1">{t.remaining} haven’t finished yet</p></div>)}
                 </section>
                 <section className="bg-amber-50 border border-amber-100 rounded-xl p-5"><h3 className="font-semibold">Biggest gaps before the paywall</h3>{data.dropoffs.length ? data.dropoffs.map(d => <div className="flex justify-between gap-3 border-b border-amber-100 py-3 text-sm last:border-0" key={d.stepKey}><span>{d.from} → {d.step}</span><strong className="shrink-0">{d.dropFromPrevious} · {d.dropRate}%</strong></div>) : <p className="text-sm text-gray-600 mt-2">No gaps recorded yet.</p>}</section>
