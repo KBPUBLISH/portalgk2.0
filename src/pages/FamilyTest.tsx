@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Download, RefreshCw, Users } from 'lucide-react';
 import axios from 'axios';
+import FamilyIslandViewer from '../components/FamilyIslandViewer';
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'https://backendgk2-0.onrender.com').replace(/\/+$/, '').replace(/\/api$/, '');
 
@@ -61,6 +62,7 @@ const FamilyTest: React.FC = () => {
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [islandFamily, setIslandFamily] = useState<FamilySignup | null>(null);
   const [detailLoading, setDetailLoading] = useState<Record<string, boolean>>({});
   const [detailErrors, setDetailErrors] = useState<Record<string, string>>({});
 
@@ -249,6 +251,8 @@ const FamilyTest: React.FC = () => {
                         onClick={(event) => { event.stopPropagation(); toggleFamily(family._id); }}>
                         {family.parentName} <span className="text-xs">{open ? '▾ Hide activity' : '▸ View activity'}</span>
                       </button>
+                      <button type="button" aria-label={`View ${family.parentName || 'family'}’s island`} className="block mt-2 text-sm text-emerald-700 underline underline-offset-4"
+                        onClick={(event) => { event.stopPropagation(); setIslandFamily(family); }}>View island</button>
                     </td>
                     <td className="px-4 py-3 text-gray-700">{family.email}</td>
                     <td className="px-4 py-3 text-gray-700">{usage?.sessions || 0}</td>
@@ -341,6 +345,7 @@ const FamilyTest: React.FC = () => {
           </tbody>
         </table>
       </div>
+      {islandFamily && <FamilyIslandViewer account={islandFamily.email} parentName={islandFamily.parentName} onClose={() => setIslandFamily(null)} />}
     </div>
   );
 };
