@@ -23,6 +23,7 @@ const navSections: NavSection[] = [
             { path: '/analytics', icon: BarChart3, label: 'Content Analytics' },
             { path: '/onboarding-analytics', icon: TrendingUp, label: 'Onboarding' },
             { path: '/new-tutorial', icon: Compass, label: 'New Tutorial' },
+            { path: '/paywall-test', icon: TrendingUp, label: 'Paywall test' },
             { path: '/series-ratings', icon: Headphones, label: 'Audio Drama Ratings' },
             { path: '/ai-insights', icon: Sparkles, label: 'AI Insights' },
         ],
