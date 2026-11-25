@@ -33,6 +33,7 @@ import NewUserWelcome from './pages/NewUserWelcome';
 import AnalyticsDashboard from './pages/AnalyticsDashboard';
 import AiInsights from './pages/AiInsights';
 import OnboardingAnalytics from './pages/OnboardingAnalytics';
+import PaywallExperiment from './pages/PaywallExperiment';
 import SeriesRatings from './pages/SeriesRatings';
 import NewTutorialAnalytics from './pages/NewTutorialAnalytics';
 import KidsMonthlyCharactersPage from './pages/KidsMonthlyCharactersPage';
@@ -155,6 +156,7 @@ function App() {
             <Route path="ai-insights" element={<AiInsights />} />
             <Route path="onboarding-analytics" element={<OnboardingAnalytics />} />
             <Route path="new-tutorial" element={<NewTutorialAnalytics />} />
+            <Route path="paywall-test" element={<PaywallExperiment />} />
             <Route path="series-ratings" element={<SeriesRatings />} />
             <Route path="onboarding-analytics/kids-characters" element={<KidsMonthlyCharactersPage />} />
             <Route path="radio" element={<Radio />} />
