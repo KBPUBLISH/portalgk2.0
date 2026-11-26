@@ -100,12 +100,17 @@ interface Experience {
     tasks: {key: string; label: string; count: number; rate: number; remaining: number}[];
 }
 interface Study {
+    afterAvatarFunnel?: {
+        viewers: number; trials: number; paid: number; paidRate: number | null; skipped: number;
+        steps: {key: string; label: string; count: number; previous: number; fromPreviousRate: number | null}[];
+    };
     membershipFunnel?: {
         viewers: number; opens: number; ctaTaps: number; continueTaps: number;
         paid: number; guestPaid: number; paidRate: number | null; firstTrackedAt: string | null;
         checkoutCancelled: number; checkoutErrors: number;
         steps: { key: string; label: string; count: number; previous: number; fromPreviousRate: number | null; viewerRate: number | null }[];
     };
+    avatarTrialExperience?: Experience;
     playFirstExperience?: Experience;
     experience?: Experience;
     previousExperience?: Experience;
@@ -167,7 +172,7 @@ const NewTutorialAnalytics: React.FC = () => {
     const [days, setDays] = useState(30);
     const [platform, setPlatform] = useState('all');
     const [entry, setEntry] = useState('all');
-    const [experienceVersion, setExperienceVersion] = useState('play_first_v1');
+    const [experienceVersion, setExperienceVersion] = useState('avatar_trial_v1');
     const [study, setStudy] = useState<Study | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -191,10 +196,10 @@ const NewTutorialAnalytics: React.FC = () => {
                 <p className="text-gray-600 mt-2 max-w-2xl">See how many families start the experience, finish the tutorial, and reach the new paywall. Then follow the parent flow to a confirmed membership.</p>
             </div>
             <div className="flex flex-wrap items-start gap-2">
-                <label className="text-xs text-gray-500">Experience<select aria-label="Experience" className="block mt-1 border rounded-lg p-2 bg-white text-gray-800" value={experienceVersion} onChange={e => setExperienceVersion(e.target.value)}><option value="play_first_v1">Play first · new</option><option value="story_first_v1">Previous · story first</option><option value="island_intro_v2">Previous · island first</option><option value="all">All experiences</option></select></label>
+                <label className="text-xs text-gray-500">Experience<select aria-label="Experience" className="block mt-1 border rounded-lg p-2 bg-white text-gray-800" value={experienceVersion} onChange={e => setExperienceVersion(e.target.value)}><option value="avatar_trial_v1">After-avatar trial · new</option><option value="play_first_v1">Previous · play first</option><option value="story_first_v1">Previous · story first</option><option value="island_intro_v2">Previous · island first</option><option value="all">All experiences</option></select></label>
                 <label className="text-xs text-gray-500">Cohort window<select aria-label="Cohort window" className="block mt-1 border rounded-lg p-2 bg-white text-gray-800" value={days} onChange={e => setDays(Number(e.target.value))}>{[1, 7, 14, 30, 90].map(n => <option key={n} value={n}>Last {n} {n === 1 ? 'day' : 'days'}</option>)}</select></label>
                 <label className="text-xs text-gray-500">Platform<select aria-label="Platform" className="block mt-1 border rounded-lg p-2 bg-white text-gray-800" value={platform} onChange={e => setPlatform(e.target.value)}><option value="all">All platforms</option><option value="android">Android</option><option value="ios">iOS</option><option value="web">Web</option></select></label>
-                <label className="text-xs text-gray-500">Parent entry<select aria-label="Parent entry" className="block mt-1 border rounded-lg p-2 bg-white text-gray-800" value={entry} onChange={e => setEntry(e.target.value)}><option value="all">All entries</option><option value="tour">Badge / handoff</option><option value="resumed">Reopened / direct</option></select></label>
+                <label className="text-xs text-gray-500">Parent entry<select aria-label="Parent entry" className="block mt-1 border rounded-lg p-2 bg-white text-gray-800" value={entry} onChange={e => setEntry(e.target.value)}><option value="all">All entries</option><option value="tour">Badge / handoff</option><option value="after-avatar">After avatar creation</option><option value="resumed">Reopened / direct</option></select></label>
                 <button aria-label="Refresh report" onClick={() => setRefresh(n => n + 1)} disabled={loading} className="mt-5 p-2 border rounded-lg bg-white"><RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} /></button>
             </div>
         </header>
@@ -205,10 +210,18 @@ const NewTutorialAnalytics: React.FC = () => {
         {loading && <div role="status" className="p-10 text-center text-gray-500">Loading the current journey…</div>}
         {study && summary && <>
             {summary.journeys === 0 && <section className="p-6 border border-dashed border-indigo-200 bg-white rounded-xl"><h2 className="font-semibold text-gray-900">Ready for the first new journeys</h2><p className="mt-2 text-sm text-gray-600">Tracking starts with this release. Existing tutorial history is preserved, but it won’t be presented as data from this new flow.</p></section>}
+            {study.avatarTrialExperience && ['avatar_trial_v1','all'].includes(experienceVersion) && <ExperienceSection data={study.avatarTrialExperience} />}
             {study.playFirstExperience && ['play_first_v1','all'].includes(experienceVersion) && <ExperienceSection data={study.playFirstExperience} />}
             {study.experience && ['story_first_v1','all'].includes(experienceVersion) && <ExperienceSection data={study.experience} />}
             {study.previousExperience && ['island_intro_v2','all'].includes(experienceVersion) && <details className="bg-white border rounded-xl p-5"><summary className="cursor-pointer font-semibold">Previous island-first flow · {study.previousExperience.started} starters</summary><ExperienceSection data={study.previousExperience} /></details>}
-            <h2 className="text-xl font-semibold text-gray-900 pt-3">After the experience · parent flow</h2>
+            <h2 className="text-xl font-semibold text-gray-900 pt-3">Membership offers · parent flow</h2>
+            {study.afterAvatarFunnel && <section aria-label="After-avatar paywall funnel" className="bg-white border border-amber-200 rounded-xl p-5 shadow-sm">
+                <h2 className="text-lg font-semibold">After avatar creation → trial reminder → membership</h2>
+                <p className="text-sm text-gray-600 mt-2">New optional offer · unique journeys completing these steps in order. Both monthly and yearly are included.</p>
+                <div className="overflow-x-auto mt-4"><table className="w-full text-sm text-left"><thead className="border-b text-gray-500"><tr><th className="py-2">Step</th><th>Journeys</th><th>From previous</th></tr></thead><tbody>{study.afterAvatarFunnel.steps.map(s => <tr key={s.key} className="border-b last:border-0"><th className="py-3 font-medium">{s.label}</th><td>{s.count}</td><td>{s.fromPreviousRate == null ? '—' : `${s.fromPreviousRate}%`} ({s.count}/{s.previous})</td></tr>)}</tbody></table></div>
+                <p className="text-sm text-gray-700 mt-4"><strong>{study.afterAvatarFunnel.trials}</strong> verified trial starts · <strong>{study.afterAvatarFunnel.paid}</strong> paying subscribers · <strong>{study.afterAvatarFunnel.skipped}</strong> chose Maybe later.</p>
+                <p className="text-xs text-gray-500 mt-3">{study.afterAvatarFunnel.paidRate == null ? 'No tracked reminder views yet.' : `${study.afterAvatarFunnel.paidRate}% of reminder viewers have a verified payment.`} Receipts must be attributed to this placement; purchases from a later island paywall are excluded. Trial starts are not payments. This release is not a randomized A/B result.</p>
+            </section>}
             {study.membershipFunnel && <section aria-label="Membership purchase funnel" className="bg-white border border-indigo-200 rounded-xl p-5 shadow-sm">
                 <div className="flex flex-wrap justify-between gap-4"><div><h2 className="text-lg font-semibold">Keep Adventure Going → paid membership</h2><p className="text-sm text-gray-600 mt-1">Annual promo only · unique device journeys completing these steps in order.</p></div><div className="text-right"><strong className="text-2xl text-indigo-700">{study.membershipFunnel.paidRate == null ? '—' : `${study.membershipFunnel.paidRate}%`}</strong><p className="text-xs text-gray-500">{study.membershipFunnel.paid} paid / {study.membershipFunnel.viewers} viewers</p></div></div>
                 <div className="overflow-x-auto mt-5"><table className="w-full text-sm text-left"><thead className="border-b text-gray-500"><tr><th className="py-2">Step</th><th>Journeys</th><th>From previous</th><th>Of viewers</th></tr></thead><tbody>{study.membershipFunnel.steps.map(s => <tr key={s.key} className="border-b last:border-0"><th className="font-medium py-3">{s.label}</th><td>{s.count}</td><td>{s.fromPreviousRate == null ? '—' : `${s.fromPreviousRate}%`} <span className="text-gray-400">({s.count}/{s.previous})</span></td><td>{s.viewerRate == null ? '—' : `${s.viewerRate}%`}</td></tr>)}</tbody></table></div>
@@ -245,11 +258,12 @@ const NewTutorialAnalytics: React.FC = () => {
 };
 
 function ExperienceSection({ data }: { data: Experience }) {
-    const playFirst=data.version==='play_first_v1';
+    const avatarTrial=data.version==='avatar_trial_v1';
+    const playFirst=data.version==='play_first_v1'||avatarTrial;
     const storyFirst=data.version==='story_first_v1';
     return <section aria-label="Full experience funnel" className="space-y-5">
         <div className="rounded-2xl bg-slate-900 p-6 text-white">
-            <p className="text-xs uppercase tracking-widest text-sky-200 font-semibold">{playFirst ? 'Play-first journey' : storyFirst ? 'Story-first journey' : 'Previous island-first journey'}</p>
+            <p className="text-xs uppercase tracking-widest text-sky-200 font-semibold">{avatarTrial ? 'After-avatar trial journey' : playFirst ? 'Play-first journey' : storyFirst ? 'Story-first journey' : 'Previous island-first journey'}</p>
             <div className="flex flex-wrap justify-between gap-6 mt-3">
                 <div><h2 className="text-2xl font-bold">How many make it to the paywall?</h2>
                     <p className="text-slate-300 text-sm mt-2 max-w-xl">{data.paywallAfterExperience} of {data.started} starters reached the paywall {playFirst ? 'after completing their first home and returning to the ship.' : 'after welcoming Adam to their island.'}</p></div>
@@ -263,7 +277,7 @@ function ExperienceSection({ data }: { data: Experience }) {
             <Stat icon={TreePalm} label={playFirst||storyFirst?"Island reached":"Island tasks done"} value={String(playFirst||storyFirst?data.island:data.islandCompleted)} hint={playFirst?`${data.islandRate}% of starters · goal 50%`:storyFirst?"Ready-made home for Adam":`${data.island} loaded the island`} />
             <Stat icon={Ship} label={playFirst?"First homes built":storyFirst?"Adam welcomed":"Ship tours done"} value={String(playFirst?data.firstHomeCompleted:storyFirst?data.funnel.find(s=>s.stepKey==='exp_adam_home')?.count||0:data.tourCompleted)} />
             <Stat icon={Library} label="Story packs done" value={String(data.storyPackCompleted)} />
-            <Stat icon={ArrowRight} label="Parent intro reached" value={String(data.parentIntro)} hint={`${data.parentIntroRate}% of splash starters`} />
+            <Stat icon={ArrowRight} label={avatarTrial?"Paywall reached":"Parent intro reached"} value={String(avatarTrial?data.paywall:data.parentIntro)} hint={`${avatarTrial?data.paywallRate:data.parentIntroRate}% of splash starters`} />
         </div>
         {!data.started && <p className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">No starters recorded for this experience in the selected window. Previous experience cohorts are available in the selector above.</p>}
         <div className="grid xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] gap-5">
