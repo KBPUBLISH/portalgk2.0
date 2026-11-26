@@ -100,6 +100,12 @@ interface Experience {
     tasks: {key: string; label: string; count: number; rate: number; remaining: number}[];
 }
 interface Study {
+    membershipFunnel?: {
+        viewers: number; opens: number; ctaTaps: number; continueTaps: number;
+        paid: number; guestPaid: number; paidRate: number | null; firstTrackedAt: string | null;
+        checkoutCancelled: number; checkoutErrors: number;
+        steps: { key: string; label: string; count: number; previous: number; fromPreviousRate: number | null; viewerRate: number | null }[];
+    };
     playFirstExperience?: Experience;
     experience?: Experience;
     previousExperience?: Experience;
@@ -203,13 +209,20 @@ const NewTutorialAnalytics: React.FC = () => {
             {study.experience && ['story_first_v1','all'].includes(experienceVersion) && <ExperienceSection data={study.experience} />}
             {study.previousExperience && ['island_intro_v2','all'].includes(experienceVersion) && <details className="bg-white border rounded-xl p-5"><summary className="cursor-pointer font-semibold">Previous island-first flow · {study.previousExperience.started} starters</summary><ExperienceSection data={study.previousExperience} /></details>}
             <h2 className="text-xl font-semibold text-gray-900 pt-3">After the experience · parent flow</h2>
+            {study.membershipFunnel && <section aria-label="Membership purchase funnel" className="bg-white border border-indigo-200 rounded-xl p-5 shadow-sm">
+                <div className="flex flex-wrap justify-between gap-4"><div><h2 className="text-lg font-semibold">Keep Adventure Going → paid membership</h2><p className="text-sm text-gray-600 mt-1">Annual promo only · unique device journeys completing these steps in order.</p></div><div className="text-right"><strong className="text-2xl text-indigo-700">{study.membershipFunnel.paidRate == null ? '—' : `${study.membershipFunnel.paidRate}%`}</strong><p className="text-xs text-gray-500">{study.membershipFunnel.paid} paid / {study.membershipFunnel.viewers} viewers</p></div></div>
+                <div className="overflow-x-auto mt-5"><table className="w-full text-sm text-left"><thead className="border-b text-gray-500"><tr><th className="py-2">Step</th><th>Journeys</th><th>From previous</th><th>Of viewers</th></tr></thead><tbody>{study.membershipFunnel.steps.map(s => <tr key={s.key} className="border-b last:border-0"><th className="font-medium py-3">{s.label}</th><td>{s.count}</td><td>{s.fromPreviousRate == null ? '—' : `${s.fromPreviousRate}%`} <span className="text-gray-400">({s.count}/{s.previous})</span></td><td>{s.viewerRate == null ? '—' : `${s.viewerRate}%`}</td></tr>)}</tbody></table></div>
+                <p className="text-sm text-gray-600 mt-4">Total actions including repeats: <strong>{study.membershipFunnel.opens}</strong> paywall opens · <strong>{study.membershipFunnel.ctaTaps}</strong> Keep Adventure Going taps · <strong>{study.membershipFunnel.continueTaps}</strong> Continue taps.</p>
+                <p className="text-sm text-gray-600 mt-2">{study.membershipFunnel.guestPaid} paid journeys purchased as guests · {study.membershipFunnel.checkoutCancelled} cancellation events · {study.membershipFunnel.checkoutErrors} checkout errors.</p>
+                <p className="text-xs text-gray-500 mt-4">Only the newly instrumented promo paywall is included. Older paywalls and the upfront-trial experiment are excluded from this funnel. A free trial or a completion screen is not a payment. Missing steps mean not observed yet, not confirmed abandonment. Journeys are not verified unique parents. {study.membershipFunnel.firstTrackedAt ? `First tracked view in this cohort: ${formatWhen(study.membershipFunnel.firstTrackedAt, true)}.` : 'Waiting for the first tracked promo paywall view.'}</p>
+            </section>}
             <div className="grid grid-cols-2 xl:grid-cols-6 gap-3">
                 <Stat icon={Users} label="Parent entries" value={String(summary.parentStarted)} hint={`${summary.resumed} reopened / direct`} />
                 <Stat icon={Gift} label="Paywall reached" value={String(summary.paywall)} hint={`${summary.paywallOpens ?? 0} recorded opens, including returns`} />
                 <Stat icon={MousePointerClick} label="Checkout requested" value={String(summary.checkout)} />
                 <Stat icon={Crown} label="Confirmed trials" value={String(summary.trials)} hint="Verified store receipt" />
                 <Stat icon={CheckCircle} label="Paid starts" value={String(summary.paid)} hint="Started without a trial" />
-                <Stat icon={ArrowRight} label="Paywall conversion" value={`${summary.paywallConversion}%`} hint={`${summary.paywallConfirmed ?? summary.confirmed} of ${summary.paywall} paywall viewers`} />
+                <Stat icon={ArrowRight} label="Trial or paid membership" value={`${summary.paywallConversion}%`} hint={`${summary.paywallConfirmed ?? summary.confirmed} of ${summary.paywall} paywall viewers`} />
             </div>
             <section className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm">
                 <div className="flex flex-wrap justify-between items-start gap-3 mb-5"><div><h2 className="text-lg font-semibold text-gray-900">The parent journey</h2><p className="text-sm text-gray-500 mt-1">Observed reach, as a percentage of parent entries. Reopened journeys may skip earlier screens.</p></div><span className="text-xs rounded-full bg-indigo-50 px-3 py-2 text-indigo-700">{summary.checkoutConversion}% of checkouts confirmed</span></div>
