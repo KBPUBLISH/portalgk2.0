@@ -594,6 +594,21 @@ const BibleMapStoryForm: React.FC = () => {
         }
     };
 
+    const uploadTryItSubtitle = async (file: File): Promise<string> => {
+        const island = islands.find((i) => i._id === form.islandId);
+        const islandKey = island?.slug || form.islandId || id || 'temp';
+        const body = new FormData();
+        body.append('file', file);
+        const res = await apiClient.post(
+            `/api/upload/subtitle?bookId=${encodeURIComponent(`bible-map/${islandKey}`)}&type=try-it-srt&islandId=${encodeURIComponent(islandKey)}`,
+            body,
+            { timeout: 120000 },
+        );
+        const url = String(res.data?.url || '').trim();
+        if (!url) throw new Error('Upload did not return a file URL');
+        return url;
+    };
+
     const uploadSceneVideo = async (
         file: File,
         kind: 'scene-bg' | 'scene-anim' | 'try-it',
@@ -886,6 +901,19 @@ const BibleMapStoryForm: React.FC = () => {
                             : 'easy',
                     tryIt: {
                         videoUrl: String(story.tryIt?.videoUrl || ''),
+                        subtitles: Array.isArray(story.tryIt?.subtitles)
+                            ? story.tryIt.subtitles
+                                  .filter(
+                                      (row: { language?: string; url?: string }) =>
+                                          row &&
+                                          String(row.language || '').trim() &&
+                                          String(row.url || '').trim(),
+                                  )
+                                  .map((row: { language?: string; url?: string }) => ({
+                                      language: String(row.language || '').trim().toLowerCase(),
+                                      url: String(row.url || '').trim(),
+                                  }))
+                            : [],
                         prompts: Array.isArray(story.tryIt?.prompts)
                             ? story.tryIt.prompts
                                   .filter(
@@ -1147,6 +1175,12 @@ const BibleMapStoryForm: React.FC = () => {
                 : [],
         tryIt: {
             videoUrl: form.tryIt.videoUrl.trim(),
+            subtitles: (form.tryIt.subtitles || [])
+                .filter((row) => row.language.trim() && row.url.trim())
+                .map((row) => ({
+                    language: row.language.trim().toLowerCase(),
+                    url: row.url.trim(),
+                })),
             prompts: form.tryIt.prompts
                 .filter((p) => p.text.trim())
                 .map((p) => ({
@@ -2507,6 +2541,7 @@ const BibleMapStoryForm: React.FC = () => {
                         value={form.tryIt}
                         onChange={(next) => update('tryIt', next)}
                         onUploadVideo={(file) => uploadSceneVideo(file, 'try-it')}
+                        onUploadSubtitle={uploadTryItSubtitle}
                     />
                 )}
 
