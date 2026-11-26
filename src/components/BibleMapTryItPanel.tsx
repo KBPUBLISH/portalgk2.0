@@ -10,14 +10,45 @@ export interface TryItPrompt {
     blanks?: number;
 }
 
+export interface TryItSubtitleFile {
+    language: string;
+    url: string;
+}
+
 export interface TryItState {
     videoUrl: string;
     prompts: TryItPrompt[];
+    subtitles: TryItSubtitleFile[];
 }
+
+/** Same codes the kids app uses in Settings. */
+export const TRY_IT_SUBTITLE_LANGUAGES: { code: string; label: string }[] = [
+    { code: 'en', label: 'English' },
+    { code: 'es', label: 'Spanish' },
+    { code: 'pt', label: 'Portuguese' },
+    { code: 'fr', label: 'French' },
+    { code: 'de', label: 'German' },
+    { code: 'it', label: 'Italian' },
+    { code: 'nl', label: 'Dutch' },
+    { code: 'pl', label: 'Polish' },
+    { code: 'ru', label: 'Russian' },
+    { code: 'zh', label: 'Chinese (Simplified)' },
+    { code: 'zh-tw', label: 'Chinese (Traditional)' },
+    { code: 'ja', label: 'Japanese' },
+    { code: 'ko', label: 'Korean' },
+    { code: 'tl', label: 'Filipino' },
+    { code: 'id', label: 'Indonesian' },
+    { code: 'hi', label: 'Hindi' },
+    { code: 'ta', label: 'Tamil' },
+    { code: 'ml', label: 'Malayalam' },
+    { code: 'ar', label: 'Arabic' },
+    { code: 'sw', label: 'Swahili' },
+];
 
 export const emptyTryIt = (): TryItState => ({
     videoUrl: '',
     prompts: [],
+    subtitles: [],
 });
 
 export const emptyTryItPrompt = (type: TryItPromptType = 'statement'): TryItPrompt => ({
@@ -48,15 +79,20 @@ interface BibleMapTryItPanelProps {
     value: TryItState;
     onChange: (next: TryItState) => void;
     onUploadVideo: (file: File) => Promise<string>;
+    onUploadSubtitle: (file: File) => Promise<string>;
 }
 
 const BibleMapTryItPanel: React.FC<BibleMapTryItPanelProps> = ({
     value,
     onChange,
     onUploadVideo,
+    onUploadSubtitle,
 }) => {
     const fileRef = useRef<HTMLInputElement>(null);
+    const subtitleRef = useRef<HTMLInputElement>(null);
+    const subtitleLanguageRef = useRef('es');
     const [uploading, setUploading] = useState(false);
+    const [uploadingSubtitle, setUploadingSubtitle] = useState(false);
 
     const updatePrompts = (prompts: TryItPrompt[]) => onChange({ ...value, prompts });
 
@@ -101,6 +137,41 @@ const BibleMapTryItPanel: React.FC<BibleMapTryItPanelProps> = ({
             alert(msg);
         } finally {
             setUploading(false);
+        }
+    };
+
+    const subtitles = Array.isArray(value.subtitles) ? value.subtitles : [];
+
+    const setSubtitles = (next: TryItSubtitleFile[]) => onChange({ ...value, subtitles: next });
+
+    const handleSubtitleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+        if (!/\.srt$/i.test(file.name)) {
+            alert('Upload an .srt subtitle file');
+            return;
+        }
+        const language = subtitleLanguageRef.current;
+        setUploadingSubtitle(true);
+        try {
+            const url = await onUploadSubtitle(file);
+            const without = subtitles.filter((row) => row.language !== language);
+            setSubtitles([...without, { language, url }]);
+        } catch (err: unknown) {
+            console.error(err);
+            const ax = err as {
+                message?: string;
+                response?: { data?: { message?: string; error?: string } };
+            };
+            const msg =
+                ax.response?.data?.message ||
+                ax.response?.data?.error ||
+                (ax.message && ax.message !== 'Network Error' ? ax.message : '') ||
+                'The subtitle upload did not finish. Try again.';
+            alert(msg);
+        } finally {
+            setUploadingSubtitle(false);
         }
     };
 
@@ -171,6 +242,86 @@ const BibleMapTryItPanel: React.FC<BibleMapTryItPanelProps> = ({
                         Uses the same upload as scene videos (multipart field <code>file</code>).
                     </p>
                 </div>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
+                <div>
+                    <h3 className="text-sm font-medium text-gray-800">Subtitles (one SRT per language)</h3>
+                    <p className="text-xs text-gray-500 mt-1 max-w-2xl">
+                        Upload an .srt for each language. When a family watches with that language
+                        selected, the kids app plays this file on the video.
+                    </p>
+                </div>
+                {subtitles.length > 0 && (
+                    <ul className="space-y-2">
+                        {subtitles.map((row) => {
+                            const label =
+                                TRY_IT_SUBTITLE_LANGUAGES.find((lang) => lang.code === row.language)
+                                    ?.label || row.language;
+                            return (
+                                <li
+                                    key={row.language}
+                                    className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                                >
+                                    <span className="font-medium text-gray-800">{label}</span>
+                                    <span className="truncate text-xs text-gray-400 flex-1">{row.url}</span>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setSubtitles(
+                                                subtitles.filter((item) => item.language !== row.language),
+                                            )
+                                        }
+                                        className="inline-flex items-center gap-1 text-xs text-red-600 hover:underline"
+                                    >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                        Remove
+                                    </button>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )}
+                <div className="flex flex-wrap items-center gap-2">
+                    <select
+                        className="border border-gray-300 rounded-lg px-2 py-2 text-sm bg-white"
+                        defaultValue="es"
+                        onChange={(e) => {
+                            subtitleLanguageRef.current = e.target.value;
+                        }}
+                        aria-label="Subtitle language"
+                    >
+                        {TRY_IT_SUBTITLE_LANGUAGES.map((lang) => (
+                            <option key={lang.code} value={lang.code}>
+                                {lang.label}
+                            </option>
+                        ))}
+                    </select>
+                    <input
+                        ref={subtitleRef}
+                        type="file"
+                        accept=".srt,text/plain"
+                        className="hidden"
+                        onChange={(e) => void handleSubtitleUpload(e)}
+                    />
+                    <button
+                        type="button"
+                        disabled={uploadingSubtitle}
+                        onClick={() => subtitleRef.current?.click()}
+                        className="inline-flex items-center gap-2 bg-white border border-gray-300 text-gray-800 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+                    >
+                        {uploadingSubtitle ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                            <Upload className="w-4 h-4" />
+                        )}
+                        {uploadingSubtitle ? 'Uploading…' : 'Upload SRT'}
+                    </button>
+                </div>
+                <p className="text-xs text-gray-400">
+                    Saves with this story. Upload path: <code>POST /api/upload/subtitle</code> (field{' '}
+                    <code>file</code>, query <code>type=try-it-srt</code>).
+                </p>
             </div>
 
             {hasVideo && filledPrompts < 1 && (
